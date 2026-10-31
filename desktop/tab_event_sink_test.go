@@ -1,0 +1,291 @@
+package main
+
+import (
+	"context"
+	"strconv"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"reasonix/internal/event"
+)
+
+type closeTrackingSink struct {
+	closed atomic.Bool
+}
+
+func (s *closeTrackingSink) Emit(event.Event) {}
+
+func (s *closeTrackingSink) Close() {
+	s.closed.Store(true)
+}
+
+type blockingCloseTrackingSink struct {
+	closeTrackingSink
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (s *blockingCloseTrackingSink) Emit(event.Event) {
+	close(s.entered)
+	<-s.release
+}
+
+func TestTabEventSinkSetBotSinkClosesPreviousSink(t *testing.T) {
+	sink := &tabEventSink{}
+	first := &closeTrackingSink{}
+	second := &closeTrackingSink{}
+
+	sink.SetBotSink(first)
+	if first.closed.Load() {
+		t.Fatal("newly attached sink was closed")
+	}
+
+	sink.SetBotSink(second)
+	if !first.closed.Load() {
+		t.Fatal("previous sink was not closed when replaced")
+	}
+	if second.closed.Load() {
+		t.Fatal("replacement sink was closed too early")
+	}
+
+	sink.SetBotSink(nil)
+	if !second.closed.Load() {
+		t.Fatal("second sink was not closed when cleared")
+	}
+}
+
+func TestTabEventSinkOldTurnDoneDoesNotClearReplacement(t *testing.T) {
+	sink := &tabEventSink{}
+	old := &blockingCloseTrackingSink{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	replacement := &closeTrackingSink{}
+
+	if !sink.tryBeginTurn() {
+		t.Fatal("failed to reserve initial turn")
+	}
+	sink.SetBotSink(old)
+	done := make(chan struct{})
+	go func() {
+		sink.Emit(event.Event{Kind: event.TurnDone})
+		close(done)
+	}()
+	select {
+	case <-old.entered:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("old forwarder did not receive TurnDone")
+	}
+
+	sink.SetBotSink(replacement)
+	if sink.tryBeginTurn() {
+		t.Fatal("new turn admitted before old TurnDone completed")
+	}
+	close(old.release)
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("TurnDone did not finish")
+	}
+
+	if replacement.closed.Load() {
+		t.Fatal("old TurnDone cleared the replacement forwarder")
+	}
+	got, _ := sink.botSinkSnapshot()
+	if got != replacement {
+		t.Fatalf("attached forwarder = %T, want replacement", got)
+	}
+	if !sink.tryBeginTurn() {
+		t.Fatal("next turn was not admitted after TurnDone completed")
+	}
+	sink.cancelTurnStart()
+	sink.SetBotSink(nil)
+}
+
+func TestTabEventSinkDoesNotBlockOnRuntimeEventsEmit(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	delivered := make(chan string, 2)
+	var calls atomic.Int32
+
+	sink := &tabEventSink{tabID: "tab", ctx: context.Background()}
+	sink.runtimeEvents.emit = func(_ context.Context, name string, payload ...any) {
+		if name != eventChannel {
+			t.Errorf("event name = %q, want %q", name, eventChannel)
+		}
+		if len(payload) != 1 {
+			t.Errorf("payload count = %d, want 1", len(payload))
+			return
+		}
+		wire, ok := payload[0].(wireEventTab)
+		if !ok {
+			t.Errorf("payload type = %T, want wireEventTab", payload[0])
+			return
+		}
+		delivered <- wire.Text
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+	}
+
+	wrapped := event.Sync(sink)
+	wrapped.Emit(event.Event{Kind: event.Text, Text: "one"})
+
+	select {
+	case <-entered:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("first runtime emit did not start")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wrapped.Emit(event.Event{Kind: event.Text, Text: "two"})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("second event blocked behind runtime EventsEmit")
+	}
+
+	close(release)
+	if got := <-delivered; got != "one" {
+		t.Fatalf("first delivered event = %q, want one", got)
+	}
+	select {
+	case got := <-delivered:
+		if got != "two" {
+			t.Fatalf("second delivered event = %q, want two", got)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("second queued event was not delivered")
+	}
+}
+
+func TestEmitProjectTreeChangedDoesNotBlockOnRuntimeEventsEmit(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	allDelivered := make(chan struct{}, 1)
+	var calls atomic.Int32
+	var runtimeCalls atomic.Int32
+	var legacyCalls atomic.Int32
+
+	app := &App{ctx: context.Background()}
+	app.runtimeEvents.emit = func(_ context.Context, name string, payload ...any) {
+		switch name {
+		case "project-tree:runtime-changed":
+			runtimeCalls.Add(1)
+			if len(payload) != 1 {
+				t.Errorf("runtime payload count = %d, want 1", len(payload))
+			} else if event, ok := payload[0].(ProjectTreeRuntimeSnapshot); !ok || event.Topics == nil || event.Revision == 0 {
+				t.Errorf("runtime payload = %#v, want a versioned snapshot with [] topics", payload[0])
+			}
+		case "runtime-state:changed":
+			if len(payload) != 1 {
+				t.Errorf("unified runtime payload count = %d", len(payload))
+			} else if snapshot, ok := payload[0].(RuntimeStateProjection); !ok || snapshot.Sessions == nil || snapshot.Revision == 0 {
+				t.Errorf("invalid unified runtime snapshot: %#v", payload[0])
+			}
+		case "project-tree:changed":
+			legacyCalls.Add(1)
+			if len(payload) != 0 {
+				t.Errorf("legacy payload count = %d, want 0", len(payload))
+			}
+		default:
+			t.Errorf("event name = %q, want project-tree:runtime-changed or project-tree:changed", name)
+		}
+		if runtimeCalls.Load() >= 2 && legacyCalls.Load() >= 2 {
+			select {
+			case allDelivered <- struct{}{}:
+			default:
+			}
+		}
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+	}
+
+	app.emitProjectTreeChanged()
+	select {
+	case <-entered:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("first project tree runtime emit did not start")
+	}
+	// Unchanged snapshots are intentionally deduplicated. A real binding
+	// change must still publish without waiting for the blocked transport.
+	app.mu.Lock()
+	app.tabs = map[string]*WorkspaceTab{"second": {ID: "second", Scope: "global"}}
+	app.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		app.emitProjectTreeChanged()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("project tree event blocked behind runtime EventsEmit")
+	}
+
+	close(release)
+	select {
+	case <-allDelivered:
+		return
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("runtime emit calls = %d (runtime=%d legacy=%d), want two broadcasts on both contracts", calls.Load(), runtimeCalls.Load(), legacyCalls.Load())
+	}
+}
+
+func TestAsyncRuntimeEmitterDrainsBacklogInOrder(t *testing.T) {
+	const backlog = 256
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	delivered := make(chan string, backlog)
+	var calls atomic.Int32
+
+	emitter := &asyncRuntimeEmitter{}
+	emitter.emit = func(_ context.Context, _ string, payload ...any) {
+		if len(payload) != 1 {
+			t.Errorf("payload count = %d, want 1", len(payload))
+			return
+		}
+		value, ok := payload[0].(string)
+		if !ok {
+			t.Errorf("payload type = %T, want string", payload[0])
+			return
+		}
+		delivered <- value
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+	}
+
+	ctx := context.Background()
+	for i := range backlog {
+		emitter.Emit(ctx, "agent:event", strconv.Itoa(i))
+	}
+
+	select {
+	case <-entered:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("first runtime emit did not start")
+	}
+	close(release)
+
+	for i := range backlog {
+		select {
+		case got := <-delivered:
+			if want := strconv.Itoa(i); got != want {
+				t.Fatalf("delivered[%d] = %q, want %q", i, got, want)
+			}
+		case <-time.After(500 * time.Millisecond):
+			t.Fatalf("timed out waiting for delivered event %d", i)
+		}
+	}
+}

@@ -1,0 +1,140 @@
+import type { Todo } from "./tools";
+
+export interface TodoPanelScopeInput {
+  activeTabId?: string | null;
+  activeTab?: {
+    id?: string | null;
+    scope?: string | null;
+    workspaceRoot?: string | null;
+    topicId?: string | null;
+    sessionPath?: string | null;
+  } | null;
+  eventChannel?: string | null;
+}
+
+export type TodoPresentationStatus = "pending" | "in_progress" | "waiting" | "paused" | "completed";
+
+export interface TodoRuntimePresentation {
+  running: boolean;
+  pendingPrompt: boolean;
+}
+
+export function todoPresentationStatus(
+  status: Todo["status"],
+  runtime: TodoRuntimePresentation,
+): TodoPresentationStatus {
+  switch (todoStatus(status)) {
+    case "completed":
+      return "completed";
+    case "in_progress":
+      if (runtime.pendingPrompt) return "waiting";
+      return runtime.running ? "in_progress" : "paused";
+    default:
+      return "pending";
+  }
+}
+
+export function todoContinueTarget(
+  targetTabId: string | null | undefined,
+  activeTabId: string | null | undefined,
+  runtime: TodoRuntimePresentation & { ready: boolean; readOnly?: boolean },
+): string | null {
+  const target = String(targetTabId ?? "").trim();
+  if (!target || target !== String(activeTabId ?? "").trim()) return null;
+  if (!runtime.ready || runtime.readOnly || runtime.running || runtime.pendingPrompt) return null;
+  return target;
+}
+
+export function resolveTodoPanelTodos(
+	canonical: Todo[] | null | undefined,
+): Todo[] {
+	if (Array.isArray(canonical)) return canonical;
+	return [];
+}
+
+export function sameTodoList(a: Todo[] | null | undefined, b: Todo[] | null | undefined): boolean {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((todo, index) => {
+    const other = b[index];
+    return (
+      todo.content === other.content &&
+      todo.status === other.status
+    );
+  });
+}
+
+export function todoDismissalKey(todos: Todo[]): string {
+  if (todos.length === 0) return "";
+  return JSON.stringify(todos.map((todo) => ({
+    content: String(todo.content ?? ""),
+    status: todoStatus(todo.status),
+  })));
+}
+
+export function todoPanelScope({ activeTab, activeTabId, eventChannel }: TodoPanelScopeInput): string {
+  const tabId = String(activeTabId ?? "").trim();
+  const tab = !tabId || activeTab?.id === tabId ? activeTab : null;
+  const sessionPath = tab?.sessionPath?.trim();
+  if (sessionPath) return `session:${sessionPath}`;
+  if (tabId) return `tab:${tabId}`;
+  const topicId = tab?.topicId?.trim();
+  if (tab && topicId) return `topic:${tab.scope ?? ""}:${tab.workspaceRoot ?? ""}:${topicId}`;
+  const channel = String(eventChannel ?? "").trim();
+  return channel ? `event:${channel}` : "";
+}
+
+export function scopedTodoDismissalKey(scope: string | null | undefined, todoKey: string | null | undefined): string {
+  const key = String(todoKey ?? "").trim();
+  if (!key) return "";
+  const prefix = String(scope ?? "").trim();
+  return prefix ? `${prefix}\0${key}` : key;
+}
+
+export function dismissedTodoKeyForScope(
+  scope: string | null | undefined,
+  dismissedKeys: ReadonlySet<string> | null | undefined,
+  todoKey: string | null | undefined,
+): string | null {
+  const scopedKey = scopedTodoDismissalKey(scope, todoKey);
+  if (!scopedKey || !dismissedKeys?.has(scopedKey)) return null;
+  return todoKey ?? null;
+}
+
+export function todoBatchKey(todos: Todo[]): string {
+  if (todos.length === 0) return "";
+  return JSON.stringify(todos.map((todo) => ({
+    content: String(todo.content ?? ""),
+  })));
+}
+
+export function scopedTodoBatchKey(scope: string | null | undefined, batchKey: string | null | undefined): string {
+  const key = String(batchKey ?? "").trim();
+  if (!key) return "";
+  const prefix = String(scope ?? "").trim();
+  return prefix ? `${prefix}\0${key}` : key;
+}
+
+export function shouldShowTodoPanel(
+	todoKey: string | null | undefined,
+	dismissedTodoKey: string | null,
+	todos: Todo[],
+): boolean {
+  if (!todoKey || todos.length === 0) return false;
+  if (hasIncompleteTodos(todos)) return true;
+  if (todoKey === dismissedTodoKey) return false;
+	return true;
+}
+
+export function shouldOpenTodoPanelByDefault(): boolean {
+  return false;
+}
+
+function todoStatus(status: unknown): string {
+  const normalized = String(status ?? "").trim();
+  return normalized || "pending";
+}
+
+function hasIncompleteTodos(todos: Todo[]): boolean {
+  return todos.some((todo) => todoStatus(todo.status) !== "completed");
+}

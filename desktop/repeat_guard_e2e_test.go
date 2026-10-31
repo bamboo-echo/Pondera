@@ -1,0 +1,94 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"reasonix/internal/agent"
+	agenttest "reasonix/internal/agent/testutil"
+	"reasonix/internal/control"
+	"reasonix/internal/event"
+	"reasonix/internal/provider"
+	"reasonix/internal/tool"
+)
+
+type desktopCountingTool struct {
+	name     string
+	readOnly bool
+	calls    *int32
+}
+
+func (t desktopCountingTool) Name() string        { return t.name }
+func (t desktopCountingTool) Description() string { return "test tool" }
+func (t desktopCountingTool) Schema() json.RawMessage {
+	return json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"}}}`)
+}
+func (t desktopCountingTool) ReadOnly() bool { return t.readOnly }
+func (t desktopCountingTool) Execute(context.Context, json.RawMessage) (string, error) {
+	atomic.AddInt32(t.calls, 1)
+	return "ok", nil
+}
+
+func TestDesktopE2ERemindsWithoutBlockingRepeatedSuccessfulBashFileWrite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping desktop E2E repeat-guard test in short mode")
+	}
+
+	var calls int32
+	reg := tool.NewRegistry()
+	todoWrite, ok := tool.LookupBuiltin("todo_write")
+	if !ok {
+		t.Fatal("todo_write builtin is not registered")
+	}
+	reg.Add(todoWrite)
+	reg.Add(desktopCountingTool{name: "bash", calls: &calls})
+	args := `{"command":"printf 'hello' > prompt.txt"}`
+	prov := agenttest.NewMock("scripted-desktop",
+		agenttest.Turn{ToolCalls: []provider.ToolCall{{ID: "todo-1", Name: "todo_write", Arguments: `{"todos":[{"content":"update the prompt file","status":"in_progress"}]}`}}},
+		agenttest.Turn{ToolCalls: []provider.ToolCall{{ID: "c1", Name: "bash", Arguments: args}}},
+		agenttest.Turn{ToolCalls: []provider.ToolCall{{ID: "c2", Name: "bash", Arguments: args}}},
+		agenttest.Turn{ToolCalls: []provider.ToolCall{{ID: "c3", Name: "bash", Arguments: args}}},
+		agenttest.Turn{Text: "done"},
+	)
+	events := make(chan event.Event, 32)
+	sink := event.FuncSink(func(e event.Event) { events <- e })
+	ag := agent.New(prov, reg, agent.NewSession(""), agent.Options{}, sink)
+	ctrl := control.New(control.Options{Runner: ag, Executor: ag, Sink: sink})
+	app := NewApp()
+	app.setTestCtrl(ctrl, "scripted-desktop")
+
+	app.SubmitToTab("test", "update the prompt file")
+
+	var results []event.Event
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case e := <-events:
+			if e.Kind == event.ToolResult && e.Tool.Name == "bash" {
+				results = append(results, e)
+			}
+			if e.Kind == event.TurnDone {
+				if e.Err != nil {
+					t.Fatalf("turn failed: %v", e.Err)
+				}
+				if got := atomic.LoadInt32(&calls); got != 3 {
+					t.Fatalf("bash executed %d times, want all 3 calls to run", got)
+				}
+				if len(results) != 3 {
+					t.Fatalf("tool results = %d, want 3", len(results))
+				}
+				last := results[len(results)-1].Tool.Output
+				if !strings.Contains(last, "[repeat reminder]") || !strings.Contains(last, "called 3 consecutive times") {
+					t.Fatalf("third repeated write should add a non-blocking reminder, got %q", last)
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for desktop turn to finish")
+		}
+	}
+}

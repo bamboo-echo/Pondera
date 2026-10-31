@@ -1,0 +1,84 @@
+# Build artifacts
+/bin/
+/dist/
+/stage/
+/npm/.stage/
+/reasonix
+/reasonix.exe
+/e2ebench
+/e2ebench.exe
+
+# Website (Astro) build output
+/site/dist/
+/site/.astro/
+/site/_preview.png
+
+# Go test/build scratch
+*.test
+*.out
+*.coverprofile
+coverage.out
+cpu.prof
+mem.prof
+
+# Desktop build artifacts
+/desktop/build/*
+!/desktop/build/appicon.png
+!/desktop/build/appicon.svg
+!/desktop/build/trayTemplate.png
+!/desktop/build/trayTemplate@2x.png
+/desktop/desktop
+/desktop/frontend/dist/*
+!/desktop/frontend/dist/.gitkeep
+/desktop/frontend/.reasonix-frontend-artifact.json
+/desktop/frontend/sourcemaps/
+/desktop/electron/dist/
+
+# Environment / local config (reasonix.example.toml is the shared template)
+.env
+.env.local
+*.local
+**/.firebase-crash-migration-state.json
+**/.firebase-crash-migration-state.json.tmp-*
+/reasonix.toml
+/desktop/.env
+/desktop/reasonix.toml
+
+# Node / frontend dependencies and caches
+node_modules/
+.pnpm-store/
+.npm/
+
+# Project-local Reasonix state; keep the checked-in review command.
+/.reasonix/*
+!/.reasonix/commands/
+!/.reasonix/commands/review.md
+
+# Stray Reasonix state written under a package dir by a test whose RealPath
+# resolves to CWD (e.g. remote bootstrap EnsureServe). Never commit these.
+internal/**/.reasonix/
+desktop/**/.reasonix/
+
+# CodeGraph per-project index (rebuilt locally; never committed)
+.codegraph/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+/site/public/av/
+
+benchmarks/context-maintenance-e2e/run/
+
+# Local scratch
+temp/
+
+# Official theme art intermediate outputs / caches
+scripts/official-theme-art/out/
+scripts/official-theme-art/__pycache__/
+site/.generated/
+
+# Committed pointer at REASONIX.md; overrides a global CLAUDE.md ignore rule.
+!/CLAUDE.md
+desktop/desktop.exe

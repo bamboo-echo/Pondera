@@ -1,0 +1,284 @@
+package control
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"testing"
+	"time"
+
+	"reasonix/internal/i18n"
+	"reasonix/internal/provider"
+	"reasonix/internal/turnevent"
+)
+
+func TestExplainError(t *testing.T) {
+	if explainError(nil) != nil {
+		t.Error("nil should stay nil")
+	}
+
+	bal := explainError(&provider.APIError{Provider: "deepseek", Status: 402, Body: "Insufficient Balance"})
+	if bal.Error() != fmt.Sprintf(i18n.M.ProviderErrQuotaExhaustedFmt, "deepseek", 402) {
+		t.Errorf("402 = %q, want the localized quota message with actual HTTP status", bal.Error())
+	}
+
+	auth := explainError(&provider.AuthError{Provider: "deepseek", KeyEnv: "DEEPSEEK_API_KEY", Status: 401})
+	if !strings.Contains(auth.Error(), "DEEPSEEK_API_KEY") {
+		t.Errorf("401 should name the key env: %q", auth.Error())
+	}
+	if !strings.Contains(auth.Error(), i18n.M.ProviderErrAuth) {
+		t.Errorf("401 without a key should use the missing-key message: %q", auth.Error())
+	}
+
+	rejected := explainError(&provider.AuthError{Provider: "mimo", KeyEnv: "MIMO_API_KEY", Status: 401, HasKey: true})
+	if !strings.Contains(rejected.Error(), i18n.M.ProviderErrAuthRejected) {
+		t.Errorf("401 with a key present should use the server-rejected message: %q", rejected.Error())
+	}
+	if !strings.Contains(rejected.Error(), "MIMO_API_KEY") {
+		t.Errorf("401 should still name the key env: %q", rejected.Error())
+	}
+
+	sourced := explainError(&provider.AuthError{Provider: "deepseek", KeyEnv: "DEEPSEEK_API_KEY", KeySource: "project .env", Status: 401, HasKey: true})
+	if !strings.Contains(sourced.Error(), "DEEPSEEK_API_KEY from project .env") {
+		t.Errorf("401 should name the key source: %q", sourced.Error())
+	}
+
+	authBody := explainError(&provider.AuthError{Provider: "relay", KeyEnv: "RELAY_API_KEY", Status: 401, HasKey: true, Body: `{"error":{"message":"令牌已过期","type":"new_api_error"}}`})
+	for _, want := range []string{i18n.M.ProviderErrAuthRejected, "RELAY_API_KEY", "令牌已过期"} {
+		if !strings.Contains(authBody.Error(), want) {
+			t.Errorf("401 with a body = %q, want it to contain %q", authBody.Error(), want)
+		}
+	}
+
+	formatMismatch := explainError(&provider.AuthError{
+		Provider: "opencode-go-anthropic", KeyEnv: "OPENCODE_GO_API_KEY", Status: 401, HasKey: true,
+		Body: `{"error":{"message":"Model grok-4.5 is not supported for format anthropic"}}`,
+	})
+	for _, want := range []string{i18n.M.ProviderErrModelFormatMismatch, i18n.M.ProviderErrOpenCodeGoGrokRoute, "not supported for format anthropic"} {
+		if !strings.Contains(formatMismatch.Error(), want) {
+			t.Errorf("format mismatch = %q, want it to contain %q", formatMismatch.Error(), want)
+		}
+	}
+	if strings.Contains(formatMismatch.Error(), i18n.M.ProviderErrAuthRejected) {
+		t.Errorf("format mismatch must not be classified as a rejected API key: %q", formatMismatch.Error())
+	}
+
+	authEcho := explainError(&provider.AuthError{Provider: "deepseek", KeyEnv: "DEEPSEEK_API_KEY", Status: 401, HasKey: true, Body: `{"error":{"message":"Authentication Fails, Your api key: ****ae54 is invalid"}}`})
+	if !strings.Contains(authEcho.Error(), "Authentication Fails") {
+		t.Errorf("401 should keep the readable reason, got %q", authEcho.Error())
+	}
+	if strings.Contains(authEcho.Error(), "ae54") {
+		t.Errorf("401 must not surface the masked key tail, got %q", authEcho.Error())
+	}
+
+	for _, status := range []int{400, 422, 429, 500, 503} {
+		got := explainError(&provider.APIError{Provider: "p", Status: status})
+		if got.Error() == "" || got.Error() == (&provider.APIError{Provider: "p", Status: status}).Error() {
+			t.Errorf("status %d should map to a localized message, got %q", status, got.Error())
+		}
+	}
+
+	notFoundCause := &provider.APIError{Provider: "deepseek-anthropic", ProviderDisplayName: "Deepseek2", Protocol: "openai", Status: 404}
+	notFound := explainError(notFoundCause)
+	for _, want := range []string{"Deepseek2 · Chat Completions", i18n.M.ProviderErrNotFound} {
+		if !strings.Contains(notFound.Error(), want) {
+			t.Errorf("404 = %q, want %q", notFound.Error(), want)
+		}
+	}
+	if d := provider.DiagnoseFailure(notFound); d.ProviderID != "deepseek-anthropic" || d.ProviderDisplayName != "Deepseek2" || d.Protocol != "openai" || d.Status != 404 {
+		t.Fatalf("explained 404 diagnostic = %+v", d)
+	}
+
+	jsonBody := explainError(&provider.APIError{Provider: "deepseek", Status: 400, Body: `{"error":{"message":"This model's maximum context length is 65536 tokens.","type":"invalid_request_error"}}`})
+	if !strings.Contains(jsonBody.Error(), i18n.M.ProviderErrBadRequest) || !strings.Contains(jsonBody.Error(), "maximum context length") {
+		t.Errorf("400 should append the provider reason from a JSON body, got %q", jsonBody.Error())
+	}
+
+	limit := explainError(&provider.ContextLimitError{
+		APIError:         &provider.APIError{Provider: "deepseek", Status: 400, Body: `{"error":{"message":"This model's maximum context length is 1048576 tokens. However, you requested 1165351 tokens (810882 in the messages, 354469 in the completion)."}}`},
+		WindowTokens:     1_048_576,
+		RequestedTokens:  1_165_351,
+		PromptTokens:     810_882,
+		CompletionTokens: 354_469,
+	})
+	if !strings.Contains(limit.Error(), "810882") || !strings.Contains(limit.Error(), "1048576") || !strings.Contains(limit.Error(), "Compact") {
+		t.Errorf("context overflow should name numbers and recovery, got %q", limit.Error())
+	}
+
+	unnumbered := explainError(&provider.ContextLimitError{
+		APIError: &provider.APIError{Provider: "glm", Status: 400, Body: `{"error":{"code":"1261","message":"Prompt exceeds max length"}}`},
+	})
+	if strings.Contains(unnumbered.Error(), fmt.Sprintf(i18n.M.ProviderErrContextOverflowFmt, 0, 0, 0, 0)) {
+		t.Errorf("an overflow without token numbers must not quote zeros, got %q", unnumbered.Error())
+	}
+	if !strings.Contains(unnumbered.Error(), i18n.M.ProviderErrBadRequest) || !strings.Contains(unnumbered.Error(), "Prompt exceeds max length") {
+		t.Errorf("an overflow without token numbers should keep the provider reason, got %q", unnumbered.Error())
+	}
+
+	toolSchema := explainError(&provider.APIError{
+		Provider:    "mimo",
+		Status:      400,
+		Body:        `{"error":{"message":"Tool 197 function has invalid 'parameters' schema"}}`,
+		ToolContext: `Provider tool 197 maps to Pondera tool "mcp__files__search" (MCP server "files", tool "search").`,
+	})
+	for _, want := range []string{"invalid 'parameters' schema", `MCP server "files"`} {
+		if !strings.Contains(toolSchema.Error(), want) {
+			t.Errorf("400 tool schema error = %q, want %q", toolSchema.Error(), want)
+		}
+	}
+
+	rawBody := explainError(&provider.APIError{Provider: "deepseek", Status: 422, Body: "some unparseable detail"})
+	if !strings.Contains(rawBody.Error(), "some unparseable detail") {
+		t.Errorf("422 should fall back to the raw body, got %q", rawBody.Error())
+	}
+
+	miniMaxInput := explainError(&provider.APIError{
+		Provider: "custom-m3",
+		Status:   422,
+		Body:     `{"error":{"message":"input new_sensitive (1026)","code":"1026"}}`,
+		TraceID:  "minimax-trace-123",
+	})
+	for _, want := range []string{i18n.M.ProviderErrInputSensitive, "input new_sensitive", "Trace ID: minimax-trace-123"} {
+		if !strings.Contains(miniMaxInput.Error(), want) {
+			t.Errorf("MiniMax 1026 = %q, want %q", miniMaxInput.Error(), want)
+		}
+	}
+	if strings.Contains(miniMaxInput.Error(), i18n.M.ProviderErrUnprocessable) {
+		t.Errorf("MiniMax 1026 must not use the generic 422 message: %q", miniMaxInput.Error())
+	}
+
+	miniMaxOutput := explainError(&provider.APIError{
+		Provider: "minimax-cn-api",
+		Status:   422,
+		Body:     `{"base_resp":{"status_code":1027,"status_msg":"output new_sensitive"}}`,
+	})
+	for _, want := range []string{i18n.M.ProviderErrOutputSensitive, "output new_sensitive"} {
+		if !strings.Contains(miniMaxOutput.Error(), want) {
+			t.Errorf("MiniMax 1027 = %q, want %q", miniMaxOutput.Error(), want)
+		}
+	}
+
+	unrelated1026 := explainError(&provider.APIError{Provider: "other", Status: 422, Body: `{"code":1026,"message":"other meaning"}`})
+	if !strings.Contains(unrelated1026.Error(), i18n.M.ProviderErrUnprocessable) {
+		t.Errorf("another provider's numeric code 1026 must remain generic: %q", unrelated1026.Error())
+	}
+
+	rate := explainError(&provider.APIError{Provider: "deepseek", Status: 429, Body: `{"error":{"message":"slow down"}}`})
+	if !strings.Contains(rate.Error(), i18n.M.ProviderErrRateLimited) || !strings.Contains(rate.Error(), "slow down") {
+		t.Errorf("429 should append the provider reason, got %q", rate.Error())
+	}
+
+	// Relay gateways (one-api/new-api style) wrap the real failure — dead
+	// upstream channel, unsupported tools, exhausted quota — in a 5xx JSON
+	// body; the category line alone made those undiagnosable.
+	relay := explainError(&provider.APIError{Provider: "relay", Status: 500, Body: `{"error":{"message":"no available channel for model claude-fable-5 in group default","type":"new_api_error"}}`})
+	if !strings.Contains(relay.Error(), i18n.M.ProviderErrServer) || !strings.Contains(relay.Error(), "no available channel") {
+		t.Errorf("500 should append the provider reason from a JSON body, got %q", relay.Error())
+	}
+
+	busy := explainError(&provider.APIError{Provider: "relay", Status: 503, Body: "upstream unavailable"})
+	if !strings.Contains(busy.Error(), i18n.M.ProviderErrServerBusy) || !strings.Contains(busy.Error(), "upstream unavailable") {
+		t.Errorf("503 should fall back to the raw body, got %q", busy.Error())
+	}
+
+	bare := explainError(&provider.APIError{Provider: "relay", Status: 500})
+	if bare.Error() != i18n.M.ProviderErrServer {
+		t.Errorf("500 without a body = %q, want exactly the localized message", bare.Error())
+	}
+
+	interrupted := explainError(&provider.StreamInterruptedError{Err: io.ErrUnexpectedEOF})
+	if interrupted.Error() != fmt.Sprintf(i18n.M.ProviderErrStreamInterruptedFmt, io.ErrUnexpectedEOF) || !errors.Is(interrupted, io.ErrUnexpectedEOF) {
+		t.Errorf("stream interruption should be actionable, got %q", interrupted.Error())
+	}
+
+	disconnected := explainError(io.ErrUnexpectedEOF)
+	if disconnected.Error() != fmt.Sprintf(i18n.M.ProviderErrDisconnectedFmt, io.ErrUnexpectedEOF) || !errors.Is(disconnected, io.ErrUnexpectedEOF) {
+		t.Errorf("connection reset should be actionable, got %q", disconnected.Error())
+	}
+
+	nonStreaming := fmt.Errorf("gw: stream ended before any SSE event: %w", provider.ErrNonStreamingResponse)
+	explained := explainError(nonStreaming)
+	if explained.Error() != fmt.Sprintf(i18n.M.ProviderErrNonStreamingFmt, nonStreaming) || !errors.Is(explained, provider.ErrNonStreamingResponse) {
+		t.Errorf("non-streaming endpoint should get its own hint, got %q", explained.Error())
+	}
+
+	plain := errors.New("some other failure")
+	//nolint:errorlint // identity check: explainError must return the same error, unwrapped.
+	if explainError(plain) != plain {
+		t.Error("unknown errors should pass through unchanged")
+	}
+}
+
+func TestExplainRecoveryWaitExhaustedKeepsTypeAndCause(t *testing.T) {
+	cause := &provider.APIError{Provider: "deepseek", Status: 503, Body: `{"error":{"message":"upstream overloaded"}}`}
+	got := explainError(&provider.RecoveryWaitExhaustedError{Phase: "headers", Status: 503, Waited: 9*time.Minute + 33*time.Second + 400*time.Millisecond, Attempts: 13, Cause: cause})
+	for _, want := range []string{fmt.Sprintf(i18n.M.ProviderErrWaitExhaustedFmt, "9m33s"), "HTTP 503", "upstream overloaded"} {
+		if !strings.Contains(got.Error(), want) {
+			t.Errorf("explanation = %q, want it to contain %q", got.Error(), want)
+		}
+	}
+	if strings.Contains(got.Error(), i18n.M.ProviderErrServerBusy) || strings.Contains(got.Error(), "provider unreachable for") {
+		t.Errorf("explanation must describe the exhausted wait, not the last status: %q", got.Error())
+	}
+	if d := provider.DiagnoseFailure(got); d.Kind != "recovery_wait_exhausted" || d.Status != 503 {
+		t.Errorf("diagnostic = %+v", d)
+	}
+	if turnOutcome(got) != "" {
+		t.Errorf("an exhausted wait is an ordinary failure, got outcome %q", turnOutcome(got))
+	}
+	connect := explainError(&provider.RecoveryWaitExhaustedError{Phase: "connect", Waited: 10 * time.Minute, Attempts: 12, Cause: io.ErrUnexpectedEOF})
+	if !strings.Contains(connect.Error(), fmt.Sprintf(i18n.M.ProviderErrWaitExhaustedFmt, "10m0s")) || !strings.Contains(connect.Error(), io.ErrUnexpectedEOF.Error()) {
+		t.Errorf("connect explanation = %q", connect.Error())
+	}
+}
+
+func TestExplainErrorPreservesTurnLedgerFailure(t *testing.T) {
+	storageErr := fmt.Errorf("persist turn admission: %w", turnevent.ErrTurnLedgerUnavailable)
+	got := explainError(storageErr)
+	if !errors.Is(got, turnevent.ErrTurnLedgerUnavailable) {
+		t.Fatalf("explainError(%v) = %v, want storage sentinel preserved", storageErr, got)
+	}
+	if strings.Contains(got.Error(), "model stream") {
+		t.Fatalf("storage failure was misclassified as provider failure: %v", got)
+	}
+}
+
+func TestRedactAuthReason(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"masked tail", "Your api key: ****ae54 is invalid", "Your api key: **** is invalid"},
+		{"masked prefix form", "key sk-ab**** was rejected", "key **** was rejected"},
+		{"full key echoed by a relay", "Invalid key sk-proj-abc123def456ghi789 provided", "Invalid key **** provided"},
+		{"digit-free sk key via secrets.Redact", "api key: sk-proj-abcdefghijklmnop is invalid", "api key: **** is invalid"},
+		{"digit-free value after credential word", "api key: relaykey_abcdefghijklmn rejected", "api key: **** rejected"},
+		{"bearer value collapses fully", "Bearer abc.def-ghijklmnopqrs rejected", "Bearer **** rejected"},
+		{"mixed-case token without context", "rejected AbCdEfGhIjKlMnOpQr", "rejected ****"},
+		{"digit-free identifier survives", "code: invalid_authentication_token", "code: invalid_authentication_token"},
+		{"all-caps code survives", "code INVALID_AUTHENTICATION_TOKEN", "code INVALID_AUTHENTICATION_TOKEN"},
+		{"short tokens survive", "token expired at gateway", "token expired at gateway"},
+		{"empty", "", ""},
+	}
+	for _, c := range cases {
+		if got := redactAuthReason(c.in); got != c.want {
+			t.Errorf("%s: redactAuthReason(%q) = %q, want %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
+func TestExplainObservedQuota401DoesNotAskToReplaceKey(t *testing.T) {
+	err := explainError(&provider.AuthError{Provider: "opencode-go", Status: 401, HasKey: true, Body: `{"error":{"type":"CreditsError","message":"Insufficient balance. https://example.test/private-billing"}}`})
+	if err == nil || strings.Contains(err.Error(), "private-billing") || strings.Contains(err.Error(), "invalid") || !strings.Contains(err.Error(), "401") {
+		t.Fatalf("misleading quota explanation: %v", err)
+	}
+}
+
+func TestOpaqueFailureExplainsWithoutGuessingAndUsesSafeTrace(t *testing.T) {
+	got := explainError(&provider.APIError{Status: 400, Body: `{"model":"deepseek"}`, TraceID: "trace-123"}).Error()
+	if !strings.Contains(got, i18n.M.ProviderErrReasonMissing) || !strings.Contains(got, "trace-123") || strings.Contains(got, "thinking") {
+		t.Fatalf("opaque explanation=%s", got)
+	}
+	got = explainError(&provider.APIError{Status: 400, Body: `{"model":"deepseek"}`, TraceID: "https://private.invalid/billing"}).Error()
+	if strings.Contains(got, "private.invalid") {
+		t.Fatal("unsafe trace escaped")
+	}
+}

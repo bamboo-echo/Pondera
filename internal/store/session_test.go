@@ -1,0 +1,138 @@
+package store
+
+import "testing"
+
+func TestSessionSidecarLayout(t *testing.T) {
+	const p = "/home/u/.pondera/sessions/abc.jsonl"
+	cases := []struct {
+		name string
+		got  string
+		want string
+	}{
+		// .meta appends to the full path (historical layout); the rest replace .jsonl.
+		{"meta", SessionMeta(p), p + ".meta"},
+		{"goal-state", SessionGoalState(p), "/home/u/.pondera/sessions/abc.goal-state.json"},
+		{"event-log", SessionEventLog(p), "/home/u/.pondera/sessions/abc.events.jsonl"},
+		{"event-log-damaged", SessionEventLogDamaged(p), "/home/u/.pondera/sessions/abc.events.jsonl.damaged"},
+		{"turn-event-log", SessionTurnEventLog(p), "/home/u/.pondera/sessions/abc.turns.jsonl"},
+		{"turn-event-log-damaged", SessionTurnEventLogDamaged(p), "/home/u/.pondera/sessions/abc.turns.jsonl.damaged"},
+		{"event-index", SessionEventIndex(p), "/home/u/.pondera/sessions/abc.event-index.json"},
+		{"display-index", SessionDisplayIndex(p), "/home/u/.pondera/sessions/abc.display-index.json"},
+		{"transcript-projection", SessionTranscriptProjection(p), "/home/u/.pondera/sessions/abc.transcript-projection.json"},
+		{"conflict-log", SessionConflictLog(p), "/home/u/.pondera/sessions/abc.conflicts.jsonl"},
+		{"lock", SessionLockFile(p), p + ".lock"},
+		{"lease-lock", SessionLeaseLock(p), p + ".lease.lock"},
+		{"lease-info", SessionLeaseInfo(p), p + ".lease.json"},
+		{"checkpoint", SessionCheckpointDir(p), "/home/u/.pondera/sessions/abc.ckpt"},
+		{"jobs", SessionJobsDir(p), "/home/u/.pondera/sessions/abc.jobs"},
+		{"inbox", SessionInboxDir(p), "/home/u/.pondera/sessions/abc.inbox"},
+		{"cleanup-pending", SessionCleanupPending(p), "/home/u/.pondera/sessions/abc.cleanup-pending.json"},
+		{"context", SessionContext(p), "/home/u/.pondera/sessions/abc.context.json"},
+	}
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
+		}
+	}
+}
+
+func TestSessionSidecarEmptyPath(t *testing.T) {
+	for _, fn := range []struct {
+		name string
+		f    func(string) string
+	}{
+		{"meta", SessionMeta},
+		{"goal-state", SessionGoalState},
+		{"event-log", SessionEventLog},
+		{"event-log-damaged", SessionEventLogDamaged},
+		{"turn-event-log", SessionTurnEventLog},
+		{"turn-event-log-damaged", SessionTurnEventLogDamaged},
+		{"event-index", SessionEventIndex},
+		{"display-index", SessionDisplayIndex},
+		{"transcript-projection", SessionTranscriptProjection},
+		{"conflict-log", SessionConflictLog},
+		{"lock", SessionLockFile},
+		{"lease-lock", SessionLeaseLock},
+		{"lease-info", SessionLeaseInfo},
+		{"checkpoint", SessionCheckpointDir},
+		{"jobs", SessionJobsDir},
+		{"inbox", SessionInboxDir},
+		{"cleanup-pending", SessionCleanupPending},
+		{"context", SessionContext},
+	} {
+		if got := fn.f(""); got != "" {
+			t.Errorf("%s(\"\") = %q, want empty", fn.name, got)
+		}
+	}
+}
+
+func TestIsSessionTranscriptName(t *testing.T) {
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"session.jsonl", true},
+		{"session.events.jsonl", false},
+		{"session.turns.jsonl", false},
+		{"session.conflicts.jsonl", false},
+		{"session.guardian.jsonl", false},
+		{"session.wire.jsonl", false},
+		{"session.adjudication.jsonl", false},
+		{"session.execution.jsonl", false},
+		{"session.guardian.events.jsonl", false},
+		{"session.events.jsonl.damaged", false},
+		{"session.jsonl.meta", false},
+		{"notes.txt", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := IsSessionTranscriptName(c.name); got != c.want {
+			t.Errorf("IsSessionTranscriptName(%q) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestSessionSidecarFiles(t *testing.T) {
+	const p = "/home/u/.pondera/sessions/abc.jsonl"
+	got := SessionSidecarFiles(p)
+	want := []string{
+		p + ".meta",
+		"/home/u/.pondera/sessions/abc.goal-state.json",
+		"/home/u/.pondera/sessions/abc.events.jsonl",
+		"/home/u/.pondera/sessions/abc.events.jsonl.damaged",
+		"/home/u/.pondera/sessions/abc.events.jsonl.rotating",
+		"/home/u/.pondera/sessions/abc.turns.jsonl",
+		"/home/u/.pondera/sessions/abc.turns.jsonl.damaged",
+		"/home/u/.pondera/sessions/abc.event-index.json",
+		"/home/u/.pondera/sessions/abc.display-index.json",
+		"/home/u/.pondera/sessions/abc.transcript-projection.json",
+		"/home/u/.pondera/sessions/abc.conflicts.jsonl",
+		"/home/u/.pondera/sessions/abc.recovery.json",
+		"/home/u/.pondera/sessions/abc.context.json",
+		"/home/u/.pondera/sessions/abc.pinned-context.json",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("SessionSidecarFiles = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("SessionSidecarFiles[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if SessionSidecarFiles("") != nil {
+		t.Error("SessionSidecarFiles(\"\") should be nil")
+	}
+}
+
+func TestAStudioImportIsNotASessionTranscript(t *testing.T) {
+	for name, want := range map[string]bool{
+		"v4-abc.jsonl": false, "v4-abc.events.jsonl": false, "20260101-abc.jsonl": true, "dev4-x.jsonl": true,
+	} {
+		if got := IsSessionTranscriptName(name); got != want {
+			t.Errorf("IsSessionTranscriptName(%q) = %v, want %v", name, got, want)
+		}
+	}
+	if !IsStudioImportName("v4-abc.jsonl.meta") || IsStudioImportName("abc.jsonl") {
+		t.Fatal("IsStudioImportName must key on the v4- prefix alone")
+	}
+}

@@ -1,0 +1,2138 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { captureListReadAnchor, restoreListReadAnchor, type ListReadAnchor } from "../lib/listReadAnchor";
+import { ProjectTreeSessionBadges } from "./ProjectTreeSessionBadges";
+import { sessionLifecycleFences } from "../lib/sessionLifecycleFences";
+import { projectSessionIdentity, projectSessionRowKey } from "../lib/projectSessionIdentity";
+import type { CSSProperties, DragEvent as ReactDragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import { Archive, Pencil, Plus, Folder, FolderPlus, Search, BriefcaseBusiness, Copy, FolderOpen, XCircle, Check, ListCollapse, ListRestart, MessageSquare, Clock, Pin, MoreHorizontal, Minimize2, Maximize2, GitBranch, Sparkles, Cloud } from "lucide-react";
+import { asArray } from "../lib/array";
+import { defaultWorkspaceTitle } from "../lib/sessionTitles";
+import { useToast } from "../lib/toast";
+import { app } from "../lib/bridge";
+import { onProjectTreeChangedV2 } from "../lib/sessionCatalogBridge";
+import { releaseReadSnapshot } from "../lib/readSnapshot";
+import { sessionCatalogNotice } from "../lib/sessionCatalogPresentation";
+import { sessionTitleErrorKey, sessionTitleTarget } from "../lib/sessionTitleOperation";
+import { useSessionTitleOperation } from "../lib/useSessionTitleOperation";
+import { isRuntimeSessionNode, isTopicNode, loadWorkbenchSortMode, mergeIncompleteProjectTopicPage, mergeProjectTopicPage, projectTreeDedupedExactTime, projectTreeEventAffectsFolder, projectTreeFolderDisclosure, projectTreeRevisionIsFresh, projectTreeShellChildren, projectTreeShellSignature, projectTreeShouldApplyShellSnapshot, projectTreeShouldRenderTopicActions, projectTreeShouldSuppressOpenForRename, projectTreeTopicArchiveBlocked, projectTreeTopicHasUnreadActivity, projectTreeTopicMenuOffersPin, projectTreeTopicMetaLine, projectTreeTopicOpenRequest, projectTreeTopicPageIsFresh, projectTreeWithoutSession, projectTreeWithoutTopic, projectTreeWithSessionTitle, projectTreeWithTopicTitle, topicActivityDateLabel, topicActivityLabel, topicIsActive, topicStatus, topicStatusLabel, topicUnknownTimeLabel, WORKBENCH_SORT_KEY, type ProjectTreePendingTopicOpen, type WorkbenchSortMode } from "../lib/projectTreeTopic";
+export * from "../lib/projectTreeTopic";
+import { arrangeWorkbenchTree, splitPinnedProjectTree, type PinnedTreeSections } from "../lib/projectTreePresentation";
+export * from "../lib/projectTreePresentation";
+import type { ProjectNode, SessionCatalogStatus } from "../lib/types";
+import { useT, type Translator } from "../lib/i18n";
+import { PROJECT_COLOR_OPTIONS, projectColorValue } from "../lib/projectColors";
+import { projectTreeSessionArchiveTargetKey, projectTreeTopicArchiveTargetKey, projectTreeWithoutTopics, reloadProjectTreeTopics, useProjectTreeArchiveController, type ProjectTreeRefresh, type ProjectTreeRefreshOptions } from "../lib/projectTreeArchive";
+import { topicShortcutLabel, type TopicShortcutEntry } from "../lib/topicShortcuts";
+import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type ContextMenuPoint } from "./ContextMenu";
+import { Tooltip } from "./Tooltip";
+import { WorktreeBadge } from "./WorktreeBadge";
+import { useProjectCreation } from "./useProjectCreation";
+import { useProjectTreeRuntimeProjection } from "../lib/useProjectTreeRuntimeProjection";
+import { useProjectTreeFrontendDiagnostics, type ProjectTreeDiagnosticSnapshot } from "../lib/useProjectTreeFrontendDiagnostics";
+import { summarizeProjectTreeSessions } from "../lib/projectTreeDiagnostics";
+import { GLOBAL_PROJECT_ORDER_KEY, ProjectTreeFolderActivity, ProjectTreeGroupRows, applyProjectOrder, projectTreeGroupContainsNode, projectTreeOrganizationKey, projectTreeProjectRoots, reorderedProjectRoots, useProjectTreeOrganization, type ProjectDropPosition } from "./ProjectTreeOrganization";
+import { ProjectTreeSessionArchiveMenu } from "./ProjectTreeSessionArchiveMenu";
+import { ProjectTreeHeaderAddControl, ProjectTreeRemoteAction, projectTreeHeaderAddItems } from "./ProjectTreeAddControls";
+import { activeRemoteProjectAncestorKeys, buildRemoteProjectMenuItems, useRemoteRuntimeTree, openRemoteSessionNode, remoteProjectKey, remoteServeBadgeState, renameRemoteProjectTitle, RemoteProjectEmptyState, remoteSessionActionIdentity, remoteSessionArchiveBlocked, useRemoteProjectGroups, useRemoteSessionActions } from "./ProjectTreeRemoteGroups";
+import type { ProjectTreeProps } from "./ProjectTreeProps";
+import { PROJECT_TREE_SEARCH_PAGE, PROJECT_TREE_WINDOW_INITIAL, PROJECT_TREE_WINDOW_STEP, forgetProjectTreeWindowLimits, loadProjectTreePageWindow, projectTreeListKey, projectTreeListNeedsInitialization, projectTreeListShowsLoading, projectTreeProjectsNeedingInitialLoad, projectTreeWindowRows, reloadProjectTreeTopicLists, rememberProjectTreeWindowLimit, type ProjectTreeListPageState } from "../lib/projectTreeWindow";
+import { useProjectTreeReadActivity } from "./useProjectTreeReadActivity";
+import { useProjectTreeListRuntime } from "../lib/useProjectTreeListRuntime";
+import { activeSessionAncestorKeys, collapsibleProjectTreeFolderKeys, defaultExpandedProjectTreeKeys, projectTreeNodeKey as projectNodeKey } from "../lib/projectTreeExpansion";
+import { createProjectTreeRequestDiagnostic } from "../lib/projectTreeRequestDiagnostics";
+export { activeSessionAncestorKeys, defaultExpandedProjectTreeKeys } from "../lib/projectTreeExpansion";
+
+type WorkbenchHeaderMenu = "more" | "add" | null;
+
+type CollapseSnapshot = {
+  expanded: Set<string>;
+  manuallyCollapsed: Set<string>;
+};
+
+// Global rows use the same project tree recipe; the fallback supplies their non-workspace accent.
+function projectAccentStyle(color?: string, fallbackValue?: string): CSSProperties | undefined {
+  const value = projectColorValue(color) || fallbackValue;
+  if (!value) return undefined;
+  return { "--project-accent": value } as CSSProperties;
+}
+
+function colorMenuLabel(label: string, color?: string, active = false) {
+  const value = projectColorValue(color);
+  return (
+    <span className="project-tree__color-option">
+      <span
+        className="project-tree__color-swatch"
+        style={value ? ({ "--project-accent": value } as CSSProperties) : undefined}
+        aria-hidden="true"
+      />
+      <span>{label}</span>
+      {active && <Check className="project-tree__color-check" size={12} />}
+    </span>
+  );
+}
+
+function menuLabelWithCheck(label: string, checked: boolean) {
+  return (
+    <span className="context-menu__label-with-check">
+      <span className="context-menu__label-text">{label}</span>
+      {checked && <Check className="context-menu__check" size={13} aria-hidden="true" />}
+    </span>
+  );
+}
+
+function revealLabelKey(platform: string): "projectTree.revealInFinder" | "projectTree.revealInExplorer" | "projectTree.revealInFileManager" {
+  if (platform === "darwin") return "projectTree.revealInFinder";
+  if (platform === "windows") return "projectTree.revealInExplorer";
+  return "projectTree.revealInFileManager";
+}
+
+function projectColorLabel(t: Translator, color?: string): string {
+  switch (color) {
+    case "red": return t("projectTree.colorRed");
+    case "orange": return t("projectTree.colorOrange");
+    case "amber": return t("projectTree.colorAmber");
+    case "green": return t("projectTree.colorGreen");
+    case "teal": return t("projectTree.colorTeal");
+    case "blue": return t("projectTree.colorBlue");
+    case "purple": return t("projectTree.colorPurple");
+    case "pink": return t("projectTree.colorPink");
+    default: return t("projectTree.colorDefault");
+  }
+}
+
+export function ProjectTree({
+  activeScope,
+  activeWorkspaceRoot,
+  activeTopicId,
+  activeSessionPath,
+  activeRemote,
+  imTopicSources = {},
+  variant = "workbench",
+  onOpenTopic,
+  onAddProject,
+  onCreateTopic,
+  onCreateIsolatedWorktree,
+  onRenameTopic,
+  onTopicsChanged,
+  refreshSignal,
+  searchExpanded = true,
+  searchFocusSignal = 0,
+  showShortcutBadges = false,
+  shortcutPlatform,
+  onVisibleTopicsChange,
+}: ProjectTreeProps) {
+  const t = useT();
+  const { showToast } = useToast();
+  const projectTreeRef = useRef<HTMLDivElement>(null);
+  const readAnchorRef = useRef<ListReadAnchor | undefined>(undefined);
+  const compactTopics = variant === "workbench";
+  const creationTopics = variant === "creation";
+  const [tree, setTree] = useState<ProjectNode[]>([]);
+  const [shellStage, setShellStage] = useState<"loading" | "slow" | "ready">("loading");
+  const treeRef = useRef<ProjectNode[]>([]);
+  const latestRevisionRef = useRef(0);
+  const shellRequestRef = useRef(0);
+  const shellGenerationRef = useRef<number | undefined>(undefined);
+  const [organizationRevision, setOrganizationRevision] = useState(0);
+  const {
+    topicRevisionRef, topicCompletePageRef, topicPageState, setTopicPageState, topicPageStateRef,
+    updateTopicPageState, topicWindowLimits, setTopicWindowLimits, topicWindowLimitsRef,
+    resetTopicWindowLimits, topicLoadSeqRef, topicLoadPendingRef, topicRequestLimiterRef,
+    topicLoadErrorRef, invalidateProjectTopicLists,
+  } = useProjectTreeListRuntime();
+  const [catalogStatus, setCatalogStatus] = useState<SessionCatalogStatus>({
+    state: "opening", revision: 0, indexed: 0, total: 0, repairPending: 0,
+    repairActive: 0, repairDeferred: 0, repairBlocked: 0,
+  });
+  const catalogStatusGenerationRef = useRef(0), rebuildingCatalogRef = useRef(false), catalogRebuildFailedRef = useRef(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [manuallyCollapsed, setManuallyCollapsed] = useState<Set<string>>(new Set());
+  const [creatingProject, setCreatingProject] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [editingTopic, setEditingTopic] = useState<string | null>(null);
+  const [editingSession, setEditingSession] = useState<{ key: string; path: string; topicId: string } | null>(null);
+  const [topicDraft, setTopicDraft] = useState("");
+  const [menuNodeKey, setMenuNodeKey] = useState<string | null>(null);
+  const [menuProject, setMenuProject] = useState<{ key: string; root: string; path: string; scope: "global" | "project"; label: string } | null>(null);
+  const [menuPoint, setMenuPoint] = useState<ContextMenuPoint | null>(null);
+  const [editingProject, setEditingProject] = useState<{ key: string; root: string } | null>(null);
+  const [projectDraft, setProjectDraft] = useState("");
+  const [isolatingProject, setIsolatingProject] = useState<string | null>(null);
+  const [worktreeAvailability, setWorktreeAvailability] = useState<Record<string, { available: boolean; reason?: string }>>({});
+  const [confirmArchiveTarget, setConfirmArchiveTarget] = useState<string | null>(null);
+  const [confirmRemoveProject, setConfirmRemoveProject] = useState<string | null>(null);
+  const [dragProjectRoot, setDragProjectRoot] = useState<string | null>(null);
+  const [dropProject, setDropProject] = useState<{ root: string; position: ProjectDropPosition } | null>(null);
+  const [collapseSnapshot, setCollapseSnapshot] = useState<CollapseSnapshot | null>(null);
+  const [platform, setPlatform] = useState("");
+  const [workbenchHeaderMenu, setWorkbenchHeaderMenu] = useState<WorkbenchHeaderMenu>(null);
+  const [workbenchSortMode, setWorkbenchSortMode] = useState<WorkbenchSortMode>(loadWorkbenchSortMode);
+  const workbenchSortModeRef = useRef(workbenchSortMode);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const topicIndexRef = useRef(0);
+  const visibleTopicsCollectorRef = useRef<TopicShortcutEntry[]>([]);
+  const creatingRef = useRef(false);
+  const closeMenu = useCallback(() => {
+    setMenuNodeKey(null);
+    setMenuProject(null);
+    setMenuPoint(null);
+    setConfirmArchiveTarget(null);
+    setConfirmRemoveProject(null);
+    setWorkbenchHeaderMenu(null);
+  }, []);
+  const topicRequestContextRef = useRef({ query: query.trim(), sortMode: creationTopics ? "updated" : workbenchSortMode });
+  topicRequestContextRef.current = { query: query.trim(), sortMode: creationTopics ? "updated" : workbenchSortMode };
+  const activeSummaryRequestRef = useRef("");
+  const refreshRef = useRef<ProjectTreeRefresh>(async () => {});
+  const { trashingTopics, trashingSessions, currentArchiveTombstones, trashTopic, trashSession, inspectTopicRemoval, topicRemovalInspections } = useProjectTreeArchiveController({
+    treeRef, invalidateProjectTopicLists, refreshRef,
+    optimisticallyRemoveTopic: (topicId) => setTree((current) => projectTreeWithoutTopic(current, topicId)),
+    optimisticallyRemoveSession: (node) => setTree((current) => projectTreeWithoutSession(current, node)),
+    closeMenu, onTopicsChanged, showToast,
+    sessionErrorMessage: (error) => t(sessionTitleErrorKey(error)),
+  });
+  const applyRuntimeProjection = useProjectTreeRuntimeProjection(setTree, currentArchiveTombstones);
+  const clickTimerRef = useRef<ProjectTreePendingTopicOpen | null>(null);
+  useEffect(() => {
+    const invalidatePendingOpen = (event: Event) => {
+      const pending = clickTimerRef.current;
+      if (!pending) return;
+      const target = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-topic-open-key]") : null;
+      if (event.type === "click" && target?.dataset.topicOpenKey === pending.rowKey) return;
+      const keyEvent = event as globalThis.KeyboardEvent;
+      if (event.type === "keydown" && !keyEvent.metaKey && !keyEvent.ctrlKey && keyEvent.key !== "Escape") return;
+      clearTimeout(pending.timer);
+      clickTimerRef.current = null;
+    };
+    document.addEventListener("click", invalidatePendingOpen, true);
+    document.addEventListener("keydown", invalidatePendingOpen, true);
+    return () => {
+      document.removeEventListener("click", invalidatePendingOpen, true);
+      document.removeEventListener("keydown", invalidatePendingOpen, true);
+    };
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current !== null) clearTimeout(clickTimerRef.current.timer);
+    };
+  }, []);
+  const manuallyCollapsedRef = useRef(manuallyCollapsed);
+  const updateManuallyCollapsed = useCallback((updater: (prev: Set<string>) => Set<string>) => {
+    setManuallyCollapsed((prev) => {
+      const next = updater(prev);
+      manuallyCollapsedRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const loadProjectTopicsRef = useRef<(project: ProjectNode, append?: boolean, groupID?: string, background?: boolean) => Promise<void>>(async () => {});
+  const topicRefreshPendingRef = useRef(new Map<string, () => void>());
+  const topicLastStartRef = useRef<Record<string, number>>({});
+  const topicRefreshTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => () => {
+    for (const timer of topicRefreshTimersRef.current.values()) clearTimeout(timer);
+    topicRefreshPendingRef.current.clear();
+    for (const state of Object.values(topicPageStateRef.current)) releaseReadSnapshot(state.snapshotId);
+    for (const key of Object.keys(topicLoadSeqRef.current)) topicLoadSeqRef.current[key]++;
+  }, [topicLoadSeqRef, topicPageStateRef]);
+
+  const loadProjectTopics = useCallback(async (project: ProjectNode, append = false, groupID = "", background = false) => {
+    if ((project.kind !== "project" && project.kind !== "global_folder") || project.remote) return;
+    const key = project.key;
+    const normalizedQuery = query.trim();
+    const listKey = projectTreeListKey(key, groupID, normalizedQuery);
+    if (topicLoadPendingRef.current[listKey] !== undefined) {
+      if (!append) topicRefreshPendingRef.current.set(listKey, () => { void loadProjectTopicsRef.current(project, false, groupID, true); });
+      return;
+    }
+    if (background && !append && Date.now() - (topicLastStartRef.current[listKey] ?? 0) < 500) {
+      if (!topicRefreshTimersRef.current.has(listKey)) {
+        topicRefreshTimersRef.current.set(listKey, setTimeout(() => {
+          topicRefreshTimersRef.current.delete(listKey);
+          void loadProjectTopicsRef.current(project, false, groupID, true);
+        }, 500 - (Date.now() - topicLastStartRef.current[listKey])));
+      }
+      return;
+    }
+    topicLastStartRef.current[listKey] = Date.now();
+    const pageState = topicPageStateRef.current[listKey];
+    if (pageState?.loading) return;
+    const cursor = append ? pageState?.nextCursor ?? "" : "";
+    if (append && !cursor) return;
+    const sortMode = creationTopics ? "updated" : workbenchSortModeRef.current;
+    const windowKey = projectTreeListKey(key, groupID);
+    const limit = normalizedQuery
+      ? PROJECT_TREE_SEARCH_PAGE
+      : append
+        ? PROJECT_TREE_WINDOW_STEP
+        : topicWindowLimitsRef.current[windowKey] ?? PROJECT_TREE_WINDOW_INITIAL;
+    const excludePinned = !creationTopics && !project.pinned;
+    // Completeness belongs to the logical list, not to the size of the page
+    // used to paint it. This lets an incomplete refresh retain a previously
+    // complete 5/15/25-row screen while the catalog repairs itself.
+    const requestSignature = [
+      normalizedQuery,
+      groupID,
+      sortMode,
+      excludePinned ? "exclude-pinned" : "include-pinned",
+    ].join("\u001f");
+    // Last-query-wins: stale completions cannot overwrite a newer first page.
+    const seq = (topicLoadSeqRef.current[listKey] ?? 0) + 1;
+    topicLoadSeqRef.current[listKey] = seq;
+    topicLoadPendingRef.current[listKey] = seq;
+    updateTopicPageState(listKey, { ...pageState, loading: true,
+      refreshing: background && !append && pageState?.itemKeys !== undefined, error: undefined });
+    const emitRequest = createProjectTreeRequestDiagnostic({ projectKind: project.kind, creationTopics, sequence: seq, stats: () => topicRequestLimiterRef.current.stats() });
+    try {
+      const page = await topicRequestLimiterRef.current.run(() => {
+        emitRequest("started");
+        const context = topicRequestContextRef.current;
+        if (topicLoadSeqRef.current[listKey] !== seq || context.query !== normalizedQuery || context.sortMode !== sortMode) return (emitRequest("discarded", { status: "stale" }), Promise.resolve(null));
+        return loadProjectTreePageWindow(cursor, limit, (pageCursor, pageLimit) => app.ListProjectTopics({
+          scope: project.kind === "global_folder" ? "global" : "project",
+          workspaceRoot: project.kind === "global_folder" ? "" : project.root ?? "",
+          cursor: pageCursor,
+          limit: pageLimit,
+          query: normalizedQuery,
+          sortMode,
+          groupFilter: normalizedQuery ? "all" : groupID ? "group" : "ungrouped",
+          groupId: groupID || undefined,
+          // Individually pinned topics live in the standalone pinned section
+          // for ordinary projects. A pinned project is itself that section's
+          // folder, so its children must remain available inside it.
+          excludePinned,
+        }), append ? Math.max(limit, (pageState?.itemKeys?.length ?? 0) + limit) : limit);
+      });
+      if (!page) return;
+      if (topicLoadSeqRef.current[listKey] !== seq) { if (!append || page.replacedSnapshot) releaseReadSnapshot(page.snapshotId); emitRequest("discarded", { status: "stale", itemCount: page.items.length }); return; }
+      const currentContext = topicRequestContextRef.current;
+      if (currentContext.query !== normalizedQuery || currentContext.sortMode !== sortMode) { if (!append || page.replacedSnapshot) releaseReadSnapshot(page.snapshotId); emitRequest("discarded", { status: "stale", itemCount: page.items.length }); return; }
+      const appendPage = append && !page.replacedSnapshot;
+      if (appendPage && pageState?.snapshotId && page.snapshotId !== pageState.snapshotId) throw new Error("Mixed read snapshots in one list");
+      delete topicLoadErrorRef.current[listKey];
+      if (!projectTreeTopicPageIsFresh(topicRevisionRef.current, listKey, page.revision)) {
+        if (!appendPage) releaseReadSnapshot(page.snapshotId);
+        updateTopicPageState(listKey, { ...topicPageStateRef.current[listKey], loading: false });
+        emitRequest("discarded", { status: "stale", itemCount: page.items.length });
+        return;
+      }
+      topicRevisionRef.current[listKey] = Math.max(topicRevisionRef.current[listKey] ?? 0, page.revision);
+      sessionLifecycleFences.observeDirectory(asArray(page.items));
+      const items = projectTreeWithoutTopics(asArray(page.items), currentArchiveTombstones());
+      const completeBaseline = topicCompletePageRef.current[listKey];
+      const preserveCompletePage = page.complete === false && completeBaseline?.signature === requestSignature;
+      const incomingKeys = items.map((item) => item.key);
+      const previousKeys = topicPageStateRef.current[listKey]?.itemKeys ?? [];
+      const itemKeys = appendPage || preserveCompletePage
+        ? [...new Set([...previousKeys, ...incomingKeys])]
+        : incomingKeys;
+      if (page.complete !== false) {
+        topicCompletePageRef.current[listKey] = { signature: requestSignature, revision: page.revision };
+      }
+      if (!appendPage && pageState?.itemKeys !== undefined && !readAnchorRef.current) readAnchorRef.current = captureListReadAnchor(projectTreeRef.current);
+      setTree((current) => applyRuntimeProjection(current.map((node) => {
+        if (node.key !== key) return node;
+        const previous = new Set(previousKeys);
+        const otherLists = new Set(Object.entries(topicPageStateRef.current)
+          .filter(([other]) => other !== listKey && other.startsWith(`${key}\u001f`))
+          .flatMap(([, state]) => state.itemKeys ?? []));
+        const retained = appendPage ? asArray(node.children) : asArray(node.children)
+          .filter((child) => child.pinned || !previous.has(child.key) || otherLists.has(child.key));
+        const children = preserveCompletePage
+          ? mergeIncompleteProjectTopicPage(asArray(node.children), items)
+          : mergeProjectTopicPage(retained, items, true);
+        return children === node.children ? node : { ...node, children };
+      })));
+      updateTopicPageState(listKey, preserveCompletePage
+        ? { ...topicPageStateRef.current[listKey], itemKeys, loading: false, initialized: true }
+        : { itemKeys, nextCursor: page.nextCursor, snapshotId: page.snapshotId, loading: false, initialized: true });
+      if (preserveCompletePage && !appendPage) releaseReadSnapshot(page.snapshotId);
+      else if (!appendPage && pageState?.snapshotId !== page.snapshotId) releaseReadSnapshot(pageState?.snapshotId);
+      emitRequest("completed", { status: "ok", itemCount: items.length });
+    } catch (error) {
+      if (topicLoadSeqRef.current[listKey] !== seq) return void emitRequest("discarded", { status: "stale" });
+      const message = error instanceof Error ? error.message : String(error);
+      updateTopicPageState(listKey, { ...topicPageStateRef.current[listKey], loading: false, initialized: true, error: message });
+      if (topicLoadErrorRef.current[listKey] !== message) {
+        topicLoadErrorRef.current[listKey] = message;
+        showToast(message, "error", { durationMs: 6000 });
+      }
+      emitRequest("failed", { status: "error" });
+    } finally {
+      if (topicLoadPendingRef.current[listKey] === seq) delete topicLoadPendingRef.current[listKey];
+      if (topicLoadSeqRef.current[listKey] === seq) {
+        const pending = topicRefreshPendingRef.current.get(listKey);
+        topicRefreshPendingRef.current.delete(listKey);
+        pending?.();
+      }
+    }
+  }, [applyRuntimeProjection, creationTopics, currentArchiveTombstones, query, showToast, updateTopicPageState]);
+  loadProjectTopicsRef.current = loadProjectTopics;
+  useLayoutEffect(() => { restoreListReadAnchor(projectTreeRef.current, readAnchorRef.current); readAnchorRef.current = undefined; }, [tree]);
+
+  const topicListState = useCallback((project: ProjectNode, groupID = "") => (
+    topicPageState[projectTreeListKey(project.key, groupID, query)]
+  ), [query, topicPageState]);
+  const topicListLimit = useCallback((project: ProjectNode, groupID = "") => (
+    topicWindowLimits[projectTreeListKey(project.key, groupID)] ?? PROJECT_TREE_WINDOW_INITIAL
+  ), [topicWindowLimits]);
+  const ensureTopicList = useCallback((project: ProjectNode, groupID = "") => {
+    const state = topicPageStateRef.current[projectTreeListKey(project.key, groupID, query)];
+    if (!projectTreeListNeedsInitialization(state)) return Promise.resolve();
+    return loadProjectTopics(project, false, groupID);
+  }, [loadProjectTopics, query]);
+  const ensureTopicListRef = useRef(ensureTopicList);
+  ensureTopicListRef.current = ensureTopicList;
+  const expandTopicList = useCallback((project: ProjectNode, groupID = "", loadedCount = 0) => {
+    const key = projectTreeListKey(project.key, groupID);
+    const requestKey = projectTreeListKey(project.key, groupID, query);
+    if (!project.remote && (topicLoadPendingRef.current[requestKey] !== undefined || topicPageStateRef.current[requestKey]?.loading)) return;
+    const nextLimit = (topicWindowLimitsRef.current[key] ?? PROJECT_TREE_WINDOW_INITIAL) + PROJECT_TREE_WINDOW_STEP;
+    setTopicWindowLimits((current) => {
+      const next = { ...current, [key]: nextLimit };
+      rememberProjectTreeWindowLimit(key, next[key]);
+      topicWindowLimitsRef.current = next;
+      return next;
+    });
+    if (!project.remote && loadedCount < nextLimit && topicPageStateRef.current[requestKey]?.nextCursor) {
+      void loadProjectTopics(project, true, groupID);
+    }
+  }, [loadProjectTopics, query]);
+
+  const retryTopicList = useCallback((project: ProjectNode, groupID = "") => {
+    const state = topicPageStateRef.current[projectTreeListKey(project.key, groupID, query)];
+    void loadProjectTopics(project, Boolean(state?.nextCursor), groupID);
+  }, [loadProjectTopics, query]);
+  const forgetTopicList = useCallback((project: ProjectNode, groupID: string) => {
+    const listKey = projectTreeListKey(project.key, groupID);
+    topicLoadSeqRef.current[listKey] = (topicLoadSeqRef.current[listKey] ?? 0) + 1;
+    delete topicLoadPendingRef.current[listKey];
+    delete topicRevisionRef.current[listKey];
+    delete topicCompletePageRef.current[listKey];
+    delete topicLoadErrorRef.current[listKey];
+    const nextPages = { ...topicPageStateRef.current };
+    releaseReadSnapshot(nextPages[listKey]?.snapshotId);
+    delete nextPages[listKey];
+    topicPageStateRef.current = nextPages;
+    setTopicPageState(nextPages);
+    const nextLimits = { ...topicWindowLimitsRef.current };
+    delete nextLimits[listKey];
+    topicWindowLimitsRef.current = nextLimits;
+    setTopicWindowLimits(nextLimits);
+    rememberProjectTreeWindowLimit(listKey, PROJECT_TREE_WINDOW_INITIAL);
+  }, []);
+  const reloadProjectTopicLists = useCallback((project: ProjectNode) => {
+    return reloadProjectTreeTopicLists(project,
+      topicRequestContextRef.current.query, topicPageStateRef.current,
+      (target, groupID) => loadProjectTopicsRef.current(target, false, groupID, true));
+  }, []);
+
+  const changeQuery = useCallback((value: string) => {
+    if (value.trim() !== topicRequestContextRef.current.query) {
+      // Retain painted rows, but retire requests/cursors from the old search
+      // before any completion can run between this event and the next render.
+      topicRequestContextRef.current = { ...topicRequestContextRef.current, query: value.trim() };
+      for (const project of treeRef.current) invalidateProjectTopicLists(project.key);
+    }
+    setQuery(value);
+  }, [invalidateProjectTopicLists]);
+
+  const selectWorkbenchSortMode = useCallback((sortMode: WorkbenchSortMode) => {
+    if (workbenchSortModeRef.current === sortMode) {
+      closeMenu();
+      return;
+    }
+    // Invalidate before scheduling React state so an already-resolved older
+    // request cannot write back during the render/effect gap. Its pagination
+    // cursor belongs to the old order and must not be reused by the new query.
+    workbenchSortModeRef.current = sortMode;
+    topicRequestContextRef.current = { query: query.trim(), sortMode };
+    for (const project of treeRef.current) invalidateProjectTopicLists(project.key);
+    setWorkbenchSortMode(sortMode);
+    closeMenu();
+
+    const filtering = query.trim() !== "";
+    for (const project of treeRef.current) {
+      const key = projectNodeKey(project, 0);
+      if (filtering || expanded.has(key)) void ensureTopicList(project);
+    }
+  }, [closeMenu, ensureTopicList, expanded, invalidateProjectTopicLists, query]);
+  // Snapshot carries project shells plus lightweight pinned topic shells.
+  // Preserve already loaded pages by project key while reconciling pins, so a
+  // metadata refresh does not collapse or blank the sidebar.
+  const refresh = useCallback(async (options?: ProjectTreeRefreshOptions, throwOnSnapshotError = false) => {
+    const request = ++shellRequestRef.current;
+    const reloadRequestedProjects = (projects: ProjectNode[]) => reloadProjectTreeTopics(projects, options, reloadProjectTopicLists), catalogStatusGeneration = catalogStatusGenerationRef.current;
+    try {
+      const snapshot = await app.GetProjectTreeSnapshot();
+      if (request !== shellRequestRef.current) return;
+      const rev = snapshot.revision ?? 0, empty = treeRef.current.length === 0;
+      // Catalog revisions describe topic indexing, not workspace membership.
+      // Compare the authoritative membership generation independently; an old
+      // registry cannot become fresh merely because an index scan advanced.
+      const generation = snapshot.workspaceGeneration ?? undefined;
+      const fresh = generation === undefined
+        ? projectTreeShouldApplyShellSnapshot({ currentRevision: latestRevisionRef.current, incomingRevision: rev, treeEmpty: empty })
+        : shellGenerationRef.current === undefined || generation >= shellGenerationRef.current;
+      if (!fresh) {
+        await reloadRequestedProjects(treeRef.current);
+        return;
+      }
+      if (generation !== undefined) shellGenerationRef.current = generation;
+      if (projectTreeRevisionIsFresh(latestRevisionRef.current, rev)) latestRevisionRef.current = Math.max(latestRevisionRef.current, rev);
+      const projects = asArray(snapshot.projects);
+      if (!catalogRebuildFailedRef.current && catalogStatusGeneration === catalogStatusGenerationRef.current) setCatalogStatus(snapshot.catalog);
+      setTree((current) => applyRuntimeProjection(projects.map((project) => {
+        const previous = current.find((node) => node.key === project.key);
+        // Topic pages reload asynchronously. Keep the last painted children
+        // until their replacement arrives so a mutation cannot blank every
+        // expanded folder for the duration of a catalog scan.
+        return { ...project, children: projectTreeShellChildren(previous?.children, project.children) };
+      })));
+      await reloadRequestedProjects(projects);
+    } catch (err) {
+      // A failed shell read can still reload topics from resident folders.
+      if (request === shellRequestRef.current) await reloadRequestedProjects(treeRef.current);
+      if (throwOnSnapshotError) throw err;
+    } finally {
+      if (request === shellRequestRef.current) setShellStage("ready");
+    }
+  }, [applyRuntimeProjection, reloadProjectTopicLists]);
+  refreshRef.current = refresh;
+  const { openRemoteProject, openRemoteWindow, remoteSessions, setRemoteSessions, remoteServers, remoteGroupBusy, remoteGroupError, ensureRemoteGroupSessions, refreshRemoteSessions } = useRemoteProjectGroups(tree, showToast, expanded, query);
+  const treeWithRemoteSessions = useRemoteRuntimeTree(tree, remoteSessions, t);
+  const remoteSessionActions = useRemoteSessionActions(remoteSessions, refreshRemoteSessions, (error) => showToast(error instanceof Error ? error.message : String(error), "error"));
+  const { addingProject, handleAddProject, openBlankProjectFlow, blankProjectFlow, openRemoteConnectFlow, remoteConnectFlow } = useProjectCreation({
+    onAddProject,
+    onRefresh: () => refresh(undefined, true),
+    showToast,
+  });
+
+  const rebuildSessionCatalog = useCallback(async () => {
+    if (rebuildingCatalogRef.current || catalogStatus.canRebuild !== true) return;
+    rebuildingCatalogRef.current = true; catalogRebuildFailedRef.current = false; catalogStatusGenerationRef.current += 1;
+    setCatalogStatus({ ...catalogStatus, state: "rebuilding", canRebuild: false });
+    try {
+      await app.RebuildSessionCatalog(); catalogStatusGenerationRef.current += 1;
+      await refresh();
+    } catch {
+      catalogRebuildFailedRef.current = true; catalogStatusGenerationRef.current += 1; setCatalogStatus(catalogStatus);
+    } finally {
+      rebuildingCatalogRef.current = false;
+    }
+  }, [catalogStatus, refresh]);
+
+  useEffect(() => {
+    treeRef.current = tree;
+  }, [tree]);
+
+  useEffect(() => {
+    if (activeRemote || !activeTopicId || (activeScope !== "global" && activeScope !== "project")) return;
+    const workspaceRoot = activeScope === "global" ? "" : activeWorkspaceRoot ?? "";
+    const project = tree.find((node) => activeScope === "global"
+      ? node.kind === "global_folder"
+      : node.kind === "project" && node.root === workspaceRoot);
+    if (!project) return;
+    if (asArray(project.children).some((node) => node.topicId === activeTopicId)) return;
+    const requestKey = [activeScope, workspaceRoot, activeTopicId].join("\u001f");
+    if (activeSummaryRequestRef.current === requestKey) return;
+    activeSummaryRequestRef.current = requestKey;
+    void app.GetTopicSummary({ scope: activeScope, workspaceRoot, topicId: activeTopicId }).then((summary) => {
+      if (!summary?.topicId || activeSummaryRequestRef.current !== requestKey) return;
+      setTree((current) => current.map((node) => node.key === project.key
+        ? { ...node, children: mergeProjectTopicPage(asArray(node.children), [summary], true) }
+        : node));
+    }).catch(() => {}).finally(() => {
+      if (activeSummaryRequestRef.current === requestKey) activeSummaryRequestRef.current = "";
+    });
+  }, [activeRemote, activeScope, activeTopicId, activeWorkspaceRoot, tree]);
+
+  useEffect(() => {
+    manuallyCollapsedRef.current = manuallyCollapsed;
+  }, [manuallyCollapsed]);
+
+  const searchVisible = searchExpanded || query.trim().length > 0;
+
+  useEffect(() => {
+    if (!searchVisible || searchFocusSignal <= 0) return;
+    searchInputRef.current?.focus();
+  }, [searchFocusSignal, searchVisible]);
+
+  useEffect(() => {
+    void refresh();
+    return () => { shellRequestRef.current++; };
+  }, [refresh, refreshSignal]);
+
+  useEffect(() => {
+    if (shellStage !== "loading") return;
+    const timer = setTimeout(() => setShellStage("slow"), 250); return () => clearTimeout(timer);
+  }, [shellStage]);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let latest: Parameters<Parameters<typeof onProjectTreeChangedV2>[0]>[0] | undefined;
+    const apply = (event: NonNullable<typeof latest>) => {
+    // A stale or missed revision means the tree may have drifted from the
+    // catalog; refetch the full snapshot instead of dropping the event.
+    if (!projectTreeRevisionIsFresh(latestRevisionRef.current, event.revision)) {
+      void refresh();
+    }
+    latestRevisionRef.current = Math.max(latestRevisionRef.current, event.revision);
+    if (event.reason === "metadata") setOrganizationRevision((current) => Math.max(current, event.revision));
+    const catalogStatusGeneration = catalogStatusGenerationRef.current;
+    void app.GetSessionCatalogStatus().then((status) => { if (!catalogRebuildFailedRef.current && catalogStatusGeneration === catalogStatusGenerationRef.current) setCatalogStatus(status); }).catch(() => {});
+    if (treeRef.current.length === 0) { void refresh(); return; } // race: event before shell
+    const affected = asArray(event.roots);
+    for (const project of treeRef.current) {
+      const key = projectNodeKey(project, 0);
+      if (projectTreeEventAffectsFolder(project, affected)) {
+        if (topicRequestContextRef.current.query || expanded.has(key)) void reloadProjectTopicLists(project);
+        else invalidateProjectTopicLists(project.key);
+      }
+    }
+    };
+    const unsubscribe = onProjectTreeChangedV2((event) => {
+      latest = latest ? { ...event, roots: latest.roots.length && event.roots.length ? [...new Set([...latest.roots, ...event.roots])] : [], reason: latest.reason === "metadata" ? "metadata" : event.reason } : event;
+      if (timer === undefined) timer = setTimeout(() => { timer = undefined; const event = latest; latest = undefined; if (event) apply(event); }, 200);
+    });
+    return () => { unsubscribe(); if (timer !== undefined) clearTimeout(timer); };
+  }, [expanded, invalidateProjectTopicLists, refresh, reloadProjectTopicLists]);
+  // Debounce query reloads so typing does not stampede the catalog.
+  // Dependency is the project-shell signature, not tree: topic page loads
+  // rewrite children and would otherwise re-arm this effect in a loop.
+  const projectShellSignature = useMemo(() => projectTreeShellSignature(tree), [tree]);
+  useEffect(() => {
+    const projectKeys = new Set(tree.map((project) => project.key));
+    forgetProjectTreeWindowLimits(projectKeys);
+    const keep = (key: string) => {
+      const separator = key.indexOf("\u001f");
+      return projectKeys.has(separator >= 0 ? key.slice(0, separator) : key);
+    };
+    let changed = false;
+    const nextPages: Record<string, ProjectTreeListPageState> = {};
+    for (const [key, state] of Object.entries(topicPageStateRef.current)) {
+      if (keep(key)) nextPages[key] = state;
+      else { releaseReadSnapshot(state.snapshotId); changed = true; }
+    }
+    if (changed) {
+      topicPageStateRef.current = nextPages;
+      setTopicPageState(nextPages);
+    }
+    // Keep monotonically increasing request identities if a project is removed
+    // and re-added while an older RPC is still completing (A -> B -> A).
+    for (const key of Object.keys(topicLoadSeqRef.current)) if (!keep(key)) topicLoadSeqRef.current[key]++;
+    for (const [key, timer] of topicRefreshTimersRef.current) if (!keep(key)) { clearTimeout(timer); topicRefreshTimersRef.current.delete(key); }
+    for (const key of topicRefreshPendingRef.current.keys()) if (!keep(key)) topicRefreshPendingRef.current.delete(key);
+    for (const records of [topicLoadPendingRef.current, topicRevisionRef.current, topicCompletePageRef.current, topicLoadErrorRef.current]) {
+      for (const key of Object.keys(records)) if (!keep(key)) delete records[key];
+    }
+  }, [projectShellSignature, tree]);
+  // Only search is debounced. All first-page consumers share ensureTopicList;
+  // a delayed search must not reload a page already fetched by an event.
+  useEffect(() => {
+    if (!query.trim()) return;
+    const timer = setTimeout(() => {
+      for (const project of treeRef.current) {
+        void ensureTopicListRef.current(project);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [projectShellSignature, query]);
+
+  useEffect(() => {
+    if (query.trim()) return;
+    const projects = projectTreeProjectsNeedingInitialLoad(
+      treeRef.current,
+      expanded,
+      query,
+      topicPageStateRef.current,
+      (project) => projectNodeKey(project, 0),
+    );
+    for (const project of projects) void ensureTopicListRef.current(project);
+  }, [expanded, projectShellSignature, query]);
+
+  // Following the active topic is a view concern over the tree already held.
+  useEffect(() => {
+    const collapsed = manuallyCollapsedRef.current;
+    const keys = (activeRemote
+      ? activeRemoteProjectAncestorKeys(treeWithRemoteSessions, activeRemote, projectNodeKey)
+      : defaultExpandedProjectTreeKeys(treeWithRemoteSessions, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath))
+      .filter((key) => !collapsed.has(key));
+    // Returning prev unchanged keeps a switch that expands nothing new from
+    // re-rendering the tree at all.
+    setExpanded((prev) => (keys.every((key) => prev.has(key)) ? prev : new Set([...prev, ...keys])));
+    // Active remote groups get the same explicit cold start as a click.
+    for (const node of treeWithRemoteSessions) {
+      if (!node.remote) continue;
+      if (!keys.includes(projectNodeKey(node, 0))) continue;
+      if (!remoteSessions[remoteProjectKey(node.remote)]?.length) void ensureRemoteGroupSessions(node.remote.hostId, node.remote.workspace);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath, activeRemote]);
+
+  const { readActivity, readBaselineAt, markNodeRead } = useProjectTreeReadActivity(treeWithRemoteSessions);
+
+  useEffect(() => {
+    const markActive = (nodes: ProjectNode[]) => {
+      for (const node of nodes) {
+        if (topicIsActive(node, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath, activeRemote)) markNodeRead(node);
+        markActive(asArray(node.children));
+      }
+    };
+    markActive(treeWithRemoteSessions);
+  }, [activeRemote, activeScope, activeSessionPath, activeTopicId, activeWorkspaceRoot, markNodeRead, treeWithRemoteSessions]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(WORKBENCH_SORT_KEY, workbenchSortMode);
+    } catch {
+      /* ignore */
+    }
+  }, [workbenchSortMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void app.Platform().then((value) => {
+      if (!cancelled) setPlatform(value);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleExpand = (key: string, project?: ProjectNode) => {
+    const willCollapse = expanded.has(key);
+    if (willCollapse && project) resetTopicWindowLimits(project.key);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    updateManuallyCollapsed((prev) => {
+      const next = new Set(prev);
+      if (willCollapse) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const folderKeys = useMemo(() => collapsibleProjectTreeFolderKeys(tree), [tree]);
+  const searchActive = query.trim().length > 0;
+  const hasExpandedFolders = !searchActive && folderKeys.some((key) => expanded.has(key));
+  const canRestoreCollapsedView = collapseSnapshot !== null;
+  const canToggleCollapsedView = !searchActive && folderKeys.length > 0 && (hasExpandedFolders || canRestoreCollapsedView);
+  const collapseToggleLabel = t(canRestoreCollapsedView ? "projectTree.restoreCollapsedTooltip" : "projectTree.collapseAllTooltip");
+  const workbenchCollapseToggleLabel = t(canRestoreCollapsedView ? "projectTree.restoreCollapsedWorkbench" : "projectTree.collapseAllWorkbench");
+
+  const toggleCollapsedView = useCallback(() => {
+    if (searchActive || folderKeys.length === 0) return;
+    if (collapseSnapshot) {
+      const currentFolderKeys = new Set(folderKeys);
+      setExpanded(() => {
+        const next = new Set<string>();
+        for (const key of collapseSnapshot.expanded) {
+          if (currentFolderKeys.has(key)) next.add(key);
+        }
+        return next;
+      });
+      updateManuallyCollapsed(() => {
+        const next = new Set<string>();
+        for (const key of collapseSnapshot.manuallyCollapsed) {
+          if (currentFolderKeys.has(key)) next.add(key);
+        }
+        return next;
+      });
+      setCollapseSnapshot(null);
+      return;
+    }
+    if (!hasExpandedFolders) return;
+    resetTopicWindowLimits();
+    setCollapseSnapshot({
+      expanded: new Set(expanded),
+      manuallyCollapsed: new Set(manuallyCollapsed),
+    });
+    setExpanded((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const key of folderKeys) {
+        if (next.delete(key)) changed = true;
+      }
+      return changed ? next : prev;
+    });
+    updateManuallyCollapsed((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const key of folderKeys) {
+        if (!next.has(key)) {
+          next.add(key);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [collapseSnapshot, expanded, folderKeys, hasExpandedFolders, manuallyCollapsed, resetTopicWindowLimits, searchActive, updateManuallyCollapsed]);
+
+  const openWorkbenchHeaderMenu = (
+    event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>,
+    menu: Exclude<WorkbenchHeaderMenu, null>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuNodeKey(null);
+    setMenuProject(null);
+    setConfirmArchiveTarget(null);
+    setConfirmRemoveProject(null);
+    setMenuPoint(contextMenuPointFromEvent(event));
+    setWorkbenchHeaderMenu((value) => (value === menu ? null : menu));
+  };
+  const handleCreateTopic = async (scope: string, workspaceRoot: string, key: string) => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setCreatingProject(key);
+    setMenuProject(null);
+    setMenuPoint(null);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+    updateManuallyCollapsed((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    try {
+      if (onCreateTopic) {
+        await onCreateTopic(scope, workspaceRoot);
+        await refresh();
+        await onTopicsChanged?.();
+        return;
+      }
+      const targetRoot = scope === "project" ? workspaceRoot : "";
+      const topic = await app.CreateTopic(scope, targetRoot, "");
+      await refresh();
+      await onTopicsChanged?.();
+      await onOpenTopic(scope, targetRoot, topic.id);
+    } catch {
+      /* ignore */
+    } finally {
+      creatingRef.current = false;
+      setCreatingProject(null);
+    }
+  };
+
+  const handleCreateIsolatedWorktree = async (workspaceRoot: string) => {
+    if (!workspaceRoot || isolatingProject) return;
+    setIsolatingProject(workspaceRoot);
+    closeMenu();
+    try {
+      await onCreateIsolatedWorktree?.(workspaceRoot);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error", { durationMs: 6000 });
+    } finally {
+      setIsolatingProject(null);
+    }
+  };
+  const trashTopicAny = (node: ProjectNode) => remoteSessionActions.remove(node.topicId ?? "", () =>
+    node.sessionPath ? trashSession(node) : trashTopic(node.topicId ?? ""));
+  const startRenameTopic = (node: ProjectNode, label: string) => {
+    setMenuNodeKey(null);
+    setMenuProject(null);
+    setMenuPoint(null);
+    setConfirmArchiveTarget(null);
+    setEditingTopic(projectSessionRowKey(node));
+    setTopicDraft(label);
+  };
+
+  const startRenameSession = (key: string, path: string, topicId: string, label: string) => {
+    setMenuNodeKey(null);
+    setMenuProject(null);
+    setMenuPoint(null);
+    setConfirmArchiveTarget(null);
+    setEditingSession({ key, path, topicId });
+    setTopicDraft(label);
+  };
+
+  const startRenameProject = (key: string, root: string, label: string) => {
+    setMenuProject(null);
+    setMenuNodeKey(null);
+    setMenuPoint(null);
+    setConfirmRemoveProject(null);
+    setEditingProject({ key, root });
+    setProjectDraft(label);
+  };
+
+  const commitRenameTopic = async (node: ProjectNode) => {
+    const topicId = node.topicId ?? "";
+    const title = topicDraft.trim();
+    setEditingTopic(null);
+    if (!title) return;
+    try {
+      if (await remoteSessionActions.mutate(topicId, (remote) => app.RenameRemoteProjectSession(remote.hostId, remote.workspace, remoteSessionActionIdentity(remote), title))) return;
+      if (node.session || node.sessionPath) await app.RenameSessionTarget({ ref: node.session, source: node.source, sessionPath: node.sessionPath }, title);
+      else if (onRenameTopic) await onRenameTopic(topicId, title);
+      else await app.RenameTopic(topicId, title);
+      // Paint the new label immediately; the catalog event round-trip can lag.
+      setTree((current) => applyRuntimeProjection(node.session || node.sessionPath
+        ? projectTreeWithSessionTitle(current, node, title) : projectTreeWithTopicTitle(current, topicId, title)));
+      await refresh();
+      if (!onRenameTopic) await onTopicsChanged?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  };
+
+  const commitRenameSession = async () => {
+    const editing = editingSession;
+    const title = topicDraft.trim();
+    setEditingSession(null);
+    if (!editing || !title) return;
+    try {
+      await app.RenameSessionTarget({ sessionPath: editing.path, topicId: editing.topicId }, title);
+      await refresh();
+      await onTopicsChanged?.();
+    } catch (err) {
+      showToast(t(sessionTitleErrorKey(err)), "error");
+    }
+  };
+
+  const { renaming: aiRenamingTopics, rename: aiRenameSession } = useSessionTitleOperation(refresh, onTopicsChanged);
+
+  const commitRenameProject = async (root: string) => {
+    const title = projectDraft.trim();
+    setEditingProject(null);
+    if (!title) return;
+    try {
+      if (!await renameRemoteProjectTitle(root, title)) await app.RenameProject(root, title);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  };
+
+  const setTopicPinned = async (node: ProjectNode, pinned: boolean) => {
+    const topicId = node.topicId ?? "";
+    setMenuNodeKey(null);
+    setMenuPoint(null);
+    try {
+      if (await remoteSessionActions.mutate(topicId, (remote) => app.SetRemoteSessionPinned(remote.hostId, remote.workspace, remoteSessionActionIdentity(remote), pinned))) return;
+      if (node.session || node.sessionPath) await app.SetSessionPinned({ ref: node.session, source: node.source, sessionPath: node.sessionPath }, pinned);
+      else await app.SetTopicPinned(topicId, pinned);
+      await refresh();
+      await onTopicsChanged?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  };
+
+  const setProjectPinned = async (workspaceRoot: string, pinned: boolean) => {
+    if (!workspaceRoot) return;
+    try {
+      await app.SetProjectPinned(workspaceRoot, pinned);
+      setMenuProject(null);
+      setMenuPoint(null);
+      await refresh();
+      await onTopicsChanged?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  };
+
+  const copyProjectPath = async (path: string) => {
+    if (!path) return;
+    try {
+      await navigator.clipboard?.writeText(path);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const removeProject = async (path: string) => {
+    if (!path) return;
+    try {
+      await app.RemoveWorkspace(path);
+      setMenuProject(null);
+      setMenuPoint(null);
+      setConfirmRemoveProject(null);
+      await refresh();
+      await onTopicsChanged?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  };
+
+  const setProjectColor = async (path: string, color: string) => {
+    try {
+      await app.SetProjectColor(path, color);
+      setMenuProject(null);
+      setMenuPoint(null);
+      await refresh();
+      await onTopicsChanged?.();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const visibleTree = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matchesQuery = (node: ProjectNode) =>
+      [node.label, node.root, node.topicId].some((value) => (value ?? "").toLowerCase().includes(q));
+    const filterNode = (node: ProjectNode, acceptedKeys?: ReadonlySet<string>): ProjectNode | null => {
+      const isFolder = node.kind === "project" || node.kind === "global_folder";
+      const folderAcceptedKeys = isFolder && q && !node.remote
+        ? new Set(topicPageState[projectTreeListKey(node.key, "", query)]?.itemKeys ?? [])
+        : undefined;
+      const children = asArray(node.children)
+        .map((child) => filterNode(child, folderAcceptedKeys ?? acceptedKeys))
+        .filter((child): child is ProjectNode => child !== null);
+      if (isFolder) {
+        if (children.length > 0 || matchesQuery(node)) return { ...node, children };
+        if (q) return null;
+        return node;
+      }
+      if (!q) return node;
+      if (acceptedKeys && (isTopicNode(node) || isRuntimeSessionNode(node)) && !node.pinned && !acceptedKeys.has(node.key)) return null;
+      if (q && !matchesQuery(node)) return null;
+      return node;
+    };
+    const filtered = treeWithRemoteSessions
+      .map((node) => filterNode(node))
+      .filter((node): node is ProjectNode => node !== null);
+    if (compactTopics) return arrangeWorkbenchTree(filtered, workbenchSortMode);
+    return arrangeWorkbenchTree(filtered, "updated");
+  }, [compactTopics, query, topicPageState, treeWithRemoteSessions, workbenchSortMode]);
+
+  const pinnedTreeSections = useMemo<PinnedTreeSections>(() => {
+    if (creationTopics) return { pinned: [], projects: visibleTree };
+    return splitPinnedProjectTree(visibleTree, workbenchSortMode, compactTopics);
+  }, [compactTopics, creationTopics, visibleTree, workbenchSortMode]);
+
+  const projectDragEnabled = query.trim() === "";
+
+  const commitProjectReorder = useCallback(async (draggedRoot: string, targetRoot: string, position: ProjectDropPosition) => {
+    const nextRoots = reorderedProjectRoots(tree, draggedRoot, targetRoot, position);
+    const currentRoots = projectTreeProjectRoots(tree);
+    if (nextRoots.join("\n") === currentRoots.join("\n")) return;
+    setTree((current) => applyProjectOrder(current, nextRoots));
+    try {
+      await app.ReorderProjects(nextRoots);
+      await refresh();
+      await onTopicsChanged?.();
+    } catch {
+      await refresh();
+    }
+  }, [onTopicsChanged, refresh, tree]);
+
+  const organization = useProjectTreeOrganization({ tree, refresh, onTopicsChanged, organizationRevision, sortMode: creationTopics ? "updated" : workbenchSortMode });
+
+  const clearProjectDrag = useCallback(() => {
+    setDragProjectRoot(null);
+    setDropProject(null);
+  }, []);
+
+  useEffect(() => {
+    if (!dragProjectRoot) return;
+    window.addEventListener("dragend", clearProjectDrag);
+    window.addEventListener("drop", clearProjectDrag);
+    window.addEventListener("blur", clearProjectDrag);
+    return () => {
+      window.removeEventListener("dragend", clearProjectDrag);
+      window.removeEventListener("drop", clearProjectDrag);
+      window.removeEventListener("blur", clearProjectDrag);
+    };
+  }, [clearProjectDrag, dragProjectRoot]);
+
+  const activeAncestorKeys = useMemo(
+    () => activeRemote ? activeRemoteProjectAncestorKeys(treeWithRemoteSessions, activeRemote, projectNodeKey) : activeSessionAncestorKeys(treeWithRemoteSessions, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath),
+    [activeRemote, activeScope, activeSessionPath, activeTopicId, activeWorkspaceRoot, treeWithRemoteSessions],
+  );
+  const activeNavigationKey = useMemo(() => activeRemote
+    ? `remote\u001f${JSON.stringify(activeRemote)}`
+    : activeTopicId
+      ? [activeScope, activeWorkspaceRoot ?? "", activeTopicId].join("\u001f")
+      : "", [activeRemote, activeScope, activeTopicId, activeWorkspaceRoot]);
+  const followedActiveNavigationRef = useRef("");
+  useEffect(() => {
+    if (!activeNavigationKey) {
+      followedActiveNavigationRef.current = "";
+      return;
+    }
+    if (followedActiveNavigationRef.current === activeNavigationKey || activeAncestorKeys.length === 0) return;
+    followedActiveNavigationRef.current = activeNavigationKey;
+    const ancestorSet = new Set(activeAncestorKeys);
+    updateManuallyCollapsed((prev) => {
+      if (!activeAncestorKeys.some((key) => prev.has(key))) return prev;
+      const next = new Set(prev);
+      for (const key of activeAncestorKeys) next.delete(key);
+      return next;
+    });
+    setExpanded((prev) => {
+      if (activeAncestorKeys.every((key) => prev.has(key))) return prev;
+      return new Set([...prev, ...ancestorSet]);
+    });
+  }, [activeAncestorKeys, activeNavigationKey, updateManuallyCollapsed]);
+  useEffect(() => {
+    if (!activeNavigationKey || !projectTreeRef.current) return;
+    const root = projectTreeRef.current;
+    let frame = 0;
+    let observer: MutationObserver | null = null;
+    const reveal = () => {
+      const row = root.querySelector<HTMLElement>(".project-tree__topic--active .project-tree__topic-main");
+      if (!row) return false;
+      if (typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "nearest", inline: "nearest" });
+      observer?.disconnect();
+      observer = null;
+      return true;
+    };
+    frame = requestAnimationFrame(() => {
+      if (reveal()) return;
+      observer = new MutationObserver(() => { reveal(); });
+      observer.observe(root, { childList: true, subtree: true });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [activeNavigationKey]);
+  useEffect(() => {
+    if (activeAncestorKeys.length === 0) return;
+    setExpanded((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const key of activeAncestorKeys) {
+        if (manuallyCollapsed.has(key) || next.has(key)) continue;
+        next.add(key);
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [activeAncestorKeys, manuallyCollapsed]);
+
+  const projectTreeDiagnosticSnapshot = useMemo<ProjectTreeDiagnosticSnapshot>(() => {
+    const sessionSummary = summarizeProjectTreeSessions({
+      tree,
+      visibleTree,
+      expanded,
+      queryActive: query.trim().length > 0,
+      expandedWindowCount: Object.values(topicWindowLimits).filter((limit) => limit > PROJECT_TREE_WINDOW_INITIAL).length,
+      folderProjection: (folder, children) => {
+        const groups = organization.groupsFor(folder);
+        const scopedRows = (groupID: string, members: ProjectNode[]) => {
+          if (folder.remote) return members;
+          const accepted = new Set(topicListState(folder, query.trim() ? "" : groupID)?.itemKeys ?? []);
+          const rows = members.filter((member) => accepted.has(member.key));
+          if (!query.trim()) {
+            const active = members.find((child) => topicIsActive(child, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath));
+            if (active && !rows.some((row) => row.key === active.key)) rows.push(active);
+          }
+          return rows;
+        };
+        const ungrouped = children.filter((child) => !groups.some((group) => projectTreeGroupContainsNode(group, child)));
+        const ungroupedRows = scopedRows("", ungrouped);
+        const visible = projectTreeWindowRows(
+          ungroupedRows,
+          query.trim() ? ungroupedRows.length : topicListLimit(folder),
+          (child) => topicIsActive(child, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath),
+        );
+        const collapsed: ProjectNode[] = [];
+        for (const group of groups) {
+          const members = children.filter((child) => projectTreeGroupContainsNode(group, child));
+          const groupRows = scopedRows(group.id, members);
+          if (!query.trim() && organization.groupCollapsed(projectTreeOrganizationKey(folder), group.id)) {
+            collapsed.push(...groupRows);
+            continue;
+          }
+          visible.push(...projectTreeWindowRows(
+            groupRows,
+            query.trim() ? groupRows.length : topicListLimit(folder, group.id),
+            (child) => topicIsActive(child, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath),
+          ));
+        }
+        return { visible, collapsed };
+      },
+      projectNodeKey,
+      isActive: (node) => topicIsActive(node, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath, activeRemote),
+      isUnread: (node) => projectTreeTopicHasUnreadActivity(node, readActivity, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath, readBaselineAt, activeRemote),
+    });
+    return {
+      ...sessionSummary,
+      directoryState: catalogStatus.state,
+      scope: activeScope === "global" ? "global" : activeScope ? "project" : "unknown",
+      variant,
+      queryActive: query.trim().length > 0,
+      catalogPartial: catalogStatus.state !== "ready"
+        || (catalogStatus.repairActive ?? 0) > 0
+        || (catalogStatus.unindexedTargetCount ?? 0) > 0
+        || Boolean(catalogStatus.lastError),
+      catalogRebuilding: catalogStatus.state === "rebuilding",
+      catalogRevision: catalogStatus.revision,
+      catalogIndexed: catalogStatus.indexed,
+      catalogTotal: catalogStatus.total,
+      unloadedSessions: Math.max(0, catalogStatus.total - sessionSummary.workspaceSessions),
+      repairPending: catalogStatus.repairPending,
+      treeRevision: latestRevisionRef.current,
+      organizationRevision,
+    };
+  }, [activeRemote, activeScope, activeSessionPath, activeTopicId, activeWorkspaceRoot, catalogStatus, expanded, organization, organizationRevision, query, readActivity, readBaselineAt, topicListLimit, topicListState, topicWindowLimits, tree, variant, visibleTree]);
+
+  useProjectTreeFrontendDiagnostics(projectTreeDiagnosticSnapshot);
+
+  const renderNode = (node: ProjectNode | null | undefined, depth: number, section: "pinned" | "projects" = "projects", isVisible = true) => {
+    if (!node) return null;
+    const key = projectNodeKey(node, depth);
+    const children = asArray(node.children);
+    const isExpanded = query.trim() ? true : expanded.has(key);
+    const hasChildren = children.length > 0;
+    // Snapshot rows are shells with no children until the first page is loaded,
+    // so every project folder must remain expandable while indexing.
+    const folderDisclosure = projectTreeFolderDisclosure(hasChildren, isExpanded, true);
+
+    if (isTopicNode(node) || isRuntimeSessionNode(node)) {
+      const isSessionNode = isRuntimeSessionNode(node);
+      const openRequest = projectTreeTopicOpenRequest(node);
+      const scope = openRequest?.scope ?? "project";
+      const scopeClass = scope === "global" ? " project-tree__topic--global" : " project-tree__topic--project";
+      const accentStyle = projectAccentStyle(node.projectColor, scope === "global" ? "var(--project-tree-global-accent)" : undefined);
+      const active = topicIsActive(node, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath, activeRemote);
+      const label = (node.label || node.topicId || "Untitled").replace(/^●\s*/, "");
+      const activityAt = node.lastActivityAt || node.createdAt || 0;
+      // Every variant is a single-line row with the activity time on the right;
+      // turns and the exact date ride on the row's title instead of a second
+      // meta line.
+      const sideTimeVisible = true;
+      const timeLabel = activityAt ? topicActivityLabel(activityAt, t, true) : topicUnknownTimeLabel(node, t);
+      const exactTimeLabel = activityAt ? topicActivityDateLabel(activityAt) : "";
+      const metaFull = projectTreeTopicMetaLine(node, t, compactTopics);
+      const status = topicStatus(node);
+      const statusLabel = topicStatusLabel(node, t);
+      const archiveBlocked = projectTreeTopicArchiveBlocked(node);
+      const waitingConfirmation = status === "waiting_confirmation";
+      // Compact workbench: waiting shows an amber "待确认" pill instead of a
+      // spinning orange dot, and that pill replaces the relative time so the
+      // paused-for-user state is scannable in the background tab list.
+      const showStatusInSide = status === "thinking" || status === "streaming" || status === "waiting_confirmation" || status === "background_job";
+      const showWaitingPill = waitingConfirmation || status === "finishing" || status === "cancelling" || status === "unknown";
+      const showSideTime = sideTimeVisible && !showWaitingPill;
+      const unread = projectTreeTopicHasUnreadActivity(node, readActivity, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath, readBaselineAt, activeRemote);
+      const topicId = node.topicId ?? "";
+      const aiRenameTarget = sessionTitleTarget(node);
+      const topicTrashing = trashingTopics.has(topicId);
+      const sessionPath = node.sessionPath?.trim() ?? "";
+      const sessionTrashing = trashingSessions.has(projectSessionIdentity(node));
+      const archiveTargetKey = sessionPath ? projectTreeSessionArchiveTargetKey(sessionPath) : projectTreeTopicArchiveTargetKey(scope, node.root ?? "", topicId);
+      const imSource = scope === "global" && topicId ? imTopicSources[topicId] : undefined;
+      const imSourceLabel = imSource?.label || "";
+      const imSourceTitle = imSourceLabel ? t("msg.fromIm", { source: imSourceLabel }) : "";
+      const imSourcePlatform = (imSource?.platform || "im").replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "im";
+      const recoveryLabel = node.recoveryState === "recovery_only"
+        ? t("projectTree.recoveryOnly")
+        : node.recovered
+          ? t("projectTree.recovered")
+          : "";
+      const forkedFromLabel = node.sessionOrigin === "fork" && node.parentSession?.sessionId
+        ? t("projectTree.forkedFrom", { source: node.parentSession.sessionId })
+        : "";
+      const title = [node.preview || "", label, forkedFromLabel, recoveryLabel, imSourceTitle, statusLabel, metaFull, projectTreeDedupedExactTime(metaFull, exactTimeLabel)].filter(Boolean).join(" · ");
+      const topicMenuOpen = menuNodeKey === key;
+      const pinned = Boolean(node.pinned);
+      const pinLabel = t(pinned ? "projectTree.unpinTopic" : "projectTree.pinTopic");
+      const openTopicMenu = (event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setMenuProject(null);
+        setConfirmRemoveProject(null);
+        setMenuPoint(contextMenuPointFromEvent(event));
+        setMenuNodeKey(key);
+        setConfirmArchiveTarget(null);
+        if (!node.sessionPath && !node.remoteSession && (!node.session?.hostId || node.session.hostId === "local") && node.topicId) void inspectTopicRemoval(node.topicId).catch(() => undefined);
+      };
+      const topicMenuItems: ContextMenuItem[] = [
+        ...organization.topicMenuItems(node, t),
+        ...(projectTreeTopicMenuOffersPin(variant)
+          ? [
+              {
+                key: pinned ? "unpin" : "pin",
+                icon: <Pin size={13} />,
+                label: pinLabel,
+                onSelect: () => void setTopicPinned(node, !pinned),
+              },
+            ]
+          : []),
+        {
+          key: "rename",
+          icon: <Pencil size={13} />,
+          label: t("projectTree.renameTopic"),
+          onSelect: () => startRenameTopic(node, label),
+        },
+        {
+          key: "aiRename",
+          icon: <Sparkles size={13} />,
+          label: aiRenamingTopics.has(aiRenameTarget) ? t("projectTree.aiRenamingTopic") : t("projectTree.aiRenameTopic"),
+          disabled: aiRenamingTopics.has(aiRenameTarget) || !aiRenameTarget || Boolean(node.remoteSession) || Boolean(node.session?.hostId && node.session.hostId !== "local"),
+          onSelect: () => void aiRenameSession(aiRenameTarget),
+        },
+        {
+          key: "trash",
+          icon: <Archive className={topicTrashing || sessionTrashing ? "project-tree__archive-spinner" : undefined} size={13} />,
+          label: topicRemovalInspections[node.topicId ?? ""]?.disposition === "discard_placeholder" ? t("projectTree.removeEmptyTopic") : confirmArchiveTarget === archiveTargetKey ? t("history.confirmMoveToTrash") : t("history.moveToTrash"),
+          disabled: archiveBlocked || topicTrashing || sessionTrashing || remoteSessionArchiveBlocked(node.remoteSession),
+          danger: true,
+          onSelect: () => {
+            if (!node.sessionPath && !node.remoteSession && (!node.session?.hostId || node.session.hostId === "local")) void trashTopicAny(node);
+            else if (confirmArchiveTarget === archiveTargetKey) void trashTopicAny(node);
+            else setConfirmArchiveTarget(archiveTargetKey);
+          },
+        },
+      ];
+      if ((!isSessionNode && editingTopic === key) || (isSessionNode && editingSession?.key === key)) {
+        return (
+          <div
+            key={key}
+            className={`project-tree__topic project-tree__topic--editing${active ? " project-tree__topic--active" : ""}${imSource ? " project-tree__topic--im-source" : ""}${metaFull ? " project-tree__topic--has-meta" : ""}`}
+            style={{ paddingLeft: 14 + depth * 16 }}
+          >
+            <input
+              autoFocus
+              className="project-tree__topic-input"
+              value={topicDraft}
+              onChange={(event) => setTopicDraft(event.target.value)}
+              onFocus={(event) => event.target.select()}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+                if (event.key === "Enter") void (isSessionNode ? commitRenameSession() : commitRenameTopic(node));
+                if (event.key === "Escape") {
+                  setEditingTopic(null);
+                  setEditingSession(null);
+                }
+              }}
+              onBlur={() => void (isSessionNode ? commitRenameSession() : commitRenameTopic(node))}
+            />
+          </div>
+        );
+      }
+      const shortcutIndex = showShortcutBadges && isVisible && topicIndexRef.current < 9 ? topicIndexRef.current + 1 : 0;
+      if (shortcutIndex > 0) topicIndexRef.current++;
+      // Collect visible topics in render order for shortcut navigation
+      if (openRequest && isVisible) {
+        visibleTopicsCollectorRef.current.push({
+          scope: openRequest.scope,
+          workspaceRoot: openRequest.workspaceRoot,
+          topicId: openRequest.topicId,
+          sessionPath: openRequest.sessionPath,
+        });
+      }
+      const topicDrag = organization.topicRow(node, section === "pinned" || isSessionNode || Boolean(query || menuNodeKey || editingTopic || dragProjectRoot || creatingProject));
+      const row = (
+        <div
+          className={`project-tree__topic${scopeClass}${isSessionNode ? " project-tree__topic--session" : ""}${active ? " project-tree__topic--active" : ""}${node.running ? " project-tree__topic--running" : ""}${status ? ` project-tree__topic--status-${status}` : ""}${unread ? " project-tree__topic--unread" : ""}${!isSessionNode && pinned ? " project-tree__topic--pinned" : ""}${topicMenuOpen ? " project-tree__topic--menu-open" : ""}${topicDrag.className}${sideTimeVisible && (timeLabel || showStatusInSide || showWaitingPill) ? " project-tree__topic--with-side" : metaFull ? " project-tree__topic--has-meta" : ""}${imSource ? " project-tree__topic--im-source" : ""}${shortcutIndex > 0 ? " project-tree__topic--show-shortcut" : ""}`}
+          style={accentStyle}
+          {...topicDrag.props}
+          onContextMenu={openTopicMenu}
+        >
+          <button
+            type="button"
+            className="project-tree__topic-main"
+            data-topic-open-key={key}
+            title={title}
+            style={{ paddingLeft: 14 + depth * 16 }}
+            onClick={() => {
+              const remote = node.remoteSession ?? remoteSessionActions.resolve(topicId);
+              if (!openRequest && !remote) return;
+              const nextClick = { rowKey: key, canRename: !isSessionNode };
+              const pending = clickTimerRef.current;
+              if (pending !== null) {
+                clearTimeout(pending.timer);
+                clickTimerRef.current = null;
+                if (projectTreeShouldSuppressOpenForRename(pending, nextClick)) return;
+              }
+              const timer = setTimeout(() => {
+                if (clickTimerRef.current?.timer !== timer) return;
+                clickTimerRef.current = null;
+                if (remote) {
+                  if (openRemoteSessionNode(remote, openRemoteProject)) markNodeRead(node);
+                  return;
+                }
+                if (openRequest) void Promise.resolve()
+                  .then(() => onOpenTopic(openRequest.scope, openRequest.workspaceRoot, openRequest.topicId, openRequest.sessionPath))
+                  .then(() => markNodeRead(node))
+                  .catch((error) => showToast(String(error), "error"));
+              }, 200);
+              clickTimerRef.current = { ...nextClick, timer };
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                openTopicMenu(event);
+              }
+            }}
+            onDoubleClick={(event) => {
+              if (isSessionNode) return;
+              event.stopPropagation();
+              if (clickTimerRef.current !== null && clickTimerRef.current.rowKey === key) {
+                clearTimeout(clickTimerRef.current.timer);
+                clickTimerRef.current = null;
+              }
+              startRenameTopic(node, label);
+            }}
+          >
+            <span className="project-tree__topic-copy">
+              <span className="project-tree__topic-heading">
+                <span className="project-tree__topic-label">{label}</span>
+                <ProjectTreeSessionBadges node={node} forkedFromLabel={forkedFromLabel} recoveryLabel={recoveryLabel} />
+                {imSource && (
+                  <span
+                    className={`project-tree__topic-im project-tree__topic-im--${imSourcePlatform}`}
+                    title={imSourceTitle}
+                    aria-label={imSourceTitle}
+                  >
+                    <MessageSquare size={11} />
+                    <span>{imSourceLabel}</span>
+                  </span>
+                )}
+                {!compactTopics && statusLabel && (
+                  <span className={`project-tree__topic-status project-tree__topic-status--${status}`}>{statusLabel}</span>
+                )}
+              </span>
+            </span>
+            {sideTimeVisible && (
+              <span className={`project-tree__topic-side${!timeLabel && !showStatusInSide && !showWaitingPill ? " project-tree__topic-side--empty" : ""}`}>
+                {showWaitingPill && statusLabel ? (
+                  <span
+                    className="project-tree__topic-waiting-pill"
+                    title={statusLabel}
+                  >
+                    {statusLabel}
+                  </span>
+                ) : (
+                  <>
+                    {showStatusInSide && (
+                      <span
+                        className={`project-tree__topic-state project-tree__topic-state--${status}`}
+                        title={statusLabel}
+                        aria-hidden="true"
+                      />
+                    )}
+                    {showSideTime && timeLabel && (
+                      <span className="project-tree__topic-time" aria-hidden="true">{timeLabel}</span>
+                    )}
+                  </>
+                )}
+              </span>
+            )}
+            {compactTopics && statusLabel && !showWaitingPill && (
+              <span className="sr-only">
+                {statusLabel}
+              </span>
+            )}
+            {compactTopics && metaFull && (
+              <span className="sr-only">
+                {metaFull}
+              </span>
+            )}
+          </button>
+          {unread && <span className="project-tree__topic-unread-dot" aria-hidden="true" />}
+          {projectTreeShouldRenderTopicActions(isSessionNode, variant, unread) && !(node.remoteSession && !node.remoteSession.name) && (
+            <span
+              className="project-tree__topic-actions"
+              aria-label={t("projectTree.topicActions")}
+            >
+              <Tooltip label={pinLabel} side="top" className="project-tree__topic-action-slot">
+                <button
+                  className={`project-tree__topic-action${pinned ? " project-tree__topic-action--pinned" : ""}`}
+                  type="button"
+                  aria-label={pinLabel}
+                  aria-pressed={pinned}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void setTopicPinned(node, !pinned);
+                  }}
+                >
+                  <Pin size={15} aria-hidden="true" />
+                </button>
+              </Tooltip>
+              <Tooltip label={t("projectTree.archiveTopic")} side="top" className="project-tree__topic-action-slot">
+                <button
+                  className={`project-tree__topic-action project-tree__topic-action--archive${topicTrashing ? " project-tree__topic-action--busy" : ""}`}
+                  type="button"
+                  aria-label={t("projectTree.archiveTopic")}
+                  aria-busy={topicTrashing} disabled={archiveBlocked || topicTrashing}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void trashTopicAny(node);
+                  }}
+                >
+                  <Archive className={topicTrashing ? "project-tree__archive-spinner" : undefined} size={15} aria-hidden="true" />
+                </button>
+              </Tooltip>
+            </span>
+          )}
+          {isSessionNode ? (
+            <ProjectTreeSessionArchiveMenu
+              open={topicMenuOpen} point={menuPoint} sessionPath={sessionPath} blocked={archiveBlocked || topicTrashing} busy={sessionTrashing} confirmed={confirmArchiveTarget === archiveTargetKey}
+              aiBusy={aiRenamingTopics.has(aiRenameTarget)}
+              onRename={() => startRenameSession(key, sessionPath, topicId, label)}
+              onAIRename={() => void aiRenameSession(aiRenameTarget)}
+              onConfirm={() => setConfirmArchiveTarget(archiveTargetKey)} onTrash={() => { setConfirmArchiveTarget(null); void trashSession(node); }} onClose={closeMenu} />
+          ) : <ContextMenu open={topicMenuOpen} point={menuPoint} items={topicMenuItems} minWidth={178} ariaLabel={t("projectTree.topicActions")} onClose={closeMenu} />}
+          {shortcutIndex > 0 && (
+            <span className="project-tree__topic-shortcut" aria-hidden="true">
+              {topicShortcutLabel(shortcutIndex, shortcutPlatform)}
+            </span>
+          )}
+        </div>
+      );
+      return (
+        <div key={key}>
+          {row}
+          {hasChildren && (
+            <div className={`project-tree__children${isExpanded ? " project-tree__children--expanded" : ""}`}>
+              <div className="project-tree__children-inner">
+                {children.map((child) => renderNode(child, depth + 1, section, isVisible && isExpanded))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const scope = node.kind === "global_folder" ? "global" : "project";
+    const scopeClass = scope === "global" ? " project-tree__folder--global" : " project-tree__folder--project";
+    const pinnedClass = node.pinned ? " project-tree__folder--pinned" : "";
+    const accentStyle = projectAccentStyle(node.projectColor, scope === "global" ? "var(--project-tree-global-accent)" : undefined);
+    const projectRoot = scope === "global" ? "" : node.root ?? "";
+    const projectDragKey = scope === "global" ? GLOBAL_PROJECT_ORDER_KEY : projectRoot;
+    const projectPath = node.root ?? "";
+    const colorTargetRoot = scope === "global" ? "" : projectPath;
+    const projectLabel = scope === "global" && !node.remote ? defaultWorkspaceTitle(node.label) : node.label || "Untitled";
+    const projectPinned = Boolean(node.pinned);
+    const projectActive = node.remote ? Boolean(activeRemote && remoteProjectKey(activeRemote) === remoteProjectKey(node.remote)) : activeScope === scope && (scope === "global" || activeWorkspaceRoot === node.root);
+    const projectMenuOpen = menuProject?.key === key;
+    const activeTopicInProject = Boolean(activeTopicId) && activeScope === scope && (scope === "global" || activeWorkspaceRoot === projectRoot);
+    const sourceProjectNode = tree.find((candidate) => scope === "global"
+      ? candidate.kind === "global_folder"
+      : candidate.kind === "project" && candidate.root === projectRoot);
+    const activeTopicArchiveBlocked = asArray(sourceProjectNode?.children).some((candidate) =>
+      isTopicNode(candidate) && candidate.topicId === activeTopicId && projectTreeTopicArchiveBlocked(candidate));
+    const draggableProject = section !== "pinned" && projectDragEnabled && depth === 0 && Boolean(projectDragKey) && editingProject?.key !== key;
+    const projectDropPosition = dropProject?.root === projectDragKey ? dropProject?.position ?? null : null;
+    const handleProjectDragStart = (event: ReactDragEvent<HTMLElement>) => {
+      if (!draggableProject) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest(".project-tree__action-slot,.project-tree__folder-action-slot")) {
+        event.preventDefault();
+        return;
+      }
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", projectDragKey);
+      setDragProjectRoot(projectDragKey);
+      setDropProject(null);
+    };
+    const handleProjectDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!draggableProject || !dragProjectRoot || dragProjectRoot === projectDragKey) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const rect = event.currentTarget.getBoundingClientRect();
+      const position: ProjectDropPosition = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      setDropProject((current) => {
+        if (current?.root === projectDragKey && current?.position === position) return current;
+        return { root: projectDragKey, position };
+      });
+    };
+    const handleProjectDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!draggableProject) return;
+      const draggedRoot = dragProjectRoot || event.dataTransfer.getData("text/plain");
+      const position = dropProject?.root === projectDragKey ? dropProject?.position ?? "after" : "after";
+      event.preventDefault();
+      clearProjectDrag();
+      if (draggedRoot && draggedRoot !== projectDragKey) void commitProjectReorder(draggedRoot, projectDragKey, position);
+    };
+    const openProjectMenu = (event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuNodeKey(null);
+      setConfirmArchiveTarget(null);
+      setMenuPoint(contextMenuPointFromEvent(event));
+      setMenuProject({ key, root: projectRoot, path: projectPath, scope, label: projectLabel });
+      if (activeTopicId) void inspectTopicRemoval(activeTopicId).catch(() => undefined);
+      setConfirmRemoveProject(null);
+      if (scope === "project" && projectRoot) {
+        void app.IsolatedWorktreeAvailability(projectRoot).then((availability) => {
+          setWorktreeAvailability((current) => ({
+            ...current,
+            [projectRoot]: { available: availability.available, reason: availability.reason },
+          }));
+        }).catch(() => {});
+      }
+    };
+    const isolationAvailability = worktreeAvailability[projectRoot];
+    const isolatedWorkspaceItems: ContextMenuItem[] = scope === "project"
+      ? [{
+          key: "isolated-delivery-workspace",
+          icon: <GitBranch size={13} />,
+          label: (
+            <span title={isolationAvailability?.reason || t("projectTree.createWorktreeHint")}>
+              {isolatingProject === projectRoot ? t("projectTree.creatingWorktree") : t("projectTree.createWorktree")}
+            </span>
+          ),
+          disabled: isolatingProject !== null || isolationAvailability?.available === false,
+          onSelect: () => { void handleCreateIsolatedWorktree(projectRoot); },
+        }]
+      : [];
+    const remoteProjectMenuItems = node.remote ? buildRemoteProjectMenuItems({ ref: node.remote, t, closeMenu, openRemoteProject, openRemoteWindow, setRemoteSessions, refresh, showToast }) : [];
+    const newSessionMenuItem: ContextMenuItem = {
+      key: "new-session",
+      icon: <Plus size={13} />,
+      label: t("projectTree.newTopic"),
+      onSelect: () => { void handleCreateTopic(scope, projectPath, key); },
+    };
+    const projectMenuItems: ContextMenuItem[] = [
+      {
+        key: "new-group",
+        icon: <FolderPlus size={13} />,
+        label: t("projectTree.newGroup"),
+        onSelect: () => organization.createGroup(node, t("projectTree.newGroup")),
+      },
+      newSessionMenuItem, ...organization.resetOrderMenuItems(node, t, closeMenu),
+      ...isolatedWorkspaceItems,
+      {
+        key: "rename",
+        icon: <Pencil size={13} />,
+        label: t("projectTree.renameProject"),
+        onSelect: () => startRenameProject(key, projectRoot, projectLabel),
+      },
+      { type: "separator" as const, key: "color-separator" },
+      ...PROJECT_COLOR_OPTIONS.map((option): ContextMenuItem => ({
+        key: `color-${option.key || "default"}`,
+        label: colorMenuLabel(projectColorLabel(t, option.key), option.key, (node.projectColor || "") === option.key),
+        onSelect: () => {
+          void setProjectColor(colorTargetRoot, option.key);
+        },
+      })),
+      { type: "separator" as const, key: "path-separator" },
+      {
+        key: "reveal",
+        icon: <FolderOpen size={13} />,
+        label: t(revealLabelKey(platform)),
+        disabled: !projectPath,
+        onSelect: () => {
+          void app.RevealPath(projectPath).catch(() => {});
+          closeMenu();
+        },
+      },
+      {
+        key: "copy-path",
+        icon: <Copy size={13} />,
+        label: t("projectTree.copyPath"),
+        disabled: !projectPath,
+        onSelect: () => {
+          void copyProjectPath(projectPath);
+          closeMenu();
+        },
+      },
+      ...(scope === "project"
+        ? [
+            { type: "separator" as const, key: "remove-separator" },
+            {
+              key: "remove",
+              icon: <XCircle size={13} />,
+              label: confirmRemoveProject === key ? t("projectTree.confirmRemoveProject") : t("projectTree.removeProject"),
+              danger: true,
+              onSelect: () => {
+                if (confirmRemoveProject === key) void removeProject(projectPath);
+                else setConfirmRemoveProject(key);
+              },
+            },
+          ]
+        : []),
+    ];
+    const workbenchProjectMenuItems: ContextMenuItem[] = [
+      newSessionMenuItem, ...organization.resetOrderMenuItems(node, t, closeMenu),
+      ...(scope === "project"
+        ? [
+            {
+              key: projectPinned ? "unpin-project" : "pin-project",
+              icon: <Pin size={13} />,
+              label: t(projectPinned ? "projectTree.unpinProject" : "projectTree.pinProject"),
+              onSelect: () => {
+                void setProjectPinned(projectRoot, !projectPinned);
+              },
+            },
+          ]
+        : []),
+      ...isolatedWorkspaceItems,
+      {
+        key: "reveal",
+        icon: <FolderOpen size={13} />,
+        label: t(revealLabelKey(platform)),
+        disabled: !projectPath,
+        onSelect: () => {
+          void app.RevealPath(projectPath).catch(() => {});
+          closeMenu();
+        },
+      },
+      {
+        key: "rename",
+        icon: <Pencil size={13} />,
+        label: t("projectTree.renameProjectWorkbench"),
+        onSelect: () => startRenameProject(key, projectRoot, projectLabel),
+      },
+      {
+        key: "archive-active-topic",
+        icon: <Archive className={activeTopicId && trashingTopics.has(activeTopicId) ? "project-tree__archive-spinner" : undefined} size={13} />,
+        label: topicRemovalInspections[activeTopicId ?? ""]?.disposition === "discard_placeholder" ? t("projectTree.removeEmptyTopic") : t("projectTree.archiveConversation"),
+        disabled: !activeTopicInProject || !activeTopicId || activeTopicArchiveBlocked || Boolean(activeTopicId && trashingTopics.has(activeTopicId)),
+        danger: true,
+        onSelect: () => {
+          if (!activeTopicId) return;
+          void trashTopic(activeTopicId);
+        },
+      },
+      ...(scope === "project"
+        ? [
+            { type: "separator" as const, key: "remove-separator" },
+            {
+              key: "remove",
+              icon: <XCircle size={13} />,
+              label: confirmRemoveProject === key ? t("projectTree.confirmRemoveProjectShort") : t("projectTree.removeProjectShort"),
+              danger: true,
+              onSelect: () => {
+                if (confirmRemoveProject === key) void removeProject(projectPath);
+                else setConfirmRemoveProject(key);
+              },
+            },
+          ]
+        : []),
+    ];
+
+    const backendPage = topicListState(node);
+    const renderFolderChildren = () => {
+      const hasGroups = organization.groupsFor(node).length > 0;
+      if (!hasChildren && !hasGroups) {
+        const remoteGroupKey = node.remote ? remoteProjectKey(node.remote) : "";
+        const remoteBusy = Boolean(remoteGroupBusy[remoteGroupKey]);
+        const remoteError = remoteGroupError[remoteGroupKey] || "";
+        if (node.remote) return <RemoteProjectEmptyState
+          busy={remoteBusy} error={remoteError} ready={remoteServers[node.remote.hostId]?.[node.remote.workspace]?.state === "ready"}
+          isExpanded={isExpanded} depth={depth} t={t} onEnsure={() => ensureRemoteGroupSessions(node.remote!.hostId, node.remote!.workspace)}
+        />;
+        // While the first topic page is still loading (cold start, catalog
+        // reconcile in flight), show a skeleton instead of a blank folder.
+        if (projectTreeListShowsLoading(backendPage)) {
+          return (
+            <div className={`project-tree__children${isExpanded ? " project-tree__children--expanded" : ""}`}>
+              <div className="project-tree__children-inner">
+                <div className="project-tree__skeleton" style={{ paddingLeft: 14 + (depth + 1) * 16 }} aria-hidden="true">
+                  <span className="project-tree__skeleton-bar" />
+                  <span className="project-tree__skeleton-bar project-tree__skeleton-bar--short" />
+                  <span className="project-tree__skeleton-bar" />
+                  <span className="project-tree__skeleton-bar project-tree__skeleton-bar--short" />
+                </div>
+              </div>
+            </div>
+          );
+        }
+        if (!backendPage?.initialized) return null;
+      }
+      return (
+        <div className={`project-tree__children${isExpanded ? " project-tree__children--expanded" : ""}`}>
+          <div className="project-tree__children-inner">
+            <ProjectTreeGroupRows
+              folder={node} children={children} depth={depth + 1} section={section} visible={isVisible && isExpanded}
+              organization={organization} renderNode={renderNode} t={t} queryActive={query.trim().length > 0}
+              remote={Boolean(node.remote)} activeTopicId={activeTopicId} isActive={(child) => topicIsActive(child, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath)}
+              listState={(groupID) => topicListState(node, groupID)} listLimit={(groupID) => topicListLimit(node, groupID)}
+              onEnsureList={(groupID) => ensureTopicList(node, groupID)} onExpandList={(groupID, loadedCount) => expandTopicList(node, groupID, loadedCount)}
+              onRetryList={(groupID) => retryTopicList(node, groupID)}
+              onForgetList={(groupID) => forgetTopicList(node, groupID)}
+            />
+            {query.trim() && backendPage?.nextCursor && (
+              <button
+                type="button"
+                className="project-tree__topic-window-toggle"
+                style={{ paddingLeft: 14 + (depth + 1) * 16 }}
+                disabled={backendPage.loading}
+                aria-label={`${t("projectTree.loadMoreResults")} · ${projectLabel}`}
+                onClick={() => void loadProjectTopics(node, true)}
+              >
+                {projectTreeListShowsLoading(backendPage) ? t("projectTree.loadingMore") : t("projectTree.loadMoreResults")}
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    if (editingProject?.key === key) {
+      return (
+        <div key={key} className="project-tree__project-wrapper">
+          <div
+            className={`project-tree__folder project-tree__folder--editing${projectActive ? " project-tree__folder--active" : ""}`}
+            style={{ paddingLeft: 8 + depth * 16 }}
+          >
+            <input
+              autoFocus
+              className="project-tree__folder-input"
+              value={projectDraft}
+              onChange={(event) => setProjectDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void commitRenameProject(projectRoot);
+                if (event.key === "Escape") setEditingProject(null);
+              }}
+              onBlur={() => void commitRenameProject(projectRoot)}
+            />
+          </div>
+          {renderFolderChildren()}
+        </div>
+      );
+    }
+
+    return (
+      <div key={key} className="project-tree__project-wrapper">
+        <div
+          className={`project-tree__folder${scopeClass}${pinnedClass}${draggableProject ? " project-tree__folder--draggable" : ""}${projectActive ? " project-tree__folder--active" : ""}${projectMenuOpen ? " project-tree__folder--menu-open" : ""}${dragProjectRoot === projectDragKey ? " project-tree__folder--dragging" : ""}${projectDropPosition ? ` project-tree__folder--drop-${projectDropPosition}` : ""}`}
+          style={accentStyle}
+          draggable={draggableProject}
+          aria-grabbed={draggableProject ? dragProjectRoot === projectRoot : undefined}
+          onDragStart={handleProjectDragStart}
+          onDragOver={handleProjectDragOver}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropProject(null);
+          }}
+          onDrop={handleProjectDrop}
+          onDragEnd={clearProjectDrag}
+          onContextMenu={openProjectMenu}
+        >
+          <button
+            type="button"
+            className="project-tree__folder-main"
+            title={scope === "global" && !node.remote ? t("workspace.defaultHint") : undefined}
+            style={{ paddingLeft: 8 + depth * 16 }}
+            onClick={() => {
+              if (node.remote && !folderDisclosure.canExpand) return void openRemoteProject(node.remote, { focus: true });
+              if (folderDisclosure.canExpand) {
+                const willExpand = !expanded.has(key);
+                toggleExpand(key, node);
+                if (node.remote && willExpand) { void ensureRemoteGroupSessions(node.remote.hostId, node.remote.workspace); }
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                openProjectMenu(event);
+              }
+            }}
+            aria-expanded={folderDisclosure.ariaExpanded}
+          >
+            <span className={folderDisclosure.iconStackClassName}>
+              {node.remote ? <Cloud size={14} className="project-tree__folder-icon" /> : folderDisclosure.isOpen ? <FolderOpen size={14} className="project-tree__folder-icon" /> : <Folder size={14} className="project-tree__folder-icon" />}
+            </span>
+            <span className="project-tree__folder-color" aria-hidden="true" />
+            <span className={`project-tree__folder-label${!hasChildren ? " project-tree__folder-label--empty" : ""}`}>
+              {projectLabel}
+              {node.isolatedWorktree && <WorktreeBadge size={11} />}
+              {node.remote ? <span className={`project-tree__remote-badge project-tree__remote-badge--${remoteServeBadgeState(remoteServers[node.remote.hostId]?.[node.remote.workspace], remoteGroupBusy[remoteProjectKey(node.remote)])}`} aria-hidden="true" /> : null}
+            </span>
+            <ProjectTreeFolderActivity folder={node} />
+          </button>
+          {compactTopics && (
+            <Tooltip label={t("projectTree.projectActions")} className="project-tree__folder-action-slot">
+              <button
+                type="button"
+                className="project-tree__folder-action project-tree__folder-action--menu"
+                aria-label={t("projectTree.projectActions")}
+                aria-haspopup="menu"
+                aria-expanded={projectMenuOpen}
+                onClick={(e) => {
+                  openProjectMenu(e);
+                }}
+              >
+                <MoreHorizontal size={16} aria-hidden="true" />
+              </button>
+            </Tooltip>
+          )}
+          {!node.remote && <Tooltip label={t("projectTree.newTopicTooltip")} className={compactTopics ? "project-tree__folder-action-slot" : "project-tree__action-slot"}>
+            <button
+              type="button"
+              className={compactTopics
+                ? `project-tree__folder-action project-tree__folder-action--create${creatingProject === key ? " project-tree__folder-action--active" : ""}`
+                : `project-tree__new-topic${creatingProject === key ? " project-tree__new-topic--active" : ""}`}
+              aria-label={t("projectTree.newTopicTooltip")}
+              disabled={creatingProject !== null}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleCreateTopic(scope, projectPath, key);
+              }}
+            >
+              {compactTopics ? <Plus size={15} aria-hidden="true" /> : <Plus size={12} aria-hidden="true" />}
+            </button>
+          </Tooltip>}
+          <ContextMenu
+            open={projectMenuOpen}
+            point={menuPoint}
+            items={node.remote ? remoteProjectMenuItems : compactTopics ? workbenchProjectMenuItems : projectMenuItems}
+            minWidth={compactTopics ? 206 : 212}
+            ariaLabel={t("projectTree.projectActions")}
+            onClose={closeMenu}
+          />
+        </div>
+        {renderFolderChildren()}
+      </div>
+    );
+  };
+
+  const workbenchHeaderMoreItems: ContextMenuItem[] = [
+    {
+      key: "sort-heading",
+      icon: <Clock size={13} />,
+      label: t("projectTree.sortCriteria"),
+      disabled: true,
+      variant: "section",
+      onSelect: () => {},
+    },
+    {
+      key: "sort-created",
+      icon: <Clock size={13} />,
+      label: menuLabelWithCheck(t("projectTree.sortByCreatedAt"), workbenchSortMode === "created"),
+      onSelect: () => {
+        selectWorkbenchSortMode("created");
+      },
+    },
+    {
+      key: "sort-updated",
+      icon: <Pencil size={13} />,
+      label: menuLabelWithCheck(t("projectTree.sortByUpdatedAt"), workbenchSortMode === "updated"),
+      onSelect: () => {
+        selectWorkbenchSortMode("updated");
+      },
+    },
+  ];
+
+  const addItemCallbacks = {
+    onBlank: () => { closeMenu(); openBlankProjectFlow(); },
+    onLocal: () => { closeMenu(); void handleAddProject(); },
+    onRemote: () => { closeMenu(); openRemoteConnectFlow(); },
+  };
+  const classicHeaderAddItems = projectTreeHeaderAddItems({
+    localLabel: t("projectTree.addProjectTooltip"), remoteLabel: t("projectTree.remoteConnection"), disabled: addingProject, ...addItemCallbacks,
+  });
+  const workbenchHeaderAddItems = projectTreeHeaderAddItems({
+    blankLabel: t("projectTree.createBlankProject"), localLabel: t("projectTree.useExistingFolder"), remoteLabel: t("projectTree.remoteConnection"), disabled: addingProject, ...addItemCallbacks,
+  });
+
+  const renderProjectHeader = (mode: "classic" | "workbench") => (
+    <div className="project-tree__header">
+      <span className="project-tree__header-title">
+        <BriefcaseBusiness className="project-tree__header-icon" size={13} />
+        {t("projectTree.workspaceTitle")}
+      </span>
+      <span className="project-tree__header-actions">
+        {mode === "workbench" ? (
+          <>
+            <Tooltip label={workbenchCollapseToggleLabel} className="project-tree__header-action-slot">
+              <button
+                type="button"
+                className="project-tree__header-icon-btn"
+                aria-label={workbenchCollapseToggleLabel}
+                disabled={!canToggleCollapsedView}
+                onClick={toggleCollapsedView}
+              >
+                {canRestoreCollapsedView ? <Maximize2 size={15} aria-hidden="true" /> : <Minimize2 size={15} aria-hidden="true" />}
+              </button>
+            </Tooltip>
+            <span className="project-tree__header-menu-wrap">
+              <Tooltip label={t("projectTree.moreActions")} className="project-tree__header-action-slot">
+                <button
+                  type="button"
+                  className={`project-tree__header-icon-btn${workbenchHeaderMenu === "more" ? " project-tree__header-icon-btn--active" : ""}`}
+                  aria-label={t("projectTree.moreActions")}
+                  aria-haspopup="menu"
+                  aria-expanded={workbenchHeaderMenu === "more"}
+                  onClick={(event) => {
+                    openWorkbenchHeaderMenu(event, "more");
+                  }}
+                >
+                  <MoreHorizontal size={16} aria-hidden="true" />
+                </button>
+              </Tooltip>
+              <ContextMenu
+                open={workbenchHeaderMenu === "more"}
+                point={menuPoint}
+                items={workbenchHeaderMoreItems}
+                minWidth={222}
+                ariaLabel={t("projectTree.moreActions")}
+                onClose={closeMenu}
+              />
+            </span>
+            <span className="project-tree__header-menu-wrap">
+              <Tooltip label={t("projectTree.addProjectTooltip")} className="project-tree__header-action-slot">
+                <button
+                  type="button"
+                  className={`project-tree__header-icon-btn${workbenchHeaderMenu === "add" ? " project-tree__header-icon-btn--active" : ""}`}
+                  aria-label={t("projectTree.addProjectTooltip")}
+                  aria-haspopup="menu"
+                  aria-expanded={workbenchHeaderMenu === "add"}
+                  disabled={addingProject}
+                  onClick={(event) => {
+                    openWorkbenchHeaderMenu(event, "add");
+                  }}
+                >
+                  <FolderPlus size={16} aria-hidden="true" />
+                </button>
+              </Tooltip>
+              <ContextMenu
+                open={workbenchHeaderMenu === "add"}
+                point={menuPoint}
+                items={workbenchHeaderAddItems}
+                minWidth={206}
+                ariaLabel={t("projectTree.addProjectTooltip")}
+                onClose={closeMenu}
+              />
+            </span>
+          </>
+        ) : (
+          <>
+            <Tooltip label={collapseToggleLabel} className="project-tree__action-slot project-tree__header-action-slot project-tree__action-slot--collapse">
+              <button
+                type="button"
+                className={`project-tree__collapse-all${canRestoreCollapsedView ? " project-tree__collapse-all--restore" : ""}`}
+                aria-label={collapseToggleLabel}
+                aria-pressed={canRestoreCollapsedView}
+                disabled={!canToggleCollapsedView}
+                onClick={toggleCollapsedView}
+              >
+                {canRestoreCollapsedView ? <ListRestart size={14} /> : <ListCollapse size={14} />}
+              </button>
+            </Tooltip>
+            <ProjectTreeHeaderAddControl
+              open={workbenchHeaderMenu === "add"} point={menuPoint} items={classicHeaderAddItems}
+              label={t("projectTree.addProjectTooltip")} disabled={addingProject}
+              onOpen={(event) => openWorkbenchHeaderMenu(event, "add")} onClose={closeMenu}
+            />
+          </>
+        )}
+      </span>
+    </div>
+  );
+
+  const renderEmptyState = () => {
+    if (shellStage !== "ready") return <div className="project-tree__empty-state" role="status"><div className="project-tree__empty project-tree__empty--subtle">{t("projectTree.loadingProjects")}</div>
+      {shellStage === "slow" && <div className="project-tree__skeleton" aria-hidden="true">
+        <span className="project-tree__skeleton-bar" /><span className="project-tree__skeleton-bar project-tree__skeleton-bar--short" />
+      </div>}
+    </div>;
+    if (query.trim()) return <div className="project-tree__empty">{t("projectTree.emptyNoMatch")}</div>;
+    return (
+      <div className="project-tree__empty-state">
+        <div className="project-tree__empty project-tree__empty--subtle">{t("projectTree.emptyNoProjects")}</div>
+        <button
+          type="button"
+          className="project-tree__empty-primary"
+          onClick={() => void handleAddProject()}
+          disabled={addingProject}
+        >
+          <FolderPlus size={14} />
+          <span>{t("projectTree.addProjectTooltip")}</span>
+        </button>
+        <ProjectTreeRemoteAction label={t("projectTree.remoteConnection")} disabled={addingProject} onClick={openRemoteConnectFlow} />
+      </div>
+    );
+  };
+
+  const hasTreeRows = pinnedTreeSections.pinned.length > 0 || pinnedTreeSections.projects.length > 0;
+
+  // Report visible topics to parent after render so shortcuts match sidebar order.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    onVisibleTopicsChange?.(visibleTopicsCollectorRef.current);
+  });
+
+  // Reset topic index counter and visible topics collector before each render.
+  topicIndexRef.current = 0;
+  visibleTopicsCollectorRef.current = [];
+  const catalogNotice = sessionCatalogNotice(catalogStatus);
+  const catalogNoticeText = catalogNotice === "indexing"
+    ? (catalogStatus.total <= 0 ? t("projectTree.indexing")
+      : t("projectTree.indexingProgress", { done: catalogStatus.indexed, total: catalogStatus.total }))
+    : catalogNotice === "repair-active"
+      ? t("projectTree.repairActive", { count: catalogStatus.repairActive ?? catalogStatus.repairPending })
+      : catalogNotice === "repair-deferred"
+        ? t("projectTree.repairDeferred")
+        : catalogNotice === "repair-blocked"
+          ? t("projectTree.repairBlocked", { count: catalogStatus.repairBlocked ?? catalogStatus.repairPending })
+          : `${t("projectTree.indexing")} — ${t("task.state.failed")}`;
+
+  return (
+    <div ref={projectTreeRef} className="project-tree">
+      {searchVisible && (
+        <label className="project-tree__search">
+          <Search size={14} />
+          <input
+            ref={searchInputRef}
+            value={query}
+            onChange={(event) => changeQuery(event.target.value)}
+            placeholder={t("projectTree.searchPlaceholder")}
+          />
+        </label>
+      )}
+      {catalogNotice && (
+        <div className="project-tree__catalog-progress" role="status">
+          <span>{catalogNoticeText}</span>
+          {catalogNotice === "rebuild" && (
+            <button type="button" className="project-tree__catalog-rebuild" onClick={() => void rebuildSessionCatalog()}>
+              {t("projectTree.rebuildCatalog")}
+            </button>
+          )}
+        </div>
+      )}
+      {compactTopics ? (
+        <>
+          {renderProjectHeader("workbench")}
+          <div className="project-tree__list project-tree__list--workbench">
+            {!hasTreeRows ? (
+              renderEmptyState()
+            ) : (
+              <>
+                {pinnedTreeSections.pinned.length > 0 && (
+                  <div className="project-tree__section project-tree__section--pinned">
+                    <div className="project-tree__section-title project-tree__section-title--pinned">
+                      <Pin size={14} className="project-tree__section-title-icon" aria-hidden="true" />
+                      <span>{t("projectTree.pinnedTitle")}</span>
+                    </div>
+                    {pinnedTreeSections.pinned.map((node) => renderNode(node, 0, "pinned"))}
+                  </div>
+                )}
+                <div className="project-tree__section project-tree__section--projects">
+                  {pinnedTreeSections.projects.map((node) => renderNode(node, 0, "projects"))}
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          {renderProjectHeader("classic")}
+          <div className="project-tree__list">
+            {!hasTreeRows ? (
+              renderEmptyState()
+            ) : (
+              <>
+                {pinnedTreeSections.pinned.length > 0 && (
+                  <div className="project-tree__section project-tree__section--pinned">
+                    <div className="project-tree__section-title">{t("projectTree.pinnedTitle")}</div>
+                    {pinnedTreeSections.pinned.map((node) => renderNode(node, 1, "pinned"))}
+                  </div>
+                )}
+                <div className="project-tree__section project-tree__section--projects">
+                  {pinnedTreeSections.projects.map((node) => renderNode(node, 0, "projects"))}
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+      {blankProjectFlow}
+      {remoteConnectFlow}
+    </div>
+  );
+}

@@ -1,0 +1,221 @@
+package control
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"reasonix/internal/agent"
+	"reasonix/internal/event"
+	"reasonix/internal/provider"
+	"reasonix/internal/tool"
+)
+
+// approvalPlanTurn is planTurn with requires_approval set, gating execution
+// behind the host approval gate.
+func approvalPlanTurn(text string) []provider.Chunk {
+	args, _ := json.Marshal(map[string]any{
+		"objective":         text,
+		"requires_approval": true,
+		"steps":             []map[string]string{{"title": text}},
+	})
+	return []provider.Chunk{
+		{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{ID: "plan-1", Name: "submit_plan", Arguments: string(args)}},
+		{Type: provider.ChunkDone},
+	}
+}
+
+// scriptedTurns is a provider that replays a distinct chunk set per Stream call,
+// so a controller turn that re-enters the agent (plan turn, then approved
+// execution turn) sees a different model response each time.
+type scriptedTurns struct {
+	turns [][]provider.Chunk
+	call  int
+}
+
+func (s *scriptedTurns) Name() string { return "scripted" }
+
+func (s *scriptedTurns) Stream(_ context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
+	i := s.call
+	if i >= len(s.turns) {
+		i = len(s.turns) - 1
+	}
+	s.call++
+	ch := make(chan provider.Chunk, len(s.turns[i]))
+	for _, c := range s.turns[i] {
+		ch <- c
+	}
+	close(ch)
+	return ch, nil
+}
+
+func firstUserMessage(msgs []provider.Message) string {
+	for _, m := range msgs {
+		if agent.IsUserAuthoredTurnMessage(m) {
+			if m.ProviderContent != "" {
+				return m.ProviderContent
+			}
+			return m.Content
+		}
+	}
+	return ""
+}
+
+// planTurn delivers the plan text through submit_plan, the planner's only
+// delivery channel; prose plans fail the turn as a protocol error.
+func planTurn(text string) []provider.Chunk {
+	args, _ := json.Marshal(map[string]any{
+		"objective": text,
+		"steps":     []map[string]string{{"title": text}},
+	})
+	return []provider.Chunk{
+		{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{ID: "plan-1", Name: "submit_plan", Arguments: string(args)}},
+		{Type: provider.ChunkDone},
+	}
+}
+
+func textTurn(text string) []provider.Chunk {
+	return []provider.Chunk{{Type: provider.ChunkText, Text: text}, {Type: provider.ChunkDone}}
+}
+
+func readFileTurn() []provider.Chunk {
+	return []provider.Chunk{
+		{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{ID: "r1", Name: "read_file", Arguments: `{"path":"README.md"}`}},
+		{Type: provider.ChunkDone},
+	}
+}
+
+func planThenExecuteTurns(plan, answer string) [][]provider.Chunk {
+	return [][]provider.Chunk{textTurn(plan), readFileTurn(), textTurn(answer)}
+}
+
+func newPlanTestAgent(prov provider.Provider) *agent.Agent {
+	reg := tool.NewRegistry()
+	reg.Add(fakeControlTool{name: "read_file"})
+	return agent.New(prov, reg, agent.NewSession(""), agent.Options{}, event.Discard)
+}
+
+// TestPlanGateEndToEnd drives explicit Plan Mode through a real agent: the plan
+// marker reaches the model, the controller asks for approval, and approval exits
+// Plan Mode, seeds the task list, and runs the execution turn.
+func TestPlanGateEndToEnd(t *testing.T) {
+	prov := &scriptedTurns{turns: planThenExecuteTurns(
+		"Plan:\n1. Add the config field\n2. Wire it into boot\n3. Add tests",
+		"Done — implemented the plan.",
+	)}
+	ag := newPlanTestAgent(prov)
+
+	approvalID := make(chan string, 1)
+	c := newOwnedTestController(t, Options{
+		Runner:   ag,
+		Executor: ag,
+		Sink: event.FuncSink(func(e event.Event) {
+			switch e.Kind {
+			case event.ApprovalRequest:
+				approvalID <- e.Approval.ID
+			}
+		}),
+	})
+	c.SetPlanMode(true)
+
+	go func() { c.Approve(<-approvalID, true, false, false) }()
+
+	input := "实现 issue #2395：新增配置项、自动判断复杂任务、补测试和文档"
+	if err := c.runTurnWithRaw(context.Background(), input, input); err != nil {
+		t.Fatalf("runTurnWithRaw: %v", err)
+	}
+
+	msgs := ag.Session().Messages
+	if got := agent.StripTransientUserBlocks(firstUserMessage(msgs)); !strings.HasPrefix(got, PlanModeMarker) {
+		t.Fatalf("first model input = %q, want the plan marker prefixed", got)
+	}
+	if c.PlanMode() {
+		t.Fatal("plan mode should be off after approval")
+	}
+	if got := c.Todos(); len(got) != 0 {
+		t.Fatalf("approved plan populated todo state: %+v", got)
+	}
+	if got := lastAssistantText(msgs); got != "Done — implemented the plan." {
+		t.Fatalf("last assistant text = %q, want the execution turn's answer", got)
+	}
+	if prov.call != 3 {
+		t.Fatalf("provider called %d times, want 3 (plan + read + answer)", prov.call)
+	}
+}
+
+func TestApprovedPlanDoesNotSeedTodosWithoutModelTodoWrite(t *testing.T) {
+	prov := &scriptedTurns{turns: planThenExecuteTurns(
+		"Plan:\n1. Add the config field\n2. Wire it into boot",
+		"Done.",
+	)}
+	ag := newPlanTestAgent(prov)
+
+	approvalID := make(chan string, 1)
+	c := newOwnedTestController(t, Options{
+		Runner:   ag,
+		Executor: ag,
+		Sink: event.FuncSink(func(e event.Event) {
+			switch e.Kind {
+			case event.ApprovalRequest:
+				approvalID <- e.Approval.ID
+			}
+		}),
+	})
+	c.SetPlanMode(true)
+
+	go func() { c.Approve(<-approvalID, true, false, false) }()
+
+	input := "Implement issue #2395: add config, wire boot, add tests and docs"
+	if err := c.runTurnWithRaw(context.Background(), input, input); err != nil {
+		t.Fatalf("runTurnWithRaw: %v", err)
+	}
+
+	if got := c.Todos(); len(got) != 0 {
+		t.Fatalf("plan approval seeded todo state: %+v", got)
+	}
+}
+
+// TestPlanGateRejectionStaysInPlan proves a rejected plan keeps plan mode on
+// and never runs the execution turn: only the plan turn reached the model.
+func TestPlanGateRejectionStaysInPlan(t *testing.T) {
+	prov := &scriptedTurns{turns: [][]provider.Chunk{
+		textTurn("Plan:\n1. Add the config field\n2. Add tests"),
+	}}
+	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession(""), agent.Options{}, event.Discard)
+
+	approvalID := make(chan string, 1)
+	var seeded bool
+	c := newOwnedTestController(t, Options{
+		Runner:   ag,
+		Executor: ag,
+		Sink: event.FuncSink(func(e event.Event) {
+			switch e.Kind {
+			case event.ApprovalRequest:
+				approvalID <- e.Approval.ID
+			case event.ToolDispatch:
+				if e.Tool.ID == "plan-seed" {
+					seeded = true
+				}
+			}
+		}),
+	})
+	c.SetPlanMode(true)
+
+	go func() { c.Approve(<-approvalID, false, false, false) }()
+
+	input := "实现 issue #2395：新增配置项、自动判断复杂任务、补测试和文档"
+	if err := c.runTurnWithRaw(context.Background(), input, input); err != nil {
+		t.Fatalf("runTurnWithRaw: %v", err)
+	}
+
+	if !c.PlanMode() {
+		t.Fatal("rejected plan should keep plan mode on")
+	}
+	if seeded {
+		t.Fatal("rejected plan must not seed the task list")
+	}
+	if prov.call != 1 {
+		t.Fatalf("provider called %d times, want 1 (plan only, no execution)", prov.call)
+	}
+}
