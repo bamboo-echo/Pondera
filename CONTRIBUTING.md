@@ -1,0 +1,262 @@
+# Contributing to Pondera
+
+Thank you for your interest in contributing to Pondera! This guide covers
+everything you need to get started.
+
+## Prerequisites
+
+- **Go 1.26+** — use the toolchain pinned in `go.mod` (`GOTOOLCHAIN=auto`)
+- **Git** — for version control
+- **Node.js 24+ and pnpm 10** (optional) — only if you work on the desktop app
+  (`desktop/`)
+
+## Getting started
+
+```bash
+git clone https://github.com/bamboo-echo/Pondera.git
+cd Pondera
+go build ./cmd/pondera    # builds the CLI binary
+go test ./...              # runs the full test suite
+```
+
+## Project structure
+
+| Directory | Purpose |
+|-----------|---------|
+| `cmd/pondera` | CLI entry point |
+| `internal/agent` | Agent loop, session, coordinator |
+| `internal/cli` | TUI, subcommands, setup wizard |
+| `internal/control` | Transport-agnostic controller |
+| `internal/config` | TOML configuration loading |
+| `internal/tool/builtin` | Built-in tools (bash, read_file, …) |
+| `internal/provider` | Model-backend abstraction |
+| `internal/provider/openai` | OpenAI-compatible provider |
+| `internal/plugin` | MCP client (stdio + HTTP) |
+| `internal/event` | Typed event stream |
+| `internal/hook` | Shell hooks (PreToolUse, …) |
+| `internal/memory` | PONDERA.md hierarchy + auto-memory |
+| `internal/skill` | Skill discovery from Markdown |
+| `internal/sandbox` | OS-level sandboxing |
+| `internal/serve` | HTTP/SSE server frontend |
+| `internal/checkpoint` | Snapshot-based rewind |
+| `desktop/` | Electron desktop app + Go service (separate Go module) |
+| `docs/` | Engineering spec, migration guide |
+
+### Dependency direction
+
+```
+cli → {agent, plugin, config} → {tool, provider}
+```
+
+Built-in subpackages import their parent to self-register via `init()`.
+Parents never import children.
+
+## Development workflow
+
+### Building
+
+```bash
+make build          # go build ./...
+make test           # go test ./...
+make vet            # go vet ./...
+make fmt            # gofmt -w .
+make hooks          # install git hooks (pre-push: go vet)
+make cross          # cross-compile for all 6 targets
+```
+
+### Isolated development environment
+
+A source-built binary shares no on-disk state with a stable release when launched
+with `PONDERA_HOME` set. This gives each build its own self-contained directory
+tree — config, credentials, sessions, cache, skills, commands, hooks, and
+desktop tab state — so the two builds never interfere:
+
+**CLI**
+
+```bash
+PONDERA_HOME=/tmp/pondera-dev go run ./cmd/pondera
+# or after building:
+#   PONDERA_HOME=/tmp/pondera-dev ./bin/pondera
+```
+
+**Desktop**
+
+```bash
+scripts/desktop-build.sh darwin/arm64 v0.0.0-dev   # one platform per run
+```
+
+On Windows, use `$env:PONDERA_HOME` in PowerShell or `set PONDERA_HOME=` in
+Command Prompt; the binary extension is `.exe`.
+
+The directory is empty on first launch; the app behaves exactly like a fresh
+install. Every subsequent write — config saves, credential storage, session
+logs — stays under `PONDERA_HOME`. Legacy migration, OS-home convention
+directory scanning, and all other fallback paths are skipped so no production
+data leaks in or out.
+
+### Cache-first review gate
+
+Pondera treats high prompt-cache hit rate as product behavior. Changes that
+touch provider-visible system prompt construction, memory prefix, output styles,
+skill index behavior, default tool surfaces, tool schemas, provider request
+serialization, compaction, or MCP/tool registration need explicit cache review.
+
+For these changes:
+
+- Keep system prompt changes low-frequency and require explicit review.
+- Fill the PR body `Cache-impact:` line with `none`, `low`, `medium`, or `high`
+  plus the reason.
+- Fill the PR body `Cache-guard:` line with the focused guard test/command added
+  or run, or explain why an existing guard covers the change.
+- Fill `System-prompt-review:` when system prompt, memory prefix, output style,
+  or skill index behavior changes.
+- Prefer focused guard tests near the changed surface; `scripts/cache-guard.sh`
+  remains the broader release-level cache-hit check.
+
+CI enforces this metadata for cache-sensitive paths so prompt/tool prefix churn
+is called out before review.
+
+### Running tests
+
+```bash
+go test ./...                           # all tests
+go test ./internal/agent/ -v            # verbose, one package
+go test ./internal/tool/builtin/ -run TestGrep  # one test
+```
+
+Choose checks by the changed contract. Documentation-only changes need content
+and link checks; Go changes need owning-package tests and applicable vet/lint
+checks. Broaden to `go test ./...` for shared behavior. Desktop Go is a separate
+module: run its affected packages or `cd desktop && go test ./...`.
+
+For Go changes, format the changed files and use `make lint` (golangci-lint at
+`.golangci-version` plus repolint). `go vet` does not cover all lint rules.
+Install the pinned linter with `make lint-install` if needed. Repeat successful
+checks only when new changes or unresolved risks justify it.
+
+When adding an internal import, check the target package's test imports for a
+reverse dependency and run the target package tests to catch setup cycles.
+
+Desktop transcript scroll and history changes follow the
+[scroll and history contract](docs/TRANSCRIPT_SCROLL_CONTRACT.md), including the
+single writer, the bounded reading window, and deterministic regression cases via
+`pnpm test:transcript` in `desktop/frontend/`.
+
+Keep correctness gates deterministic. Prove concurrency and lifecycle ordering
+with channels, injected clocks, state transitions, or emitted events instead of
+asserting that an operation finishes within a small wall-clock interval on a
+shared CI runner. Use a generous timeout only as a liveness watchdog. Performance
+limits belong in an explicit benchmark that records evidence and uses the
+benchmark's documented sampling rule; host integration probes may report an
+advisory result when the runner cannot provide a controlled environment.
+
+### Code style
+
+- `gofmt` is enforced by CI — format before committing
+- Follow existing patterns: wrap errors with `fmt.Errorf("...: %w", err)`
+- Library code never calls `os.Exit` or prints to stdout/stderr
+- Only `cli/` and `main/` decide exit codes and user-facing messages
+- Exported identifiers need useful doc comments; explain non-obvious constraints
+  rather than restating code. Mechanical limits live in
+  `tools/repolint/comments.go` and `tools/repolint/main.go`.
+- `TODO(#nnn):` and `HACK(#nnn):` need an issue anchor; `FIXME` is rejected.
+- Keep one responsibility per file. Repolint ratchets existing debt: an edit
+  cannot silently increase a file's recorded debt. Prefer removing redundancy
+  or extracting a coherent owner.
+- A narrow baseline adjustment may carry existing debt through a rename or
+  extraction, or cover a small measured capacity increase whose design is clearer.
+  Explain the before/after values and rationale. Longer comments are justified
+  for non-obvious protocol, concurrency, compatibility, or recovery invariants.
+  Do not add broad slack, disable checks, or weaken correctness/security tests.
+
+### Commit messages
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat(glob): add ** recursive pattern support
+fix: replace silent error discards with structured logging
+test(event): add comprehensive unit tests for event package
+docs: add CONTRIBUTING.md
+ci: add golangci-lint and govulncheck
+```
+
+### Review updates and PR metadata
+
+Use ordinary follow-up commits and fast-forward pushes. Amend or force-push only
+when explicitly authorized, after verifying the remote head. Keep unrelated
+changes out of the PR.
+
+Two CI guards read the PR body. The scripts are the source of truth and both
+run locally: `scripts/check-cache-impact.sh`, `scripts/check-docs-impact.sh`.
+Separators must be an ASCII `-` or `:` — an em dash fails the docs guard.
+
+Cache-sensitive diffs (`internal/tool/`, `internal/provider/`,
+`internal/boot/`, `internal/agent/agent.go`, and the rest of the list in the
+script) require:
+
+```
+Cache-impact: <none|low|medium|high> - <reason>
+Cache-guard: <focused guard test/command or existing guard rationale>
+```
+
+`none` is a legitimate impact when the provider-visible prefix stays
+byte-identical; only an empty value, `todo`, or `tbd` is rejected. If the diff
+also touches `internal/config/`, `internal/memory/`, `internal/outputstyle/`,
+`internal/skill/`, or `internal/boot/`, add `System-prompt-review: <note>` —
+that field additionally rejects `none` and `n/a`, so it must name the explicit
+prompt reviewer or approval.
+
+User-visible diffs (`cmd/pondera/`, `desktop/`, `npm/`, and most of
+`internal/`; tests and lockfiles are exempt) require one of these, chosen by
+whether the same PR edited `docs/*.md`:
+
+```
+Documentation-impact: updated - <what changed>            # docs/*.md edited
+Documentation-impact: none - <why the docs stay correct>  # not edited
+```
+
+## Adding a new built-in tool
+
+1. Create `internal/tool/builtin/mytool.go`
+2. Implement the `tool.Tool` interface: `Name()`, `Description()`, `Schema()`, `ReadOnly()`, `Execute()`
+3. Register via `func init() { tool.RegisterBuiltin(myTool{}) }`
+4. Add tests in `internal/tool/builtin/builtin_test.go` or a separate `mytool_test.go`
+5. The tool is automatically available — `main` blank-imports `builtin`
+
+## Adding a new model provider
+
+(For MCP tool servers see `internal/plugin` instead — that's a different layer.)
+
+1. Create `internal/provider/myprovider/`
+2. Implement `provider.Provider`: `Name()`, `Stream()`
+3. Register via `func init() { provider.Register("mykind", New) }`
+4. The provider is available from config with `kind = "mykind"`
+
+## Adding i18n strings
+
+1. Add the field to `internal/i18n/i18n.go` (`Messages` struct)
+2. Add the value in `internal/i18n/messages_en.go` and `messages_zh.go`
+3. The `TestCatalogsComplete` test will fail if you miss a locale
+
+## Submitting changes
+
+1. Fork the repository
+2. Create a feature branch from `main-v2`
+3. Make the change and add regression coverage for affected behavior
+4. Run the relevant checks above and satisfy required CI checks
+5. Ensure changed Go files are formatted
+6. Submit a pull request to `main-v2`
+
+## Reporting issues
+
+Open an issue on GitHub with:
+- Steps to reproduce
+- Expected vs actual behavior
+- Go version and OS
+- Relevant logs or error messages
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the
+same license as the project.

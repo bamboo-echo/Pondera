@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Pondera
+Comment=Pondera desktop — an Electron shell around the Go kernel
+Exec=pondera-launcher
+Icon=pondera-desktop
+Categories=Development;Utility;
+Terminal=false
+StartupWMClass=Pondera

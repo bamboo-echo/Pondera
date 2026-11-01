@@ -1,0 +1,279 @@
+# 能力诊断
+
+<a href="./CAPABILITY_DIAGNOSTICS.md">English</a>
+&nbsp;·&nbsp;
+<a href="./GUIDE.zh-CN.md">使用指南</a>
+&nbsp;·&nbsp;
+<a href="./PLUGIN_PACKAGES.zh-CN.md">插件包</a>
+
+Pondera 提供 CLI 与桌面端 **设置 → 诊断** 共用的只读能力诊断模型，覆盖 Skills、
+Commands、Hooks、插件包、MCP 服务器，以及指令文件（`AGENTS.md` /
+`PONDERA.md` / `CLAUDE.md`）。
+
+## 技能工具引用
+
+`doctor` 和 `doctor capabilities` 使用相同的自定义路径、排除路径、禁用名单和来源
+优先级，仅检查实际生效技能的 `allowed-tools`。工具清单包含编译期内置工具和宿主
+管理的工具身份。即使没有 MCP 服务器，`use_capability` 也是已知宿主工具，无需禁用
+或覆盖内置评审技能。
+
+识别出工具名称，不代表每个会话都已注册、授权或准备好执行该工具。通过代理可调用
+但未直接展示给模型的工具也包含在清单中。MCP 依赖配置仍单独检查。
+
+| 能力诊断代码 | 含义 |
+| --- | --- |
+| `skill.tool_reference_unknown` | 普通名称不在已知清单中，应检查拼写 |
+| `skill.tool_reference_invalid` | 通配符语法错误或 MCP 引用不完整 |
+| `skill.tool_reference_ambiguous` | 提供的 MCP 绑定将一个具体引用解析到多个工具 |
+| `skill.tool_reference_unverified` | 离线无法验证的动态引用或尚未匹配的通配符 |
+| `skill.mcp_dependency_missing` | 必须自动使用的技能依赖未配置的 MCP 服务器 |
+| `skill.mcp_dependency_failed` | 必需的服务器已有宿主确认的失败状态 |
+
+“未验证”在能力诊断中属于提示信息。普通 doctor 保留现有警告列表格式，并在文本中
+明确标记未验证。这些结果不授予工具权限，也不能证明服务器损坏。静态检查不会启动
+MCP 服务器或调用模型供应商。
+现有运行时宿主或显式 `--live` 探测提供 MCP 工具列表时，能力诊断会使用这些已观察到
+的工具解析可移植别名。
+别名解析沿用运行时的插件归属规则：插件技能可使用所属包的别名，普通本地技能则需
+引用具体的可调用工具名或 capability ID。诊断保留适配器的原始名称和可见名称，
+包括配置的前缀移除结果。
+
+**写入策略**
+
+| 模式 | 配置文件 | MCP stats / schema cache | 网络 / MCP 进程 |
+| --- | --- | --- | --- |
+| 静态（默认）+ 桌面端 | 永不写入（`LoadForRootReadOnly`） | 永不写入 | 无 |
+| CLI `--live` | 永不写入 | **不写入**（`SkipPersistence`） | 在隔离 Host 中启动 automatic MCP |
+
+## 怎么用（快速上手）
+
+| 目标 | 命令 / 入口 |
+| --- | --- |
+| 检查当前工作区的 skills / hooks / MCP / 插件 | `pondera doctor capabilities` |
+| 机器可读报告（CI / 报障） | `pondera doctor capabilities --json` |
+| 指定项目根目录 | `pondera doctor capabilities --root /path/to/project` |
+| 真实探测 MCP 启动（会启动第三方服务器） | `pondera doctor capabilities --live --timeout 5s` |
+| 让 Agent 按手册排障 | 会话中 `/pondera-guide`，或自然语言描述症状 |
+| GUI 健康视图 | 桌面端 **设置 → 诊断** |
+
+**默认是静态且安全的**：无网络、不启动 MCP 子进程。只有你明确需要启动
+automatic MCP 时才用 `--live`。
+
+其它既有 doctor 命令（行为不变）：
+
+```bash
+pondera doctor                  # 环境 / provider / 沙箱快照
+pondera doctor session <id>     # 支持用会话包
+pondera doctor redact-sessions  # 脱敏会话中的密钥
+```
+
+## 日常工作流
+
+### 1. 「Skill / 命令找不到或内容不对」
+
+```bash
+pondera doctor capabilities --json | jq '.skills.entries, .commands.entries, .issues'
+```
+
+关注：
+
+- `skill.shadowed` / `command.shadowed` — 更高优先级路径覆盖了它
+- `skill.disabled` — 名字在 `[skills].disabled_skills` 里
+- `skill.missing_description` — 能加载但索引描述很弱
+- `command.read_failed` — 文件读失败或解析失败
+
+然后到 **设置 → 技能**，或直接改 `.pondera/skills` / `.pondera/commands` 下的文件。
+
+### 2. 「项目 Hooks 不触发」
+
+```bash
+pondera doctor capabilities | sed -n '/Hooks/,/Plugins/p'
+```
+
+项目 Hooks 会从 `.pondera/settings.json` 自动加载。若没有触发，请确认当前工作区，
+保存后重启 Pondera。`match` 是**锚定**正则：`file` **不会**匹配 `read_file`。
+
+### 3. 「配置了 MCP 但模型看不到工具」
+
+1. 先做静态检查（无副作用）：
+
+   ```bash
+   pondera doctor capabilities --json | jq '.mcp.servers, .issues[] | select(.subsystem=="mcp")'
+   ```
+
+2. 仅在接受启动第三方服务器时：
+
+   ```bash
+   pondera doctor capabilities --live --timeout 10s --json
+   ```
+
+常见 code：`mcp.command_not_found`、`mcp.invalid_transport`、
+`mcp.start_failed`、`mcp.no_tools`。桌面端更推荐 **设置 → 诊断** 打开
+「包含当前会话运行状态」——只读取**活动标签 Host**，不会再起第二个 Host。
+
+每个 MCP 条目通过 `source`、`source_path` 和 `effective` 标明真正生效的配置及其来源。
+启动失败还会报告 `startup_stage`（`launch`、`authorization`、`initialize` 或
+`tools/list`）、`startup_elapsed_ms`，以及有长度上限且已做凭据脱敏的 `stderr` 尾部。
+这可以区分重复/被覆盖的注册与真正缓慢或失败的握手，同时不会暴露完整进程输出。
+
+### 4. 让 Agent 按手册排查（`pondera-guide`）
+
+交互式会话中：
+
+```text
+/pondera-guide
+```
+
+或：
+
+```text
+我配置了 MCP 服务器 X，但模型始终看不到它的工具，请排查。
+```
+
+该内置 Skill 是 **inline**（`runAs: inline`）。它会优先要求模型运行：
+
+```bash
+pondera doctor capabilities --json
+```
+
+只有你明确允许启动外部 MCP 时才建议 `--live`。项目或全局同名
+`pondera-guide` 会覆盖内置版；也可用
+`[skills].disabled_skills = ["pondera-guide"]` 隐藏。
+
+指南首先加载简短入口，Skills、Commands、Hooks、MCP、Plugins 和指令解析
+分别位于二进制内置的引用页中。通过 `read_skill` 按需读取；
+工具未直接暴露时，使用能力代理：
+
+```json
+{"action":"call","capability_id":"tool:read_skill","arguments":{"name":"pondera-guide","reference":"references/hooks.md"}}
+```
+
+省略 `reference` 保持原有的技能正文读取方式。引用只能来自所选内置技能包的
+`references/*.md`，不会读取任意宿主路径，也不会绕过项目覆盖或技能禁用
+回退到内置版。磁盘技能继续通过其源文件读取引用。没有用户数据格式或迁移变化。
+
+会话技能目录在固定字符预算内先缩短描述，尽量保留全部技能名称。名称本身也超出
+预算时，只显示完整条目，并提供遗漏数量和发现提示。遗漏项仍可通过
+`use_capability` 的 search/inspect/call 发现和调用；预览不是完整能力清单。
+技能选择依据实际任务相关性，不再因弱关键词匹配而强制调用。
+
+## CLI 参考
+
+```bash
+pondera doctor capabilities [--root PATH] [--json] [--live] [--timeout 5s]
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| `--root` | 工作区根目录（默认当前目录），走 `config.LoadForRoot` |
+| `--json` | 仅向 **stdout** 输出一个 JSON 对象（提示写 stderr） |
+| `--live` | 在隔离 Host 中启动 **automatic** MCP（可能联网） |
+| `--timeout` | 单服务器 live 超时，**1s–60s**，默认 `5s`，必须配合 `--live` |
+
+### 模式
+
+| 模式 | 行为 |
+| --- | --- |
+| **静态（默认）** | 无网络；不启动 stdio / HTTP / SSE MCP 子进程 |
+| **Live（`--live`）** | stderr 风险提示；只探测 automatic 启动意图；`auto_start=false` → `skipped`；并发 4；始终关闭 Host |
+
+桌面端「包含当前会话运行状态」**不等于** CLI `--live`：桌面只**读取**活动标签 Host，
+不启动 MCP。
+
+### 退出码
+
+| 码 | 含义 |
+| --- | --- |
+| `0` | 无 `error` 级问题（warning/info 允许） |
+| `1` | 存在 `error` 或 live MCP 启动失败 |
+| `2` | 参数错误 |
+
+示例：
+
+```bash
+# 当前目录、人类可读
+pondera doctor capabilities
+
+# CI：仅有 error 时非零退出
+pondera doctor capabilities --json
+
+# live 探测，超时 15 秒
+pondera doctor capabilities --live --timeout 15s --json 2>live-warn.txt
+```
+
+既有 `pondera doctor` / `doctor session` / `doctor redact-sessions` 的 JSON
+schema **不会**混入新字段。
+
+## 桌面端
+
+打开 **设置 → 诊断**：
+
+| 控件 | 行为 |
+| --- | --- |
+| 打开页面 | 对活动工作区根加载**静态**报告 |
+| 刷新 | 按当前「会话运行状态」开关重新收集 |
+| 复制脱敏 JSON | 可安全粘贴的报告（路径已脱敏） |
+| 包含当前会话运行状态 | 仅合并活动标签 Host 的 connected / failed / deferred / disabled |
+| 前往设置（Issue 上） | 当 `settings_tab` 有值时跳到 MCP / Skills / Plugins / Hooks |
+
+页面不提供自动编辑、执行 hooks、自动启用或自动重连。打开诊断页**不会**
+rebuild controller，也不会 snapshot 会话。
+
+## JSON schema（version 1）
+
+顶层字段：`schema_version`、`root`、`live`、`summary`、
+`instructions` / `skills` / `commands` / `hooks` / `plugins` / `mcp`、`issues`。
+
+插件包条目对 Manifest v2 是增量扩展：声明了代码型 Runtime 的插件还会
+报告 `prompts` 与 `themes` 计数和 `runtime` 标记（见
+<a href="./PLUGIN_PACKAGES.zh-CN.md">插件包</a>）。旧读者可以忽略这些
+字段；`schema_version` 保持 `1`。
+
+Issue 含稳定 `code`、`severity`、`subsystem`、`source`、`message`、`remediation`、
+可选 `settings_tab`。数组与 Issue 顺序确定，便于脚本与测试。
+
+常见 code：
+
+- `skill.shadowed`、`skill.missing_description`、`skill.disabled`
+- `command.shadowed`、`command.read_failed`
+- `hook.invalid_matcher`、`hook.missing_command`、`hook.malformed_settings`
+- `plugin.missing_root`、`plugin.invalid_manifest`、`plugin.compatibility`
+- `mcp.invalid_transport`、`mcp.command_not_found`、`mcp.missing_command`、`mcp.missing_url`
+- `mcp.start_failed`、`mcp.no_tools`、`mcp.runtime_unavailable`
+
+### 严重度
+
+| 严重度 | 含义 | CLI |
+| --- | --- | --- |
+| `error` | 配置损坏或 live 启动失败 | 退出 `1` |
+| `warning` | 需处理但非致命 | 退出 `0` |
+| `info` | 遮蔽、禁用、无运行时等 | 退出 `0` |
+
+## 路径与密钥安全
+
+路径显示为 `<workspace>/...`、`~/...` 或 `<external>/basename`。
+不输出用户名、完整外部路径、环境变量值、Header 值、token、URL query。
+MCP 仅列出 env/header 的 **key**。可能携带 HTTP 响应体或 MCP stderr 的
+错误文本会先经过全局密钥脱敏器（Authorization、Bearer/JWT/厂商 token、
+`KEY=value` 与 JSON `"key":"value"` 凭据形态、Cookie/Set-Cookie 值），
+再截断到 400 字符。向 issue / 聊天贴报告时，优先复制诊断 JSON，
+不要贴原始配置文件。
+
+## 不在本诊断范围内的事项
+
+| 需求 | 改用 |
+| --- | --- |
+| Provider 密钥、代理、沙箱 OS 支持 | `pondera doctor` |
+| 给支持用的完整会话包 | `pondera doctor session <id>` |
+| 单个插件包 | `pondera plugin doctor <name>` |
+| 会话内 MCP 列表 | `/mcp` |
+
+## 缓存影响
+
+内置 `pondera-guide` 在下次变化的 `session-context` Skills 目录中增加一行；
+正文按需加载。诊断本身不属于 provider 提示词。
+
+修改静态调用策略或工具描述/schema，会改变新组装会话的缓存前缀，可能需要重新
+预热缓存。读取指南或引用页只增加工具结果，不改写当前系统前缀或工具 schema。
+相同目录的渲染是确定性的。提示词效果应在实际使用的 provider 上评估；
+确定性集成测试不能证明模型选择技能的质量。

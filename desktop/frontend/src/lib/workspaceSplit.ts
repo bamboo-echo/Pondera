@@ -1,0 +1,152 @@
+export function clampWorkspaceSplitTreeWidth({
+  width,
+  panelWidth,
+  railWidth = 0,
+  treeMinWidth,
+  previewMinWidth,
+}: {
+  width: number;
+  panelWidth?: number;
+  railWidth?: number;
+  treeMinWidth: number;
+  previewMinWidth: number;
+}): number {
+  const min = Math.round(treeMinWidth);
+  const rounded = Math.round(width);
+  if (typeof panelWidth !== "number" || !Number.isFinite(panelWidth)) {
+    return Math.max(min, rounded);
+  }
+  const splitWidth = Math.max(0, Math.round(panelWidth) - Math.round(railWidth));
+  const max = Math.max(min, splitWidth - Math.round(previewMinWidth));
+  return Math.min(max, Math.max(min, rounded));
+}
+
+export function initialWorkspaceSplitTreeWidth({
+  panelWidth,
+  railWidth = 0,
+  savedTreeWidth,
+  treeMinWidth,
+  previewMinWidth,
+}: {
+  panelWidth?: number;
+  railWidth?: number;
+  savedTreeWidth: number | null;
+  treeMinWidth: number;
+  previewMinWidth: number;
+}): number {
+  const target =
+    savedTreeWidth !== null && Number.isFinite(savedTreeWidth)
+      ? savedTreeWidth
+      : typeof panelWidth === "number" && Number.isFinite(panelWidth)
+        ? Math.max(0, panelWidth - railWidth) / 2
+        : treeMinWidth;
+  return clampWorkspaceSplitTreeWidth({ width: target, panelWidth, railWidth, treeMinWidth, previewMinWidth });
+}
+
+export type WorkspaceSplitTreeWidthMode = "even" | "manual";
+
+export function shouldInitializeWorkspaceSplitOnFileSelect({
+  previewVisible,
+  treeVisible,
+}: {
+  previewVisible: boolean;
+  treeVisible: boolean;
+}): boolean {
+  return !previewVisible || !treeVisible;
+}
+
+export function resolveWorkspaceSplitTreeWidth({
+  mode,
+  currentTreeWidth,
+  panelWidth,
+  railWidth = 0,
+  treeMinWidth,
+  previewMinWidth,
+}: {
+  mode: WorkspaceSplitTreeWidthMode;
+  currentTreeWidth: number;
+  panelWidth?: number;
+  railWidth?: number;
+  treeMinWidth: number;
+  previewMinWidth: number;
+}): number {
+  if (mode === "even") {
+    return initialWorkspaceSplitTreeWidth({
+      panelWidth,
+      railWidth,
+      savedTreeWidth: null,
+      treeMinWidth,
+      previewMinWidth,
+    });
+  }
+  return clampWorkspaceSplitTreeWidth({
+    width: currentTreeWidth,
+    panelWidth,
+    railWidth,
+    treeMinWidth,
+    previewMinWidth,
+  });
+}
+
+export function workspaceSplitCanFit({
+  panelWidth,
+  railWidth = 0,
+  treeMinWidth,
+  previewMinWidth,
+}: {
+  panelWidth?: number;
+  railWidth?: number;
+  treeMinWidth: number;
+  previewMinWidth: number;
+}): boolean {
+  if (typeof panelWidth !== "number" || !Number.isFinite(panelWidth)) {
+    return true;
+  }
+  return Math.round(panelWidth) >= Math.round(railWidth) + Math.round(treeMinWidth) + Math.round(previewMinWidth);
+}
+
+export function workspaceSplitTreeWidthFromPointer({
+  clientX,
+  panelLeft,
+  panelWidth,
+  railWidth = 0,
+  treeMinWidth,
+  previewMinWidth,
+  treeOnRight = false,
+}: {
+  clientX: number;
+  panelLeft: number;
+  panelWidth?: number;
+  railWidth?: number;
+  treeMinWidth: number;
+  previewMinWidth: number;
+  treeOnRight?: boolean;
+}): number {
+  if (treeOnRight && typeof panelWidth === "number") {
+    // Tree width is the distance from the pointer to the panel's right edge.
+    // The rail still occupies its own column on the opposite side.
+    return clampWorkspaceSplitTreeWidth({
+      width: panelLeft + panelWidth - clientX,
+      panelWidth,
+      railWidth,
+      treeMinWidth,
+      previewMinWidth,
+    });
+  }
+  return clampWorkspaceSplitTreeWidth({
+    width: clientX - panelLeft - railWidth,
+    panelWidth,
+    railWidth,
+    treeMinWidth,
+    previewMinWidth,
+  });
+}
+export const WORKSPACE_TREE_MIN_WIDTH = 140;
+export const WORKSPACE_TREE_DEFAULT_WIDTH = 300;
+export const WORKSPACE_PREVIEW_MIN_WIDTH = 140;
+export const WORKSPACE_PREVIEW_TARGET_WIDTH = 360;
+export const WORKSPACE_DUAL_PANEL_TARGET_WIDTH = WORKSPACE_TREE_DEFAULT_WIDTH + WORKSPACE_PREVIEW_TARGET_WIDTH;
+
+export function clampWorkspaceTreeWidth(width: number, panelWidth?: number): number {
+  return clampWorkspaceSplitTreeWidth({ width, panelWidth, treeMinWidth: WORKSPACE_TREE_MIN_WIDTH, previewMinWidth: WORKSPACE_PREVIEW_MIN_WIDTH });
+}

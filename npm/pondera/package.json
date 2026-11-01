@@ -1,0 +1,39 @@
+{
+  "name": "pondera",
+  "version": "0.0.0",
+  "description": "Cache-first DeepSeek coding agent for the terminal.",
+  "bin": {
+    "pondera": "bin/pondera.js"
+  },
+  "files": [
+    "bin/pondera.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/bamboo-echo/Pondera#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bamboo-echo/Pondera.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bamboo-echo/Pondera/issues"
+  },
+  "keywords": [
+    "deepseek",
+    "ai",
+    "agent",
+    "cli",
+    "coding-assistant",
+    "tui"
+  ],
+  "optionalDependencies": {
+    "@pondera/cli-darwin-arm64": "0.0.0",
+    "@pondera/cli-darwin-x64": "0.0.0",
+    "@pondera/cli-linux-arm64": "0.0.0",
+    "@pondera/cli-linux-x64": "0.0.0",
+    "@pondera/cli-win32-arm64": "0.0.0",
+    "@pondera/cli-win32-x64": "0.0.0"
+  }
+}

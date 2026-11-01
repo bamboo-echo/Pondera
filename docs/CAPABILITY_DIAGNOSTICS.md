@@ -1,0 +1,328 @@
+# Capability diagnostics
+
+<a href="./CAPABILITY_DIAGNOSTICS.zh-CN.md">简体中文</a>
+&nbsp;·&nbsp;
+<a href="./GUIDE.md">Guide</a>
+&nbsp;·&nbsp;
+<a href="./PLUGIN_PACKAGES.md">Plugin packages</a>
+
+Pondera ships a read-only capability diagnostics model shared by the CLI and
+desktop **Settings → Diagnostics**. It reports Skills, Commands, Hooks, plugin
+packages, MCP servers, and instruction docs (`AGENTS.md` / `PONDERA.md` /
+`CLAUDE.md`).
+
+**Write policy**
+
+| Mode | Config files | MCP stats / schema cache | Network / MCP processes |
+| --- | --- | --- | --- |
+| Static (default) + desktop | Never written (`LoadForRootReadOnly`) | Never written | None |
+| CLI `--live` | Never written | **Not written** (`SkipPersistence`) | Starts automatic MCP in an isolated Host |
+
+## How to use (quick start)
+
+| Goal | What to run |
+| --- | --- |
+| Check this workspace’s skills / hooks / MCP / plugins | `pondera doctor capabilities` |
+| Machine-readable report (CI / support) | `pondera doctor capabilities --json` |
+| Another project root | `pondera doctor capabilities --root /path/to/project` |
+| Probe MCP startup for real (starts third-party servers) | `pondera doctor capabilities --live --timeout 5s` |
+| Ask the agent to walk through config / fix guidance | `/pondera-guide` in chat, or ask naturally |
+| GUI health view | Desktop **Settings → Diagnostics** |
+
+**Default is static and safe:** no network, no MCP child processes. Use `--live`
+only when you explicitly want to start automatic MCP servers.
+
+Related doctor commands:
+
+```bash
+pondera doctor                  # env / providers / sandbox snapshot
+pondera doctor session <id>     # support session bundle
+pondera doctor redact-sessions  # redact secrets in session files
+```
+
+## Skill tool references
+
+Both `doctor` and `doctor capabilities` check `allowed-tools` on effective
+skills using the same configured paths, exclusions, disabled names, and source
+precedence. The inventory combines compile-time tools with host-managed tool
+identities. `use_capability` is a known host tool even with no MCP servers;
+there is no need to disable or override the built-in review skills.
+
+Recognition means the reference names a known tool, not that the tool is
+registered, permitted, or ready in every session. Hidden tools callable through
+the proxy are included. MCP dependency configuration remains a separate check.
+
+| Capability issue code | Meaning |
+| --- | --- |
+| `skill.tool_reference_unknown` | An ordinary name is not in the known inventory; check spelling |
+| `skill.tool_reference_invalid` | Invalid glob syntax or an incomplete MCP reference |
+| `skill.tool_reference_ambiguous` | Supplied MCP bindings resolve a literal to multiple tools |
+| `skill.tool_reference_unverified` | A dynamic reference or unmatched pattern cannot be verified offline |
+| `skill.mcp_dependency_missing` | An auto-use required skill depends on an unconfigured MCP server |
+| `skill.mcp_dependency_failed` | The required server has an observed host failure |
+
+Unverified references are informational in capability diagnostics. Ordinary
+doctor retains its warning-list format and explicitly labels these references
+as unverified. Neither result grants tool access or proves a server is broken.
+Static checks do not start MCP servers or call a model provider.
+When an existing runtime host or an explicit `--live` probe supplies MCP tools,
+capability diagnostics use that observed inventory to resolve portable aliases.
+Alias resolution follows runtime plugin ownership: a plugin skill can use aliases
+from its own package, while an ordinary local skill needs a concrete callable
+name or capability ID. Diagnostics preserve the adapter's original and visible
+names, including configured prefix stripping.
+
+## Everyday workflows
+
+### 1. “Skill / command is missing or wrong”
+
+```bash
+pondera doctor capabilities --json | jq '.skills.entries, .commands.entries, .issues'
+```
+
+Look for:
+
+- `skill.shadowed` / `command.shadowed` — a higher-priority path won
+- `skill.disabled` — name is in `[skills].disabled_skills`
+- `skill.missing_description` — skill loads but index quality is weak
+- `command.read_failed` — unreadable or broken markdown
+
+Then open **Settings → Skills** (or fix the file under `.pondera/skills` /
+`.pondera/commands`).
+
+### 2. “Project hooks never fire”
+
+```bash
+pondera doctor capabilities | sed -n '/Hooks/,/Plugins/p'
+```
+
+Project hooks load automatically from `.pondera/settings.json`. If they do not
+fire, confirm the active workspace and restart Pondera after saving. Matchers
+are **anchored** regexes: `file` does not match `read_file`.
+
+### 3. “MCP tools don’t show up”
+
+1. Static first (no side effects):
+
+   ```bash
+   pondera doctor capabilities --json | jq '.mcp.servers, .issues[] | select(.subsystem=="mcp")'
+   ```
+
+2. Only if you accept starting third-party servers:
+
+   ```bash
+   pondera doctor capabilities --live --timeout 10s --json
+   ```
+
+Common codes: `mcp.command_not_found`, `mcp.invalid_transport`,
+`mcp.start_failed`, `mcp.no_tools`. On desktop, prefer **Settings → Diagnostics**
+with “Include current session runtime” to read the **active tab Host** without
+starting a second Host.
+
+Each MCP entry identifies the exact winning configuration with `source`,
+`source_path`, and `effective`. Startup failures also report `startup_stage`
+(`launch`, `authorization`, `initialize`, or `tools/list`),
+`startup_elapsed_ms`, and a bounded, credential-redacted `stderr` tail. This
+distinguishes duplicate/shadowed registration from a genuinely slow or broken
+handshake without exposing full process output.
+
+### 4. Ask the agent (`pondera-guide`)
+
+In an interactive session:
+
+```text
+/pondera-guide
+```
+
+or:
+
+```text
+My MCP server X is configured but the model never sees its tools — diagnose.
+```
+
+The built-in skill is **inline** (`runAs: inline`). It tells the model to prefer:
+
+```bash
+pondera doctor capabilities --json
+```
+
+and to use `--live` only after you explicitly allow external MCP. Project or
+global skills named `pondera-guide` override the builtin; you can also hide it
+with `[skills].disabled_skills = ["pondera-guide"]`.
+
+The guide loads a short router first. Skills, commands, hooks, MCP, plugins,
+and instruction resolution have separate pages embedded in the binary. Read only
+the relevant page with `read_skill`; for a tool hidden behind the capability
+dispatcher, use:
+
+```json
+{"action":"call","capability_id":"tool:read_skill","arguments":{"name":"pondera-guide","reference":"references/hooks.md"}}
+```
+
+Omit `reference` to retain the existing full skill-body read. Reference reads
+are limited to `references/*.md` in the selected embedded skill package; they
+do not read arbitrary host paths or fall back to a builtin behind a project
+override or disabled skill. File-backed skills continue to use their source
+files for references. No user data format or migration changes.
+
+The session skills catalog shares its fixed character budget across descriptions
+before omitting entries. If names alone exceed the budget, it lists complete
+entries with an omitted count and a discovery hint. Omitted entries remain
+available through `use_capability` search/inspect/call; the preview is not the
+authoritative inventory. Skill selection uses actual task relevance rather than
+mandatory invocation on weak keyword matches.
+
+## CLI reference
+
+```bash
+pondera doctor capabilities [--root PATH] [--json] [--live] [--timeout 5s]
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--root` | Workspace root (default: current directory). Uses `config.LoadForRoot`. |
+| `--json` | Write one JSON object to **stdout** only (warnings go to stderr). |
+| `--live` | Start **automatic** MCP servers in an isolated Host (may network). |
+| `--timeout` | Per-server live timeout, **1s–60s**, default `5s`. Requires `--live`. |
+
+### Modes
+
+| Mode | Behavior |
+| --- | --- |
+| **Static (default)** | No network; no stdio / HTTP / SSE MCP child processes. |
+| **Live (`--live`)** | Stderr risk banner; only servers with automatic start intent; `auto_start=false` → `skipped`; concurrency 4; Host always closed. |
+
+Desktop “include current session runtime” is **not** CLI `--live`: the desktop
+only **reads** the active tab Host and never starts MCP.
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | No `error`-severity issues (warnings/info are allowed) |
+| `1` | One or more `error` issues, or live MCP start failures |
+| `2` | Bad flags / usage |
+
+Examples:
+
+```bash
+# Human-readable, current directory
+pondera doctor capabilities
+
+# Fail CI only on hard errors
+pondera doctor capabilities --json
+# shell: exit code 1 if summary.errors > 0
+
+# Live probe with a longer timeout
+pondera doctor capabilities --live --timeout 15s --json 2>live-warn.txt
+```
+
+Existing `pondera doctor`, `doctor session`, and `doctor redact-sessions`
+commands keep their own JSON schemas — capability fields are **not** mixed into
+those reports.
+
+## Desktop
+
+Open **Settings → Diagnostics**:
+
+| Control | Behavior |
+| --- | --- |
+| Open page | Loads a **static** report for the active workspace root |
+| Refresh | Re-runs collection with the current runtime toggle |
+| Copy redacted JSON | Clipboard paste-safe report (paths already redacted) |
+| Include current session runtime | Merge connected / failed / deferred / disabled from the **active tab Host** only |
+| Open settings (on an issue) | Jumps to MCP / Skills / Plugins / Hooks when `settings_tab` is set |
+
+The page never edits config, executes hooks, auto-enables packages, or
+reconnects MCP. Opening Diagnostics does not rebuild the controller or snapshot
+the session.
+
+## JSON schema (version 1)
+
+Top-level fields:
+
+- `schema_version` (always `1`)
+- `root` (display path)
+- `live` (bool)
+- `summary` — error/warning/info counts and resource counts
+- `instructions`, `skills`, `commands`, `hooks`, `plugins`, `mcp`
+- `issues[]` — ordered list of findings
+
+Plugin package entries are additive for Manifest v2: each package also
+reports `prompts` and `themes` counts and a `runtime` flag when the plugin
+declares a code runtime (see
+<a href="./PLUGIN_PACKAGES.md">Plugin packages</a>). Older readers can ignore
+these fields; `schema_version` stays `1`.
+
+Issue shape:
+
+```json
+{
+  "severity": "error|warning|info",
+  "code": "skill.shadowed",
+  "subsystem": "skills",
+  "name": "demo",
+  "source": "<workspace>/.pondera/skills/demo/SKILL.md",
+  "message": "...",
+  "remediation": "...",
+  "settings_tab": "skills"
+}
+```
+
+Stable codes include:
+
+- `skill.shadowed`, `skill.missing_description`, `skill.disabled`
+- `command.shadowed`, `command.read_failed`
+- `hook.invalid_matcher`, `hook.missing_command`, `hook.malformed_settings`
+- `plugin.missing_root`, `plugin.invalid_manifest`, `plugin.compatibility`
+- `mcp.invalid_transport`, `mcp.command_not_found`, `mcp.missing_command`, `mcp.missing_url`
+- `mcp.start_failed`, `mcp.no_tools`, `mcp.runtime_unavailable`
+
+Array and issue order is deterministic for scripting and tests.
+
+### Severity
+
+| Severity | Meaning | CLI exit |
+| --- | --- | --- |
+| `error` | Broken config or failed live start | `1` |
+| `warning` | Actionable but non-fatal (e.g. a missing hook command) | `0` |
+| `info` | Shadowing, disabled assets, runtime unavailable | `0` |
+
+## Path and secret safety
+
+Reports rewrite paths as:
+
+- `<workspace>/...` under the diagnosis root
+- `~/...` under the user home
+- `<external>/basename` for other absolute paths (no full external path)
+
+They never intentionally emit usernames, full external paths, environment
+variable **values**, header **values**, tokens, or URL query strings. MCP
+entries list env/header **keys** only. Error text that may carry raw HTTP
+response bodies or MCP stderr passes through the product-wide secret redactor
+(Authorization schemes, Bearer/JWT/vendor tokens, `KEY=value` and JSON
+`"key":"value"` credential forms, Cookie/Set-Cookie values) and is truncated to
+400 characters. Prefer copying report JSON into issues or chat over pasting raw
+config files.
+
+## What is *not* diagnosed here
+
+| Need | Use instead |
+| --- | --- |
+| Provider keys, proxy, sandbox OS support | `pondera doctor` |
+| Full session transcript for support | `pondera doctor session <id>` |
+| One plugin package only | `pondera plugin doctor <name>` |
+| Interactive MCP list in a chat session | `/mcp` |
+
+## Cache impact
+
+Adding the built-in `pondera-guide` skill appends one line to the next changed
+`session-context` Skills catalog. The skill body is loaded only on invocation.
+Diagnostics itself is not part of the provider prompt.
+
+Changing the static invocation policy or tool description/schema changes the
+prefix used by newly assembled sessions and can require cache warming. Reading
+a guide or reference page adds a tool result without rewriting the current
+system prefix or tool schemas. Catalog rendering is deterministic for the same
+inventory. Prompt wording should be evaluated on the actual deployed providers;
+deterministic integration tests do not measure model selection quality.

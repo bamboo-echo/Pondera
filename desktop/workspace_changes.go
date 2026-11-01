@@ -1,0 +1,713 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"pondera/internal/control"
+	"pondera/internal/diff"
+	"pondera/internal/gitcmd"
+)
+
+type gitStatusEntry struct {
+	Path    string
+	OldPath string
+	Status  string
+}
+
+type workspaceChangeAccumulator struct {
+	view       WorkspaceChangeView
+	hasSession bool
+	hasGit     bool
+}
+
+const (
+	workspaceGitBranchCacheTTL = 2 * time.Second
+	// Bound both decoded file contents and rendered patches before they cross
+	// the desktop bridge; generated files must not turn a preview click into OOM.
+	workspaceChangeDetailLimit = 2 * 1024 * 1024
+)
+
+type workspaceGitBranchCacheEntry struct {
+	branch     string
+	expires    time.Time
+	refreshing bool
+	request    *int
+}
+
+var workspaceGitBranchCache = struct {
+	sync.Mutex
+	entries map[string]workspaceGitBranchCacheEntry
+}{entries: map[string]workspaceGitBranchCacheEntry{}}
+
+var workspaceGitBranchForMetaProbe = workspaceGitBranch
+
+func (a *App) WorkspaceChanges(tabID string) WorkspaceChangesView {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return a.workspaceChanges(ctx, tabID)
+}
+
+func (a *App) workspaceChanges(ctx context.Context, tabID string) WorkspaceChangesView {
+	out := WorkspaceChangesView{Files: []WorkspaceChangeView{}, GitAvailable: true}
+	tabID = strings.TrimSpace(tabID)
+
+	workspaceRoot, ctrl, ok := a.workspaceChangesTarget(tabID)
+	if !ok {
+		out.GitAvailable = false
+		out.GitErr = fmt.Sprintf("tab %q not found", tabID)
+		return out
+	}
+
+	repo, err := workspaceRepo(workspaceRoot, ctrl)
+	if err != nil {
+		out.GitAvailable = false
+		out.GitErr = err.Error()
+		return out
+	}
+	base := repo.Dir
+
+	out.GitBranch, _ = workspaceGitBranchContext(ctx, repo)
+
+	changes := map[string]*workspaceChangeAccumulator{}
+	add := func(path string) *workspaceChangeAccumulator {
+		path = normalizeWorkspaceRelPath(base, path)
+		if path == "" {
+			return nil
+		}
+		if changes[path] == nil {
+			changes[path] = &workspaceChangeAccumulator{view: WorkspaceChangeView{Path: path}}
+		}
+		return changes[path]
+	}
+
+	if ctrl != nil {
+		for _, meta := range ctrl.Checkpoints() {
+			for _, path := range meta.Paths {
+				acc := add(path)
+				if acc == nil {
+					continue
+				}
+				acc.hasSession = true
+				if len(acc.view.Turns) == 0 || acc.view.Turns[len(acc.view.Turns)-1] != meta.Turn {
+					acc.view.Turns = append(acc.view.Turns, meta.Turn)
+				}
+				if meta.Time.UnixMilli() >= acc.view.LatestTime {
+					acc.view.LatestPrompt = meta.Prompt
+					acc.view.LatestTime = meta.Time.UnixMilli()
+				}
+			}
+		}
+	}
+
+	gitEntries, gitErr := workspaceGitStatusContext(ctx, repo)
+	if gitErr != nil {
+		out.GitAvailable = false
+		out.GitErr = gitErr.Error()
+		out.Incomplete = true
+	}
+	var untracked []string
+	for _, entry := range gitEntries {
+		acc := add(entry.Path)
+		if acc == nil {
+			continue
+		}
+		acc.hasGit = true
+		acc.view.GitStatus = entry.Status
+		acc.view.OldPath = normalizeWorkspaceRelPath(base, entry.OldPath)
+		if entry.Status == "??" {
+			untracked = append(untracked, entry.Path)
+		}
+	}
+
+	out.Files = make([]WorkspaceChangeView, 0, len(changes))
+	for _, acc := range changes {
+		if acc.hasSession {
+			acc.view.Sources = append(acc.view.Sources, "session")
+			// Session-owned files with a recorded preimage can one-click revert
+			// to the first Pondera touch (not Git HEAD).
+			if ctrl != nil {
+				if state, ok := ctrl.CheckpointFileState(acc.view.Path); ok && state.Owned {
+					acc.view.CanSessionRevert = true
+				}
+			}
+		}
+		if acc.hasGit {
+			acc.view.Sources = append(acc.view.Sources, "git")
+		}
+		out.Files = append(out.Files, acc.view)
+	}
+	sort.Slice(out.Files, func(i, j int) bool {
+		a, b := out.Files[i], out.Files[j]
+		if len(a.Sources) != len(b.Sources) {
+			return len(a.Sources) > len(b.Sources)
+		}
+		return strings.ToLower(a.Path) < strings.ToLower(b.Path)
+	})
+	if out.GitAvailable {
+		out.Added, out.Removed, out.Incomplete = workspaceGitDiffTally(ctx, repo, untracked)
+	}
+	return out
+}
+
+func (a *App) workspaceChangesTarget(tabID string) (string, control.SessionAPI, bool) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	var tab *WorkspaceTab
+	if tabID == "" {
+		tab = a.activeTabLocked()
+	} else {
+		tab = a.tabs[tabID]
+	}
+	if tab == nil {
+		return "", nil, tabID == ""
+	}
+	return tab.WorkspaceRoot, tab.Ctrl, true
+}
+
+func (a *App) workspaceRepoForTab(tabID string) (gitcmd.Repo, error) {
+	tabID = strings.TrimSpace(tabID)
+	workspaceRoot, ctrl, ok := a.workspaceChangesTarget(tabID)
+	if !ok {
+		return gitcmd.Repo{}, fmt.Errorf("tab %q not found", tabID)
+	}
+	return workspaceRepo(workspaceRoot, ctrl)
+}
+
+// WorkspaceChangeDetail returns the current patch for one file in the
+// requested tab. Git is authoritative when available because HEAD -> worktree
+// includes both staged and unstaged edits. Session checkpoints provide a
+// git-free fallback and cover files edited by Pondera before Git notices them.
+func (a *App) WorkspaceChangeDetail(tabID, path string) (WorkspaceChangeDetailView, error) {
+	workspaceRoot, ctrl, ok := a.workspaceChangesTarget(strings.TrimSpace(tabID))
+	if !ok {
+		return WorkspaceChangeDetailView{}, fmt.Errorf("tab %q not found", tabID)
+	}
+	repo, err := workspaceRepo(workspaceRoot, ctrl)
+	if err != nil {
+		return WorkspaceChangeDetailView{}, err
+	}
+	base := repo.Dir
+	rel := normalizeWorkspaceRelPath(base, path)
+	if rel == "" {
+		return WorkspaceChangeDetailView{}, os.ErrInvalid
+	}
+	if _, ok, err := workspacePathForBase(base, filepath.FromSlash(rel)); err != nil || !ok {
+		if err != nil {
+			return WorkspaceChangeDetailView{}, err
+		}
+		return WorkspaceChangeDetailView{}, os.ErrInvalid
+	}
+
+	if detail, found := workspaceGitChangeDetail(repo, rel); found {
+		return detail, nil
+	}
+	if ctrl != nil {
+		if state, found := ctrl.CheckpointFileState(rel); found {
+			return workspaceCheckpointChangeDetail(base, rel, state.Content)
+		}
+	}
+	return WorkspaceChangeDetailView{}, nil
+}
+
+func workspaceGitChangeDetail(repo gitcmd.Repo, rel string) (WorkspaceChangeDetailView, bool) {
+	base := repo.Dir
+	entries, err := workspaceGitStatus(repo)
+	if err != nil {
+		return WorkspaceChangeDetailView{}, false
+	}
+	var entry *gitStatusEntry
+	for i := range entries {
+		if entries[i].Path == rel {
+			entry = &entries[i]
+			break
+		}
+	}
+	if entry == nil {
+		return WorkspaceChangeDetailView{}, false
+	}
+
+	// Untracked files are omitted by git diff. In an unborn repository HEAD is
+	// absent as well, so synthesize the same create/delete patch from disk.
+	if entry.Status == "??" || !workspaceGitHasHead(repo) {
+		detail, err := workspaceCheckpointChangeDetail(base, rel, nil)
+		if err != nil {
+			return WorkspaceChangeDetailView{}, false
+		}
+		detail.Source = "git"
+		return detail, true
+	}
+
+	args := []string{"-C", base, "diff", "--no-ext-diff", "--no-textconv", "--relative", "HEAD", "--", filepath.FromSlash(rel)}
+	if entry.OldPath != "" && entry.OldPath != rel {
+		args = append(args, filepath.FromSlash(entry.OldPath))
+	}
+	raw, truncated, err := workspaceGitDiffOutput(repo, args...)
+	if err != nil {
+		return WorkspaceChangeDetailView{}, false
+	}
+	if truncated {
+		return WorkspaceChangeDetailView{Source: "git", Truncated: true}, true
+	}
+	patch := strings.TrimSpace(string(raw))
+	if patch == "" {
+		return WorkspaceChangeDetailView{}, false
+	}
+	added, removed := tallyUnifiedPatch(patch)
+	binary := strings.Contains(patch, "Binary files ") || strings.Contains(patch, "GIT binary patch")
+	return WorkspaceChangeDetailView{Diff: &patch, Source: "git", Added: added, Removed: removed, Binary: binary}, true
+}
+
+func workspaceGitHasHead(repo gitcmd.Repo) bool {
+	return workspaceGit(repo, "-C", repo.Dir, "rev-parse", "--verify", "HEAD").Run() == nil
+}
+
+func workspaceGitDiffOutput(repo gitcmd.Repo, args ...string) ([]byte, bool, error) {
+	cmd := workspaceGit(repo, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, false, err
+	}
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		return nil, false, err
+	}
+	raw, readErr := io.ReadAll(io.LimitReader(stdout, workspaceChangeDetailLimit+1))
+	if readErr != nil {
+		_ = stdout.Close()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
+		return nil, false, readErr
+	}
+	if len(raw) > workspaceChangeDetailLimit {
+		_ = stdout.Close()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
+		return nil, true, nil
+	}
+	waitErr := cmd.Wait()
+	if waitErr != nil {
+		return nil, false, waitErr
+	}
+	return raw, false, nil
+}
+
+func workspaceCheckpointChangeDetail(base, rel string, old *string) (WorkspaceChangeDetailView, error) {
+	path, ok, err := workspacePathForBase(base, filepath.FromSlash(rel))
+	if err != nil || !ok {
+		return WorkspaceChangeDetailView{}, err
+	}
+	oldText := ""
+	if old != nil {
+		if len(*old) > workspaceChangeDetailLimit {
+			return WorkspaceChangeDetailView{Source: "session", Truncated: true}, nil
+		}
+		oldText = *old
+	}
+	newText, exists, truncated, err := workspaceCurrentText(path)
+	if err != nil {
+		return WorkspaceChangeDetailView{}, err
+	}
+	if truncated {
+		return WorkspaceChangeDetailView{Source: "session", Truncated: true}, nil
+	}
+	kind := diff.Modify
+	if old == nil {
+		kind = diff.Create
+	} else if !exists {
+		kind = diff.Delete
+	}
+	change := diff.Build(rel, oldText, newText, kind)
+	if len(change.Diff) > workspaceChangeDetailLimit {
+		return WorkspaceChangeDetailView{Source: "session", Truncated: true}, nil
+	}
+	if change.Diff == "" && !change.Binary {
+		return WorkspaceChangeDetailView{Source: "session"}, nil
+	}
+	patch := change.Diff
+	return WorkspaceChangeDetailView{
+		Diff:    &patch,
+		Source:  "session",
+		Added:   change.Added,
+		Removed: change.Removed,
+		Binary:  change.Binary,
+	}, nil
+}
+
+func workspaceCurrentText(path string) (string, bool, bool, error) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return "", false, false, nil
+	}
+	if err != nil {
+		return "", false, false, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(path)
+		return target, true, false, err
+	}
+	if !info.Mode().IsRegular() {
+		return "", true, false, fmt.Errorf("workspace change path %q is not a regular file", path)
+	}
+	raw, truncated, err := readFileUTF8Limit(path, workspaceChangeDetailLimit)
+	return string(raw), true, truncated, err
+}
+
+func tallyUnifiedPatch(patch string) (added, removed int) {
+	inHunk := false
+	for line := range strings.SplitSeq(patch, "\n") {
+		switch {
+		case strings.HasPrefix(line, "@@"):
+			inHunk = true
+		case strings.HasPrefix(line, "diff --git "):
+			inHunk = false
+		case inHunk && strings.HasPrefix(line, "+"):
+			added++
+		case inHunk && strings.HasPrefix(line, "-"):
+			removed++
+		}
+	}
+	return added, removed
+}
+
+// workspaceGit builds a console-hidden git probe against repo's pinned
+// identity. gitcmd supplies the shared invocation baseline: CREATE_NO_WINDOW so
+// git's own children inherit the invisible console, and the config overrides
+// that keep a probe from spawning a background daemon (#3906).
+func workspaceGit(repo gitcmd.Repo, args ...string) *exec.Cmd {
+	return workspaceGitCommand(context.Background(), repo, args...)
+}
+
+func workspaceGitCommand(ctx context.Context, repo gitcmd.Repo, args ...string) *exec.Cmd {
+	return repo.Command(ctx, args...)
+}
+
+func workspaceGitOutputWithTimeout(timeout time.Duration, repo gitcmd.Repo, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return workspaceGitCommand(ctx, repo, args...).Output()
+}
+
+func workspaceGitStatus(repo gitcmd.Repo) ([]gitStatusEntry, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return workspaceGitStatusContext(ctx, repo)
+}
+
+func workspaceGitStatusContext(ctx context.Context, repo gitcmd.Repo) ([]gitStatusEntry, error) {
+	base := repo.Dir
+	// Git's porcelain paths are repository-relative even when -C points at a
+	// subdirectory. Derive the textual repository prefix from Git itself instead
+	// of comparing absolute paths: Windows may spell the same directory once as
+	// an 8.3 path and once as a long path, which makes filepath.Rel reject every
+	// otherwise valid status entry.
+	prefixCmd := workspaceGitCommand(ctx, repo, "-C", base, "rev-parse", "--show-prefix")
+	prefixRaw, err := prefixCmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	prefix := strings.TrimSpace(string(prefixRaw))
+	cmd := workspaceGitCommand(ctx, repo, "-C", base, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".")
+	raw, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	entries := parseGitStatusPorcelainZ(raw)
+	out := make([]gitStatusEntry, 0, len(entries))
+	for _, entry := range entries {
+		entry.Path = workspaceRelPathFromGitPrefix(base, prefix, entry.Path)
+		if entry.Path == "" {
+			continue
+		}
+		entry.OldPath = workspaceRelPathFromGitPrefix(base, prefix, entry.OldPath)
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+func parseGitStatusPorcelainZ(raw []byte) []gitStatusEntry {
+	parts := bytes.Split(raw, []byte{0})
+	out := make([]gitStatusEntry, 0, len(parts))
+	for i := 0; i < len(parts); i++ {
+		part := parts[i]
+		if len(part) < 4 {
+			continue
+		}
+		status := string(part[:2])
+		path := string(part[3:])
+		entry := gitStatusEntry{Path: path, Status: strings.TrimSpace(status)}
+		if strings.ContainsAny(status, "RC") && i+1 < len(parts) {
+			i++
+			entry.OldPath = string(parts[i])
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func normalizeWorkspaceRelPath(base, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if filepath.IsAbs(path) {
+		if rel, err := filepath.Rel(base, path); err == nil {
+			path = rel
+		}
+	}
+	path = filepath.Clean(path)
+	if path == "." || path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	return filepath.ToSlash(path)
+}
+
+func workspaceRelPathFromGitPrefix(base, prefix, path string) string {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	prefix = filepath.ToSlash(strings.TrimSpace(prefix))
+	if path == "" {
+		return ""
+	}
+	if prefix != "" {
+		if !strings.HasPrefix(path, prefix) {
+			return ""
+		}
+		path = strings.TrimPrefix(path, prefix)
+	}
+	return normalizeWorkspaceRelPath(base, filepath.FromSlash(path))
+}
+
+// workspaceGitBranchForMeta is the cached variant used by high-frequency UI
+// metadata refreshes. It never waits for git on the caller path: stale branch
+// metadata is less harmful than blocking tab activation or hydration. Workflows
+// that need an immediate git read, such as WorkspaceChanges, should call
+// workspaceGitBranch directly.
+func workspaceGitBranchForMeta(base string, repo gitcmd.Repo) string {
+	key := filepath.Clean(base)
+	now := time.Now()
+
+	workspaceGitBranchCache.Lock()
+	if cached, ok := workspaceGitBranchCache.entries[key]; ok {
+		branch := cached.branch
+		if now.Before(cached.expires) || cached.refreshing {
+			workspaceGitBranchCache.Unlock()
+			return branch
+		}
+		cached.refreshing = true
+		cached.request = new(int)
+		workspaceGitBranchCache.entries[key] = cached
+		workspaceGitBranchCache.Unlock()
+		go refreshWorkspaceGitBranchForMeta(key, base, repo, cached.request)
+		return branch
+	}
+
+	request := new(int)
+	workspaceGitBranchCache.entries[key] = workspaceGitBranchCacheEntry{
+		expires:    now.Add(workspaceGitBranchCacheTTL),
+		refreshing: true,
+		request:    request,
+	}
+	workspaceGitBranchCache.Unlock()
+
+	go refreshWorkspaceGitBranchForMeta(key, base, repo, request)
+	return ""
+}
+
+// refreshWorkspaceGitBranchForMeta reads through repo, the tab session's
+// identity; a tab with no session yet resolves base as opening it would.
+func refreshWorkspaceGitBranchForMeta(key, base string, repo gitcmd.Repo, request *int) {
+	branch := ""
+	// Store via defer so the refreshing flag is always cleared, even when the
+	// probe panics or exits the goroutine early; otherwise the entry would stay
+	// marked refreshing forever and never update again.
+	defer func() {
+		storeNow := time.Now()
+		workspaceGitBranchCache.Lock()
+		defer workspaceGitBranchCache.Unlock()
+		if cached, ok := workspaceGitBranchCache.entries[key]; !ok || cached.request != request {
+			return
+		}
+		if len(workspaceGitBranchCache.entries) > 256 {
+			for k, cached := range workspaceGitBranchCache.entries {
+				if storeNow.After(cached.expires) {
+					delete(workspaceGitBranchCache.entries, k)
+				}
+			}
+		}
+		workspaceGitBranchCache.entries[key] = workspaceGitBranchCacheEntry{branch: branch, expires: storeNow.Add(workspaceGitBranchCacheTTL)}
+	}()
+
+	if repo.Dir == "" {
+		repo = openWorkspaceRepo(base)
+	}
+	branch = workspaceGitBranchForMetaProbe(repo)
+}
+
+// workspaceGitBranch returns the current git branch name of repo, or an empty
+// string when it names no git repository or git is unavailable.
+func workspaceGitBranch(repo gitcmd.Repo) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	branch, _ := workspaceGitBranchContext(ctx, repo)
+	return branch
+}
+
+func workspaceGitBranchContext(ctx context.Context, repo gitcmd.Repo) (string, error) {
+	base := repo.Dir
+	raw, err := workspaceGitCommand(ctx, repo, "-C", base, "branch", "--show-current").Output()
+	if err != nil {
+		return "", err
+	}
+	if branch := strings.TrimSpace(string(raw)); branch != "" {
+		return branch, nil
+	}
+
+	raw, err = workspaceGitCommand(ctx, repo, "-C", base, "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return "", err
+	}
+	short := strings.TrimSpace(string(raw))
+	if short == "" {
+		return "", nil
+	}
+	return "@" + short, nil
+}
+
+// GitBranches returns all local git branches for the active workspace's repo.
+func (a *App) GitBranches() ([]string, error) {
+	repo, err := a.workspaceRepoForTab("")
+	if err != nil {
+		return nil, err
+	}
+	return workspaceLocalBranches(repo)
+}
+
+func (a *App) GitCheckout(branch string) error {
+	repo, err := a.workspaceRepoForTab("")
+	if err != nil {
+		return err
+	}
+	return workspaceCheckoutBranch(repo, branch, false)
+}
+
+const gitRefInvalidChars = " ~^:?*[\\" + "\t\n"
+
+func validGitBranchName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.HasPrefix(name, "-") || strings.Contains(name, "..") ||
+		strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.Contains(name, "@{") {
+		return false
+	}
+	return !strings.ContainsAny(name, gitRefInvalidChars)
+}
+
+func (a *App) GitCreateBranch(name string) error {
+	repo, err := a.workspaceRepoForTab("")
+	if err != nil {
+		return err
+	}
+	return workspaceCheckoutBranch(repo, name, true)
+}
+
+type GitCommitView struct {
+	Hash    string `json:"hash"`
+	Author  string `json:"author"`
+	Date    string `json:"date"`
+	Message string `json:"message"`
+}
+
+type GitCommitDetailView struct {
+	Diff  *string  `json:"diff,omitempty"`
+	Files []string `json:"files,omitempty"`
+}
+
+func (a *App) WorkspaceGitHistory(tabID string, path string) ([]GitCommitView, error) {
+	repo, err := a.workspaceRepoForTab(tabID)
+	if err != nil {
+		return nil, err
+	}
+	base := repo.Dir
+
+	args := []string{"-C", base, "log", "--pretty=format:%H%x00%an%x00%ad%x00%s", "-z", "-n", "100"}
+	if path != "" {
+		args = append(args, "--", path)
+	}
+
+	cmd := workspaceGit(repo, args...)
+	raw, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	parts := bytes.Split(raw, []byte{0})
+	out := []GitCommitView{}
+	// 4 parts per commit: hash, author, date, message
+	for i := 0; i+3 < len(parts); i += 4 {
+		out = append(out, GitCommitView{
+			Hash:    string(parts[i]),
+			Author:  string(parts[i+1]),
+			Date:    string(parts[i+2]),
+			Message: string(parts[i+3]),
+		})
+	}
+	return out, nil
+}
+
+func (a *App) WorkspaceGitCommitDetail(tabID string, hash string, path string) (GitCommitDetailView, error) {
+	repo, err := a.workspaceRepoForTab(tabID)
+	if err != nil {
+		return GitCommitDetailView{}, err
+	}
+	base := repo.Dir
+
+	if path != "" {
+		// Single file diff
+		cmd := workspaceGit(repo, "-C", base, "show", "--relative", "--pretty=format:", "--patch", hash, "--", path)
+		raw, err := cmd.Output()
+		if err != nil {
+			return GitCommitDetailView{}, notLocalOr(repo, hash, err)
+		}
+		diffStr := strings.TrimSpace(string(raw))
+		return GitCommitDetailView{Diff: &diffStr}, nil
+	}
+
+	// Project level: list of files changed
+	cmd := workspaceGit(repo, "-C", base, "diff-tree", "--relative", "--no-commit-id", "--name-only", "-z", "-r", hash)
+	raw, err := cmd.Output()
+	if err != nil {
+		return GitCommitDetailView{}, notLocalOr(repo, hash, err)
+	}
+
+	var files []string
+	for path := range bytes.SplitSeq(raw, []byte{0}) {
+		if len(path) > 0 {
+			files = append(files, string(path))
+		}
+	}
+	return GitCommitDetailView{Files: files}, nil
+}
+
+// notLocalOr names a failure caused by objects a partial clone never fetched —
+// host git does not fetch them — and passes any other failure through.
+func notLocalOr(repo gitcmd.Repo, hash string, err error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if repo.ObjectsMissing(ctx, hash, hash+"^") {
+		return fmt.Errorf("commit %s: %w", hash, gitcmd.ErrObjectNotLocal)
+	}
+	return err
+}
