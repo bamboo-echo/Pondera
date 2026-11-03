@@ -131,7 +131,7 @@ node desktop/packaging/smoke.mjs "<安装目录>\versions\<ver>\app" --service "
 
 - 提交信息用双语 Conventional Commits：`type(scope): english summary / 中文摘要`。
 - 只加已跟踪文件：`git add -u`；`dist/`、`desktop/build/`、`node_modules/` 均被忽略。
-- 每次「打包」完成后，同步重新导出快照并强制覆盖 `https://github.com/bamboo-echo/Pondera` 的 `main`（用户已确认这是固定流程）；只有用户明确说「这次不用推」才跳过。
+- 每次「打包」完成后，直接推送本仓库 `main` 到 `origin`（`git push origin main`，只允许快进）；只有用户明确说「这次不用推」才跳过。不再导出额外的快照仓库。
 - 功能或流程变化时同步更新本文件；改名/品牌规则见 §6。
 
 ## 9. 速查表
