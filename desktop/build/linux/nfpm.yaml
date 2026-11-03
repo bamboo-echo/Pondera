@@ -18,7 +18,7 @@ maintainer: "Pondera Contributors"
 description: |
   Pondera desktop — an Electron shell around the Go kernel.
 vendor: "Pondera Contributors"
-homepage: "https://github.com/esengine/DeepSeek-Pondera"
+homepage: "https://github.com/bamboo-echo/Pondera"
 license: "MIT"
 deb:
   compression: xz
