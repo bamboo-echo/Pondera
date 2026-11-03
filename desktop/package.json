@@ -2,7 +2,7 @@
   "name": "pondera-desktop-workspace",
   "private": true,
   "version": "0.0.0",
-  "packageManager": "pnpm@10.34.5",
+  "packageManager": "pnpm@11.8.0",
   "scripts": {
     "dev": "pnpm --filter pondera-desktop-frontend dev",
     "dev:desktop": "node scripts/dev-desktop.mjs",

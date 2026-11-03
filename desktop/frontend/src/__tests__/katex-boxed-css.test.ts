@@ -10,7 +10,7 @@ if (!/width:\s*100%\s*;/.test(boxedRule)) {
 if (!/width:\s*-webkit-fill-available\s*;/.test(boxedRule)) {
   throw new Error("KaTeX boxed frame must fill the containing row in WebKit");
 }
-if (packageJSON.packageManager !== "pnpm@10.34.5") {
+if (packageJSON.packageManager !== "pnpm@11.8.0") {
   throw new Error(`frontend package manager pin drifted: ${packageJSON.packageManager ?? "missing"}`);
 }
 
