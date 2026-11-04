@@ -246,6 +246,9 @@ func TestLocalReadFailureFallsBackToCache(t *testing.T) {
 	if !view.Cached || !view.Offline || len(view.Entries) != 2 {
 		t.Fatalf("local fallback cached=%v offline=%v entries=%d", view.Cached, view.Offline, len(view.Entries))
 	}
+	if view.SourceKind != "local-dir" {
+		t.Fatalf("fallback source kind = %q, want local-dir", view.SourceKind)
+	}
 }
 
 func TestSourceSettingsRoundTrip(t *testing.T) {

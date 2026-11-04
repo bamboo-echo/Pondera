@@ -197,7 +197,7 @@ func fileURLPath(u *url.URL) (string, error) {
 func (c *Client) loadLocal(sourcePath, kind string) (View, error) {
 	indexPath, root, err := localIndexFiles(sourcePath, kind)
 	if err != nil {
-		return c.fallback("local-"+kind, sourcePath, err)
+		return c.fallback(kind, sourcePath, err)
 	}
 	body, err := os.ReadFile(indexPath)
 	if err != nil {
