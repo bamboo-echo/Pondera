@@ -212,7 +212,14 @@ func (c *Client) loadLocal(sourcePath, kind string) (View, error) {
 	view.Source = sourcePath
 	view.SourceKind = kind
 	view.FetchedAt = c.now()
-	// Local reads have no validators; the cache is only a read-failure fallback.
+	// Local reads have no validators; the cache is only a read-failure fallback
+	// (for example an unmounted network directory).
+	c.writeCache(sourcePath, cacheRecord{
+		Source:    sourcePath,
+		FetchedAt: view.FetchedAt,
+		Name:      view.Name,
+		Entries:   view.Entries,
+	})
 	return view, nil
 }
 

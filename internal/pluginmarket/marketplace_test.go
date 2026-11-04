@@ -228,6 +228,26 @@ func TestRemoteRelativeSourcesResolveAgainstGitHubIndex(t *testing.T) {
 	}
 }
 
+func TestLocalReadFailureFallsBackToCache(t *testing.T) {
+	root := t.TempDir()
+	indexPath := writeIndex(t, root)
+	cachePath := filepath.Join(t.TempDir(), "cache.json")
+	client := New(root, cachePath)
+	if _, err := client.Load(context.Background()); err != nil {
+		t.Fatalf("seed local cache: %v", err)
+	}
+	if err := os.Remove(indexPath); err != nil {
+		t.Fatal(err)
+	}
+	view, err := client.Load(context.Background())
+	if err != nil {
+		t.Fatalf("offline local load: %v", err)
+	}
+	if !view.Cached || !view.Offline || len(view.Entries) != 2 {
+		t.Fatalf("local fallback cached=%v offline=%v entries=%d", view.Cached, view.Offline, len(view.Entries))
+	}
+}
+
 func TestSourceSettingsRoundTrip(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("PONDERA_HOME", home)
