@@ -5330,6 +5330,30 @@
       ]
     }
   },
+  "PluginMarketplace": {
+    "domain": "desktop/plugin_marketplace_app.go",
+    "owner": "App.PluginMarketplace",
+    "sources": [
+      "desktop/plugin_marketplace_app.go"
+    ],
+    "scope": {
+      "kind": "owner-state",
+      "resolver": "App.PluginMarketplace",
+      "inputs": []
+    }
+  },
+  "PluginMarketplaceSource": {
+    "domain": "desktop/plugin_marketplace_app.go",
+    "owner": "App.PluginMarketplaceSource",
+    "sources": [
+      "desktop/plugin_marketplace_app.go"
+    ],
+    "scope": {
+      "kind": "owner-state",
+      "resolver": "App.PluginMarketplaceSource",
+      "inputs": []
+    }
+  },
   "Plugins": {
     "domain": "desktop/plugin_packages_app.go",
     "owner": "App.Plugins",
@@ -9508,6 +9532,20 @@
       "inputs": [
         "name",
         "enabled"
+      ]
+    }
+  },
+  "SetPluginMarketplaceSource": {
+    "domain": "desktop/plugin_marketplace_app.go",
+    "owner": "App.SetPluginMarketplaceSource",
+    "sources": [
+      "desktop/plugin_marketplace_app.go"
+    ],
+    "scope": {
+      "kind": "owner-inputs",
+      "resolver": "App.SetPluginMarketplaceSource",
+      "inputs": [
+        "source"
       ]
     }
   },

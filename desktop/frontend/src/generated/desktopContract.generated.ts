@@ -3,7 +3,7 @@
 
 export const DESKTOP_PROTOCOL_VERSION = 11;
 
-export const DESKTOP_CONTRACT_DIGEST = "sha256:c8c6900807307d8b8c2774eaf3348dff600c084922850d84c61aa7b23f57dda0";
+export const DESKTOP_CONTRACT_DIGEST = "sha256:7450ce4f3c39ed7de137fd9a7c1c86021d0fc78ff2c72c415bf94b7e3cb662d5";
 
 export const DESKTOP_COMMANDS = [
   "AIRenameSession",
@@ -380,6 +380,8 @@ export const DESKTOP_COMMANDS = [
   "PlanPluginInstall",
   "Platform",
   "PluginDoctor",
+  "PluginMarketplace",
+  "PluginMarketplaceSource",
   "Plugins",
   "PollBotConnectionInstall",
   "PrepareHistoricalSourceVersion",
@@ -664,6 +666,7 @@ export const DESKTOP_COMMANDS = [
   "SetPlanMode",
   "SetPlannerModel",
   "SetPluginEnabled",
+  "SetPluginMarketplaceSource",
   "SetPreferredExternalOpener",
   "SetProjectColor",
   "SetProjectPinned",
@@ -3433,6 +3436,40 @@ export interface PluginMCPServerView {
   command?: string;
   url?: string;
   autoStart?: boolean;
+}
+
+export interface PluginMarketplaceEntryView {
+  name: string;
+  description?: string;
+  author?: string;
+  authorUrl?: string;
+  version?: string;
+  category: string;
+  icon?: string;
+  source?: string;
+  sha?: string;
+  installSource?: string;
+  featured?: boolean;
+  permissions?: string[];
+  installed: boolean;
+  installedVersion?: string;
+}
+
+export interface PluginMarketplaceSourceView {
+  source: string;
+  kind: string;
+}
+
+export interface PluginMarketplaceView {
+  name?: string;
+  source?: string;
+  sourceKind?: string;
+  configured: boolean;
+  entries: PluginMarketplaceEntryView[];
+  cached: boolean;
+  offline: boolean;
+  warning?: string;
+  fetchedAt?: string;
 }
 
 export interface PluginSkillView {
@@ -6415,6 +6452,8 @@ export interface GeneratedDesktopCommands {
   PlanPluginInstall(arg0: string, arg1: PluginInstallOptions): Promise<string>;
   Platform(): Promise<string>;
   PluginDoctor(arg0: string): Promise<PluginView>;
+  PluginMarketplace(): Promise<PluginMarketplaceView>;
+  PluginMarketplaceSource(): Promise<PluginMarketplaceSourceView>;
   Plugins(): Promise<PluginView[]>;
   PollBotConnectionInstall(arg0: string): Promise<BotInstallPollResult>;
   PrepareHistoricalSourceVersion(arg0: SessionSourceRef, arg1: string): Promise<SessionPreparationView>;
@@ -6699,6 +6738,7 @@ export interface GeneratedDesktopCommands {
   SetPlanMode(arg0: boolean): Promise<void>;
   SetPlannerModel(arg0: string): Promise<void>;
   SetPluginEnabled(arg0: string, arg1: boolean): Promise<void>;
+  SetPluginMarketplaceSource(arg0: string): Promise<void>;
   SetPreferredExternalOpener(arg0: string): Promise<void>;
   SetProjectColor(arg0: string, arg1: string): Promise<void>;
   SetProjectPinned(arg0: string, arg1: boolean): Promise<void>;

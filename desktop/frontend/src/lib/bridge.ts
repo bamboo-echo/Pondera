@@ -571,6 +571,9 @@ export interface AppBindings extends AttachmentBindings, SessionExportBindings, 
   SetPluginEnabled(name: string, enabled: boolean): Promise<void>;
   UpdatePlugin(name: string): Promise<string>;
   PluginDoctor(name: string): Promise<PluginView>;
+  PluginMarketplace(): Promise<import("../generated/desktopContract.generated").PluginMarketplaceView>;
+  PluginMarketplaceSource(): Promise<import("../generated/desktopContract.generated").PluginMarketplaceSourceView>;
+  SetPluginMarketplaceSource(source: string): Promise<void>;
   // Extension UI (stage 8b2): enumerate handshake-declared extension actions
   // for the command palette, invoke one, and deliver a form surface's values
   // (or {cancelled: true} on dismissal) back to the owning sidecar.
@@ -1643,6 +1646,7 @@ function makeMockApp(): MockAppBindings {
     },
   ];
   let capPlugins: PluginView[] = [];
+  let mockMarketplaceSource = "";
   const mockSwitchWorkspace = async (path: string) => {
     cwd = path || "~";
     workspaces = [cwd, ...workspaces.filter((p) => p !== cwd)].slice(0, 12);
@@ -3913,6 +3917,15 @@ function makeMockApp(): MockAppBindings {
     },
     async Plugins() {
       return capPlugins.map((p) => ({ ...p }));
+    },
+    async PluginMarketplace() {
+      return { configured: false, entries: [], cached: false, offline: false };
+    },
+    async PluginMarketplaceSource() {
+      return { source: mockMarketplaceSource, kind: "" };
+    },
+    async SetPluginMarketplaceSource(source: string) {
+      mockMarketplaceSource = source;
     },
     async PlanPluginInstall(source: string, options: PluginInstallOptions) {
       const name = options.name || source.split("/").filter(Boolean).pop()?.replace(/\.git$/, "") || "plugin";

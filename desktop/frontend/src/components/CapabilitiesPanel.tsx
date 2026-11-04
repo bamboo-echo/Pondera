@@ -1,12 +1,12 @@
 import { ErrorMessage } from "./ErrorMessage";
 import { SettingsOptions } from "./SettingsOptions";
 import { SettingsSelect } from "./SettingsSelect";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronDown, ChevronRight, CircleAlert, Folder, Plus, RefreshCw, Search, Server as ServerIcon } from "lucide-react";
 import { asArray } from "../lib/array";
 import { app } from "../lib/bridge";
 import { activeWorkBusyNoticeText, installMCPServer } from "../lib/capabilityMutations";
-import { useT } from "../lib/i18n";
+import { getLocale, useT } from "../lib/i18n";
 import { presentError } from "../lib/errorPresentation";
 import { mcpServerLifecycleActions, mcpServerRetryableFromAvailableList } from "../lib/mcpServerLifecycle";
 import { mcpSessionStateLabel, mcpSettingsSearchText } from "../lib/mcpSessionStatus";
@@ -1680,11 +1680,23 @@ type PluginInstallPlanView = {
 
 type PluginInstallMode = "local" | "git";
 
+// The marketplace panel is lazy so it (and its card grid) never enters the
+// initial renderer bundle; the settings page only pays for it when opened.
+const PluginMarketplacePanel = lazy(() => import("./PluginMarketplacePanel"));
+
+const PLUGIN_TAB_LABELS = {
+	en: { installed: "Installed", marketplace: "Marketplace" },
+	zh: { installed: "已安装", marketplace: "插件市场" },
+	"zh-TW": { installed: "已安裝", marketplace: "外掛市場" },
+} as const;
+
 // PluginsSettingsPage is the desktop plugin package manager embedded inside
 // Settings. It mirrors the MCP/Skills density: install planning on top, package
 // rows below, and diagnostics/details only when a row is expanded.
 export function PluginsSettingsPage() {
 	const t = useT();
+	const tabLabels = PLUGIN_TAB_LABELS[getLocale()] ?? PLUGIN_TAB_LABELS.en;
+	const [pluginTab, setPluginTab] = useState<"installed" | "marketplace">("installed");
 	const [installOpen, setInstallOpen] = useState(false);
 	const [snapshotKey, setSnapshotKey] = useState("");
 	const [plugins, setPlugins] = useState<PluginView[] | null>(null);
@@ -1804,6 +1816,32 @@ export function PluginsSettingsPage() {
 
 	return (
 		<section className="mem-section">
+			<div className="cap-tabs" role="tablist" aria-label={`${tabLabels.installed} / ${tabLabels.marketplace}`}>
+				<button
+					className={`cap-tab${pluginTab === "installed" ? " cap-tab--active" : ""}`}
+					role="tab"
+					aria-selected={pluginTab === "installed"}
+					type="button"
+					onClick={() => setPluginTab("installed")}
+				>
+					{tabLabels.installed}
+				</button>
+				<button
+					className={`cap-tab${pluginTab === "marketplace" ? " cap-tab--active" : ""}`}
+					role="tab"
+					aria-selected={pluginTab === "marketplace"}
+					type="button"
+					onClick={() => setPluginTab("marketplace")}
+				>
+					{tabLabels.marketplace}
+				</button>
+			</div>
+			{pluginTab === "marketplace" ? (
+				<Suspense fallback={<div className="mem-empty">{t("caps.loading")}</div>}>
+					<PluginMarketplacePanel onInstalled={() => void reload()} />
+				</Suspense>
+			) : (
+				<>
 			{err && <div className="banner banner--error"><ErrorMessage error={err} /></div>}
 			{notice && !err && <div className="banner banner--success">{notice}</div>}
 			<div className="settings-toolbar">
@@ -1931,6 +1969,8 @@ export function PluginsSettingsPage() {
 					</div>
 				)}
 			</div>
+			</>
+		)}
 		</section>
 	);
 }

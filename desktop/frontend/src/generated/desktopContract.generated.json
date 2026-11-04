@@ -10062,6 +10062,45 @@
     },
     {
       "cancellation": "before-dispatch",
+      "domain": "desktop/plugin_marketplace_app.go",
+      "name": "PluginMarketplace",
+      "owner": "App.PluginMarketplace",
+      "params": [],
+      "result": {
+        "kind": "object",
+        "ref": "main.PluginMarketplaceView"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [],
+        "kind": "owner-state",
+        "resolver": "App.PluginMarketplace"
+      },
+      "sources": [
+        "desktop/plugin_marketplace_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/plugin_marketplace_app.go",
+      "name": "PluginMarketplaceSource",
+      "owner": "App.PluginMarketplaceSource",
+      "params": [],
+      "result": {
+        "kind": "object",
+        "ref": "main.PluginMarketplaceSourceView"
+      },
+      "scope": {
+        "inputs": [],
+        "kind": "owner-state",
+        "resolver": "App.PluginMarketplaceSource"
+      },
+      "sources": [
+        "desktop/plugin_marketplace_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
       "domain": "desktop/plugin_packages_app.go",
       "name": "Plugins",
       "owner": "App.Plugins",
@@ -17841,6 +17880,28 @@
       },
       "sources": [
         "desktop/plugin_packages_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/plugin_marketplace_app.go",
+      "name": "SetPluginMarketplaceSource",
+      "owner": "App.SetPluginMarketplaceSource",
+      "params": [
+        {
+          "kind": "string"
+        }
+      ],
+      "returnsError": true,
+      "scope": {
+        "inputs": [
+          "source"
+        ],
+        "kind": "owner-inputs",
+        "resolver": "App.SetPluginMarketplaceSource"
+      },
+      "sources": [
+        "desktop/plugin_marketplace_app.go"
       ]
     },
     {
@@ -35698,6 +35759,191 @@
           "optional": true,
           "type": {
             "kind": "boolean"
+          }
+        }
+      ]
+    },
+    "main.PluginMarketplaceEntryView": {
+      "fields": [
+        {
+          "name": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "description",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "author",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "authorUrl",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "version",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "category",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "icon",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "source",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "sha",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "installSource",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "featured",
+          "optional": true,
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "permissions",
+          "optional": true,
+          "type": {
+            "elem": {
+              "kind": "string"
+            },
+            "kind": "array"
+          }
+        },
+        {
+          "name": "installed",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "installedVersion",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.PluginMarketplaceSourceView": {
+      "fields": [
+        {
+          "name": "source",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "kind",
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.PluginMarketplaceView": {
+      "fields": [
+        {
+          "name": "name",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "source",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "sourceKind",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "configured",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "entries",
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "main.PluginMarketplaceEntryView"
+            },
+            "kind": "array"
+          }
+        },
+        {
+          "name": "cached",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "offline",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "warning",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "fetchedAt",
+          "optional": true,
+          "type": {
+            "kind": "string"
           }
         }
       ]
