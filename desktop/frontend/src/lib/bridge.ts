@@ -249,7 +249,10 @@ interface DesktopWindowState {
   maximised: boolean;
 }
 import { makeLazySessionUIMock, type SessionUIBindings } from "./sessionUIBindings";
-import { makeMockAssistantBindings } from "../assistant/mockBindings";
+
+// Loaded on first use so browser-only renders do not pull the assistant shell
+// into the main entry bundle.
+const loadAssistantMock = () => import("../assistant/mockBindings").then((module) => module.makeMockAssistantBindings());
 
 export interface AppBindings extends SessionUIBindings {}
 // AppBindings is the hand-written React-to-Go contract. _CheckGeneratedBindings
@@ -2407,7 +2410,14 @@ function makeMockApp(): MockAppBindings {
     }),
     ...makeLazyPreviousDraftMock(),
 		...makeMockSessionExportBindings(),
-    ...makeMockAssistantBindings(),
+    AssistantStatus: () => loadAssistantMock().then((mock) => mock.AssistantStatus()),
+    AssistantSaveSettings: (endpoint, key, model, kind) => loadAssistantMock().then((mock) => mock.AssistantSaveSettings(endpoint, key, model, kind)),
+    AssistantChat: (message) => loadAssistantMock().then((mock) => mock.AssistantChat(message)),
+    AssistantApplyPlan: (planId) => loadAssistantMock().then((mock) => mock.AssistantApplyPlan(planId)),
+    AssistantDiagnose: () => loadAssistantMock().then((mock) => mock.AssistantDiagnose()),
+    AssistantTestConnectivity: (provider, model, draftKey) => loadAssistantMock().then((mock) => mock.AssistantTestConnectivity(provider, model, draftKey)),
+    AssistantHistory: () => loadAssistantMock().then((mock) => mock.AssistantHistory()),
+    AssistantRollback: (backupId) => loadAssistantMock().then((mock) => mock.AssistantRollback(backupId)),
     ...makeMockSessionCatalogBindings(cloneProjectTree),
     ...makeMockBlankProjectBindings(),
     async GetWorkspaceSnapshot() { return mockWorkspaceSnapshot(); },

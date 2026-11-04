@@ -1,8 +1,7 @@
 import "./lib/compat";
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import AssistantApp from "./assistant/AssistantApp";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installPerformancePressureMonitor } from "./lib/crash";
 import { installGlobalCrashHandlers } from "./lib/globalCrashHandlers";
@@ -17,6 +16,10 @@ import { initTypographyPreferences } from "./lib/typographyPreferences";
 import { initTheme } from "./lib/theme";
 import { initConversationWidth } from "./lib/conversationWidth";
 import appShellStylesheetURL from "./styles.css?url";
+
+// The assistant shell lives in its own window (`?assistant=1`). Keeping it on a
+// dynamic import means the main entry never pays for its code or CSS.
+const AssistantApp = lazy(() => import("./assistant/AssistantApp"));
 
 // Install first so startup/runtime failures paint a useful error instead of a
 // featureless webview background, with the recent console trail attached.
@@ -115,7 +118,13 @@ async function mountApp() {
       <ErrorBoundary>
         <LocaleProvider>
           <ToastProvider>
-            {assistantSurface ? <AssistantApp /> : <App />}
+            {assistantSurface ? (
+              <Suspense fallback={null}>
+                <AssistantApp />
+              </Suspense>
+            ) : (
+              <App />
+            )}
           </ToastProvider>
         </LocaleProvider>
       </ErrorBoundary>
