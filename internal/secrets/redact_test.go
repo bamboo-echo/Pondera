@@ -273,6 +273,78 @@ func TestFilterEnvDropsSensitiveKeys(t *testing.T) {
 	}
 }
 
+func TestAlwaysSensitiveEnvKey(t *testing.T) {
+	sensitive := []string{
+		"PLUGIN_TEST_HOST_API_KEY", "PLUGIN_TEST_HOST_TOKEN", "PLUGIN_TEST_HOST_SECRET",
+		"PLUGIN_TEST_HOST_PASSWORD", "HTTP_AUTHORIZATION", "AUTHORIZATION",
+		"PONDERA_HOME", "PONDERA_PLUGIN_ROOT", "DB_PWD",
+	}
+	for _, key := range sensitive {
+		if !AlwaysSensitiveEnvKey(key) {
+			t.Errorf("AlwaysSensitiveEnvKey(%q) = false, want true", key)
+		}
+	}
+	benign := []string{"PLUGIN_TEST_ORDINARY", "PATH", "LANG", "TEMP", "USERPROFILE", "SSH_AUTH_SOCK", "KEYBOARD_LAYOUT"}
+	for _, key := range benign {
+		if AlwaysSensitiveEnvKey(key) {
+			t.Errorf("AlwaysSensitiveEnvKey(%q) = true, want false", key)
+		}
+	}
+}
+
+// TestProcessEnvStrictFiltersByDefault is the MCP before/after comparison:
+// with filter_subprocess_env at its default (off), the legacy ProcessEnv still
+// carries credential-like host variables, while ProcessEnvStrict — now used by
+// every MCP stdio launch and launcher resolution — removes them and keeps
+// ordinary variables.
+func TestProcessEnvStrictFiltersByDefault(t *testing.T) {
+	previous := FilterSubprocessEnv()
+	SetFilterSubprocessEnv(false)
+	t.Cleanup(func() { SetFilterSubprocessEnv(previous) })
+
+	const registered = "PLUGIN_TEST_REGISTERED_CREDENTIAL"
+	t.Setenv("PLUGIN_TEST_HOST_API_KEY", "sk-host-secret")
+	t.Setenv("PLUGIN_TEST_HOST_TOKEN", "host-token")
+	t.Setenv("PLUGIN_TEST_HOST_SECRET", "host-secret")
+	t.Setenv("PLUGIN_TEST_AUTHORIZATION", "Bearer host-token")
+	t.Setenv("PONDERA_TEST_HOST_STATE", "host-state")
+	t.Setenv(registered, "registered-value")
+	t.Setenv("PLUGIN_TEST_ORDINARY", "visible")
+	RegisterCredentialEnvKeys([]string{registered})
+
+	sensitive := []string{
+		"PLUGIN_TEST_HOST_API_KEY", "PLUGIN_TEST_HOST_TOKEN", "PLUGIN_TEST_HOST_SECRET",
+		"PLUGIN_TEST_AUTHORIZATION", "PONDERA_TEST_HOST_STATE",
+	}
+	legacy := strings.Join(ProcessEnv(), "\n")
+	for _, key := range sensitive {
+		if !strings.Contains(legacy, key+"=") {
+			t.Fatalf("legacy ProcessEnv unexpectedly dropped %s; the before-state changed", key)
+		}
+	}
+	// A registered credential was already removed by every path; it only
+	// documents that ProcessEnvStrict keeps that guarantee.
+	if strings.Contains(legacy, registered+"=") {
+		t.Fatalf("legacy ProcessEnv leaked a registered credential")
+	}
+	if !strings.Contains(legacy, "PLUGIN_TEST_ORDINARY=visible") {
+		t.Fatalf("legacy ProcessEnv dropped an ordinary variable:\n%s", legacy)
+	}
+
+	strict := strings.Join(ProcessEnvStrict(), "\n")
+	for _, key := range append([]string{registered}, sensitive...) {
+		if strings.Contains(strict, key+"=") {
+			t.Fatalf("ProcessEnvStrict leaked %s:\n%s", key, strict)
+		}
+	}
+	if !strings.Contains(strict, "PLUGIN_TEST_ORDINARY=visible") {
+		t.Fatalf("ProcessEnvStrict dropped an ordinary variable:\n%s", strict)
+	}
+	if !strings.Contains(strict, "PATH=") {
+		t.Fatalf("ProcessEnvStrict dropped PATH:\n%s", strict)
+	}
+}
+
 func TestProcessEnvUnfilteredByDefault(t *testing.T) {
 	t.Setenv("PONDERA_TEST_SECRET_TOKEN", "ghp_abcdefghijklmnopqrstuvwxyz")
 	joined := strings.Join(ProcessEnv(), "\n")

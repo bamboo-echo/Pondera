@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"pondera/internal/secrets"
 	"pondera/internal/tool"
 )
 
@@ -53,7 +52,7 @@ func TestChromeDevtoolsMCPLive(t *testing.T) {
 	}
 	host := NewHost()
 	defer host.Close()
-	resolvedNPX, resolvedEnv, resolveErr := resolveStdioExecutable(callCtx, spec, mergeEnv(secrets.ProcessEnv(), spec.Env))
+	resolvedNPX, resolvedEnv, resolveErr := resolveStdioExecutable(callCtx, spec, stdioEnv(spec))
 	if resolveErr != nil {
 		t.Fatalf("resolve npx: %v", resolveErr)
 	}

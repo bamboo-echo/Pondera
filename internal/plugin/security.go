@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"pondera/internal/mcplaunch"
-	"pondera/internal/secrets"
 	"pondera/internal/tool"
 )
 
@@ -47,7 +46,7 @@ func buildProjectLaunchIdentity(ctx context.Context, s Spec) (mcplaunch.ProjectL
 		if strings.TrimSpace(s.Command) == "" {
 			return mcplaunch.ProjectLaunchIdentity{}, fmt.Errorf("stdio plugin %q: command is required", s.Name)
 		}
-		env := mergeEnv(secrets.ProcessEnv(), s.Env)
+		env := stdioEnv(s)
 		exe, _, err := resolveStdioExecutable(ctx, s, env)
 		if err != nil {
 			return mcplaunch.ProjectLaunchIdentity{}, err

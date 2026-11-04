@@ -147,9 +147,13 @@ instead of relying on an unversioned module.
 
 ## Security model
 
-A code extension runs outside the Pondera sandbox with the unfiltered
-inherited environment. It can read the full session and environment, bypass
-permissions and workspace restrictions, and operate the machine directly;
+A code extension runs outside the Pondera sandbox. Its environment is
+deny-by-default: it inherits only a system whitelist (executable lookup,
+temp/cache dirs, system roots), its manifest's explicit `runtime.env`, and the
+`PONDERA_PLUGIN_*` identity variables. Host credentials and ordinary inherited
+variables never cross that boundary. The extension can still read the full
+session and any file the user can read, bypass permissions and workspace
+restrictions, and operate the machine directly;
 its `permission.decision` "allow" overrides a host deny. In return the host
 enforces:
 

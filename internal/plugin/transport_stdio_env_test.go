@@ -26,6 +26,62 @@ func TestStdioShellPATHProbeFiltersEnvWhenEnabled(t *testing.T) {
 	}
 }
 
+// TestStdioEnvFiltersCredentialsByDefault pins the MCP before/after boundary:
+// with filter_subprocess_env at its default (off), the legacy merge over
+// ProcessEnv still leaked credential-shaped variables; stdioEnv — now used by
+// the stdio launch, launcher resolution and launch identity — always removes
+// them while keeping ordinary host variables.
+func TestStdioEnvFiltersCredentialsByDefault(t *testing.T) {
+	previous := secrets.FilterSubprocessEnv()
+	secrets.SetFilterSubprocessEnv(false)
+	t.Cleanup(func() { secrets.SetFilterSubprocessEnv(previous) })
+
+	t.Setenv("PLUGIN_TEST_HOST_API_KEY", "sk-host-secret")
+	t.Setenv("PLUGIN_TEST_HOST_TOKEN", "host-token")
+	t.Setenv("PLUGIN_TEST_AUTHORIZATION", "Bearer host-token")
+	t.Setenv("PONDERA_TEST_HOST_STATE", "host-state")
+	t.Setenv("PLUGIN_TEST_ORDINARY", "visible")
+
+	legacy := strings.Join(mergeEnv(secrets.ProcessEnv(), nil), "\n")
+	for _, key := range []string{"PLUGIN_TEST_HOST_API_KEY", "PLUGIN_TEST_HOST_TOKEN", "PLUGIN_TEST_AUTHORIZATION", "PONDERA_TEST_HOST_STATE"} {
+		if !strings.Contains(legacy, key+"=") {
+			t.Fatalf("legacy MCP env unexpectedly dropped %s; the before-state changed", key)
+		}
+	}
+
+	env := strings.Join(stdioEnv(Spec{}), "\n")
+	for _, key := range []string{"PLUGIN_TEST_HOST_API_KEY", "PLUGIN_TEST_HOST_TOKEN", "PLUGIN_TEST_AUTHORIZATION", "PONDERA_TEST_HOST_STATE"} {
+		if strings.Contains(env, key+"=") {
+			t.Fatalf("stdioEnv leaked %s:\n%s", key, env)
+		}
+	}
+	if !strings.Contains(env, "PLUGIN_TEST_ORDINARY=visible") {
+		t.Fatalf("stdioEnv dropped an ordinary variable:\n%s", env)
+	}
+	if !strings.Contains(env, "PATH=") {
+		t.Fatalf("stdioEnv dropped PATH:\n%s", env)
+	}
+}
+
+// TestStdioEnvExplicitDeclarationWins pins the compatibility escape hatch:
+// a server's config-declared env is layered after filtering, so it can restore
+// a value the host boundary removed (and plugin-package PONDERA_* vars still
+// arrive through the same declaration path).
+func TestStdioEnvExplicitDeclarationWins(t *testing.T) {
+	t.Setenv("PLUGIN_TEST_HOST_API_KEY", "host-secret")
+	spec := Spec{Env: map[string]string{
+		"PLUGIN_TEST_HOST_API_KEY": "declared-value",
+		"PONDERA_PLUGIN_ROOT":      "/plugin-root",
+	}}
+
+	if value, ok := envValue(stdioEnv(spec), "PLUGIN_TEST_HOST_API_KEY"); !ok || value != "declared-value" {
+		t.Fatalf("declared credential = (%q, %v), want declared-value", value, ok)
+	}
+	if value, ok := envValue(stdioEnv(spec), "PONDERA_PLUGIN_ROOT"); !ok || value != "/plugin-root" {
+		t.Fatalf("declared PONDERA_PLUGIN_ROOT = (%q, %v), want /plugin-root", value, ok)
+	}
+}
+
 func TestPrepareMCPPrivateStateWindowsPreservesHostTemp(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "mcp-state", "0123456789abcdef", "matlab")
 	hostTemp := `C:\Users\user\AppData\Local\Temp`

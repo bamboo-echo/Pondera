@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -160,14 +161,55 @@ func resolveRuntimeCommand(rt *pluginpkg.RuntimeSpec, root string) (string, erro
 	return command, nil
 }
 
-// runtimeEnv builds the sidecar's environment: the UNFILTERED inherited
-// process environment (full-trust contract — see the package doc), the
-// manifest's env, and the well-known plugin identity variables. Later entries
-// win over earlier ones for duplicate keys (exec.Cmd.Env semantics), so the
-// manifest can tune but the identity variables cannot be forged by it.
+// inheritedRuntimeEnvKeys is the closed set of host variables a sidecar may
+// inherit. The environment boundary is deny-by-default: ordinary host
+// variables (and every credential-shaped or PONDERA_* name) are not passed
+// through, so a sidecar can only obtain a variable by declaring it in the
+// manifest's runtime.env. The list keeps the process essentials a runtime,
+// interpreter, or installer needs on Windows and POSIX (temp/cache dirs,
+// system roots, executable lookup) without exposing user or credential state.
+var inheritedRuntimeEnvKeys = map[string]bool{
+	"PATH": true, "PATHEXT": true, "COMSPEC": true,
+	"SYSTEMROOT": true, "SYSTEMDRIVE": true, "WINDIR": true,
+	"TEMP": true, "TMP": true, "TMPDIR": true,
+	"USERPROFILE": true, "HOMEDRIVE": true, "HOMEPATH": true, "HOME": true,
+	"APPDATA": true, "LOCALAPPDATA": true, "PROGRAMDATA": true,
+	"PROGRAMFILES": true, "PROGRAMFILES(X86)": true,
+	"COMMONPROGRAMFILES": true, "COMMONPROGRAMFILES(X86)": true,
+	"LANG": true, "LC_ALL": true,
+}
+
+// runtimeEnv builds the sidecar's environment: the closed host whitelist
+// (see inheritedRuntimeEnvKeys), the manifest's explicitly declared env, and
+// the well-known plugin identity variables. Empty declarations are not
+// forwarded. Only the inherited host environment is deny-by-default: a
+// declaration is an explicit plugin-owned value, while the identity variables
+// are appended last and win over any duplicate key (exec.Cmd.Env semantics),
+// so a manifest cannot forge PONDERA_PLUGIN_ROOT / NAME / VERSION.
 func runtimeEnv(rt *pluginpkg.RuntimeSpec, pkg pluginpkg.Package, installed pluginpkg.InstalledPlugin) []string {
-	env := append([]string(nil), os.Environ()...)
-	for key, value := range rt.Env {
+	env := make([]string, 0, len(inheritedRuntimeEnvKeys)+len(rt.Env)+3)
+	for _, item := range os.Environ() {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok || key == "" {
+			continue
+		}
+		// The whitelist already excludes PONDERA_*; the explicit check keeps
+		// the namespace reserved even if a future entry is added there.
+		if !inheritedRuntimeEnvKeys[strings.ToUpper(key)] || secrets.AlwaysSensitiveEnvKey(key) {
+			continue
+		}
+		env = append(env, key+"="+value)
+	}
+	declared := make([]string, 0, len(rt.Env))
+	for key := range rt.Env {
+		declared = append(declared, key)
+	}
+	sort.Strings(declared)
+	for _, key := range declared {
+		value := rt.Env[key]
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(value) == "" {
+			continue
+		}
 		env = append(env, key+"="+value)
 	}
 	version := strings.TrimSpace(installed.Version)

@@ -17,6 +17,10 @@ var (
 	// only counts with a leading separator (DB_PWD, MYSQL-PWD), so the POSIX
 	// PWD / OLDPWD working-directory variables never match.
 	secretKeyNamePattern = regexp.MustCompile(`(?i)((^|[_-])(api[_-]?key|access[_-]?key|private[_-]?key|secret|token|password|passwd)([_-]|$)|[_-]pwd([_-]|$))`)
+	// strictSecretKeyNamePattern is the always-on boundary used for MCP and
+	// plugin subprocesses: every *_KEY / *_TOKEN / *_SECRET / *_PASSWORD name
+	// (not just the known api-key shapes) and any name carrying AUTHORIZATION.
+	strictSecretKeyNamePattern = regexp.MustCompile(`(?i)((^|[_-])(key|token|secret|password|passwd)([_-]|$)|[_-]pwd([_-]|$)|authorization)`)
 	// cookieHeaderPattern captures Cookie/Set-Cookie header values so every
 	// name=value pair gets its value masked; attribute flags without a value
 	// (HttpOnly, Secure) pass through untouched.
@@ -126,6 +130,46 @@ func FilterEnv(env []string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+// AlwaysSensitiveEnvKey reports whether a variable must never be inherited by
+// an MCP or plugin subprocess, regardless of the opt-in [secrets]
+// filter_subprocess_env setting: Pondera's own PONDERA_* namespace, every
+// *_KEY / *_TOKEN / *_SECRET / *_PASSWORD name, and anything carrying
+// AUTHORIZATION. Callers may still re-add an explicitly declared variable
+// after filtering.
+func AlwaysSensitiveEnvKey(key string) bool {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+	if strings.HasPrefix(strings.ToUpper(key), "PONDERA_") {
+		return true
+	}
+	return strictSecretKeyNamePattern.MatchString(key)
+}
+
+// FilterEnvAlways removes always-sensitive assignments (see
+// AlwaysSensitiveEnvKey) plus every name registered as a Pondera credential.
+// Unlike FilterEnv it never depends on filter_subprocess_env: it is the
+// default boundary for subprocesses that receive an isolated environment.
+func FilterEnvAlways(env []string) []string {
+	out := env[:0]
+	for _, item := range env {
+		key, _, ok := strings.Cut(item, "=")
+		if !ok || AlwaysSensitiveEnvKey(key) || registeredCredentialEnvKey(key) {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+// ProcessEnvStrict returns the default-filtered environment for MCP and plugin
+// subprocesses. Host credentials are always removed; callers layer the
+// server's or manifest's explicit env declarations back on top.
+func ProcessEnvStrict() []string {
+	return FilterEnvAlways(localeenv.DefaultUTF8(os.Environ()))
 }
 
 func filterRegisteredCredentialEnv(env []string) []string {

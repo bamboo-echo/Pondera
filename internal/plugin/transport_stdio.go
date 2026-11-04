@@ -57,7 +57,7 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 			releaseSlot()
 		}
 	}()
-	env := mergeEnv(secrets.ProcessEnv(), s.Env)
+	env := stdioEnv(s)
 	exe, env, err := resolveStdioExecutable(ctx, s, env)
 	if err != nil {
 		return nil, err
@@ -443,9 +443,10 @@ func runShellPATHCommand(parent context.Context, shell string, args []string) []
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
 	cmd := proc.CommandContext(ctx, shell, args...)
-	// Explicit env so the login-shell probe honors [secrets]
-	// filter_subprocess_env instead of inheriting the full environment.
-	cmd.Env = secrets.ProcessEnv()
+	// Explicit, always-filtered env: the login-shell probe is part of the MCP
+	// launch path, so it must not carry host credentials even when the opt-in
+	// [secrets] filter_subprocess_env is off.
+	cmd.Env = secrets.ProcessEnvStrict()
 	prepareStdioShellPATHProbe(cmd)
 	cmd.Stdin = strings.NewReader("")
 	out, _ := cmd.CombinedOutput()
@@ -464,6 +465,14 @@ func parseShellPATH(out []byte, marker string) string {
 		}
 	}
 	return ""
+}
+
+// stdioEnv is the environment every MCP stdio process — and the launcher
+// resolution subprocesses on its behalf — receives: the always-filtered host
+// environment (Pondera's credential names and PONDERA_* never cross the
+// boundary) with the server's explicitly declared env layered back on top.
+func stdioEnv(s Spec) []string {
+	return mergeEnv(secrets.ProcessEnvStrict(), s.Env)
 }
 
 func mergeEnv(base []string, overrides map[string]string) []string {

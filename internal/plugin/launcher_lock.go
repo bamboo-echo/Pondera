@@ -17,7 +17,6 @@ import (
 	"pondera/internal/gitcmd"
 	"pondera/internal/mcplaunch"
 	"pondera/internal/proc"
-	"pondera/internal/secrets"
 )
 
 type launcherLocator struct {
@@ -212,7 +211,7 @@ func resolveNPMPackage(ctx context.Context, spec Spec, locator string) (string, 
 	if name == "" {
 		return "", "", fmt.Errorf("unsupported npm package locator %q", locator)
 	}
-	env := mergeEnv(secrets.ProcessEnv(), spec.Env)
+	env := stdioEnv(spec)
 	env = enrichStdioShellPATH(ctx, env)
 	npm, ok := lookPathInEnv("npm", env)
 	if !ok {
@@ -332,7 +331,7 @@ func resolveGitLocator(ctx context.Context, spec Spec, locator string) (string, 
 		commit := strings.ToLower(ref)
 		return commit, digestText(commit), nil
 	}
-	env := mergeEnv(secrets.ProcessEnv(), spec.Env)
+	env := stdioEnv(spec)
 	env = enrichStdioShellPATH(ctx, env)
 	git, ok := lookPathInEnv("git", env)
 	if !ok {
