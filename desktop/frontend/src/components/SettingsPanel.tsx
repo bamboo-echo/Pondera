@@ -100,6 +100,8 @@ import { ShortcutComboDisplay } from "./ShortcutComboDisplay";
 import { SettingsNavigation, SETTINGS_NAV_TABS } from "./SettingsNavigation";
 import { StatusBarItemsEditor } from "./StatusBarItemsEditor";
 import { DesktopCloseBehaviorHint } from "./DesktopCloseBehaviorHint";
+import { settingsHasUnsavedDrafts, useSettingsDraftGuard } from "../lib/settingsDrafts";
+import { readAssistantConfigChanged } from "../lib/assistantConfigChanged";
 export type SettingsInitialFocus =
   | { target: "bot-allowlist"; connectionId?: string; requestId?: number }
   | { target: "model-access"; requestId?: number; onboarding?: boolean; providerName?: string; sourceTabId?: string }
@@ -205,6 +207,26 @@ export function SettingsPanel({
   useEffect(() => {
     void reload();
   }, [reload]);
+  const [assistantChangeDraft, setAssistantChangeDraft] = useState<string[] | null>(null);
+  const reloadAfterAssistantChange = useCallback(async (labels: string[]) => {
+    const next = await reload();
+    if (next) onChanged(next);
+    setAssistantChangeDraft(null);
+    setWarning([t("settings.assistantConfigReloaded"), ...labels].filter(Boolean).join(" · "));
+  }, [onChanged, reload, t]);
+  useEffect(() => {
+    const host = desktopHost();
+    if (host.kind === "none") return;
+    return host.events.on("assistant:config-changed", (payload: unknown) => {
+      const change = readAssistantConfigChanged(payload);
+      // Never reload over an in-progress edit: show a prompt and keep the draft.
+      if (settingsHasUnsavedDrafts()) {
+        setAssistantChangeDraft(change.labels);
+        return;
+      }
+      void reloadAfterAssistantChange(change.labels);
+    });
+  }, [reloadAfterAssistantChange]);
   const refreshModelApplication = useCallback(async () => {
     const seq = ++modelApplicationSeq.current;
     try {
@@ -417,6 +439,18 @@ export function SettingsPanel({
             )}
             {needsSettings && err && <div className="banner banner--error"><ErrorMessage error={err} /></div>}
             {needsSettings && warning && <div className="banner banner--warning"><ErrorMessage error={warning} /></div>}
+            {needsSettings && assistantChangeDraft && (
+              <div className="banner banner--warning" role="status">
+                <span>{t("settings.assistantConfigChanged")}</span>
+                {assistantChangeDraft.length ? <span>{assistantChangeDraft.join(" · ")}</span> : null}
+                <button className="btn btn--small" type="button" disabled={busy} onClick={() => void reloadAfterAssistantChange(assistantChangeDraft)}>
+                  {t("settings.assistantConfigReloadNow")}
+                </button>
+                <button className="btn btn--small" type="button" disabled={busy} onClick={() => setAssistantChangeDraft(null)}>
+                  {t("common.later")}
+                </button>
+              </div>
+            )}
             {needsSettings && (tab === "models" || tab === "providers") && modelApplication && (modelApplication.application === "pending" || modelApplication.application === "failed") && (
               <div className="banner banner--warning" role="status">
                 <span>{t(modelApplication.application === "pending" ? "settings.models.savedPending" : "settings.models.savedApplyFailed")}</span>
@@ -1909,6 +1943,7 @@ function NetworkSection({ s, busy, apply }: SectionProps) {
   const [draft, setDraft] = useState<NetworkView>(savedNetwork);
   useEffect(() => setDraft(normalizeNetworkView(s.network)), [s.network]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedNetwork);
+  useSettingsDraftGuard(dirty);
   const setProxy = (next: Partial<NetworkView["proxy"]>) => {
     setDraft({ ...draft, proxy: { ...draft.proxy, ...next } });
   };
@@ -6149,6 +6184,7 @@ export function ProviderEditor({
   const saveGeneration = useRef(0);
   latestDraftSnapshot.current = draftSnapshot;
   const dirty = draftSnapshot !== savedSnapshot;
+  useSettingsDraftGuard(dirty);
   const isNewCustomProvider = !initial;
   const editorCatalog = useMemo(() => {
     if (initial?.catalog) return initial.catalog;

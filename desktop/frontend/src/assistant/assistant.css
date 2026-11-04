@@ -225,6 +225,45 @@
   color: #ecc98f;
 }
 
+.assistant-badge--unverified {
+  background: #3a2c17;
+  color: #ecc98f;
+}
+
+.assistant-connectivity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 10px;
+  flex-wrap: wrap;
+}
+
+.assistant-connectivity button {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid #3a3e44;
+  background: #23262a;
+  color: #e6e8ea;
+  cursor: pointer;
+}
+
+.assistant-connectivity button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.assistant-probe {
+  font-size: 12px;
+}
+
+.assistant-probe--ok {
+  color: #8fd6a4;
+}
+
+.assistant-probe--fail {
+  color: #f0a08c;
+}
+
 .assistant-preview-head,
 .assistant-history-head {
   display: flex;

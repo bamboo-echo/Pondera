@@ -265,6 +265,7 @@ export interface AppBindings extends AttachmentBindings, SessionExportBindings, 
   AssistantApplyPlan(planId: string): Promise<import("../generated/desktopContract.generated").AssistantApplyResult>;
   AssistantDiagnose(): Promise<import("../generated/desktopContract.generated").AssistantDiagnoseResult>;
   AssistantTestConnectivity(provider: string, model: string, draftKey: string): Promise<import("../generated/desktopContract.generated").AssistantConnectivity>;
+  AssistantTestEndpoint(endpoint: string, kind: string, model: string, draftKey: string): Promise<import("../generated/desktopContract.generated").AssistantConnectivity>;
   AssistantHistory(): Promise<import("../generated/desktopContract.generated").AssistantHistoryRecord[]>;
   AssistantRollback(backupId: string): Promise<import("../generated/desktopContract.generated").AssistantRollbackResult>;
   GetLegacyEmptySessionCleanupStatus(): Promise<LegacyEmptySessionCleanupStatus>;
@@ -2420,6 +2421,7 @@ function makeMockApp(): MockAppBindings {
     AssistantApplyPlan: (planId) => loadAssistantMock().then((mock) => mock.AssistantApplyPlan(planId)),
     AssistantDiagnose: () => loadAssistantMock().then((mock) => mock.AssistantDiagnose()),
     AssistantTestConnectivity: (provider, model, draftKey) => loadAssistantMock().then((mock) => mock.AssistantTestConnectivity(provider, model, draftKey)),
+    AssistantTestEndpoint: (endpoint, kind, model, draftKey) => loadAssistantMock().then((mock) => mock.AssistantTestEndpoint(endpoint, kind, model, draftKey)),
     AssistantHistory: () => loadAssistantMock().then((mock) => mock.AssistantHistory()),
     AssistantRollback: (backupId) => loadAssistantMock().then((mock) => mock.AssistantRollback(backupId)),
     ...makeMockSessionCatalogBindings(cloneProjectTree),

@@ -3,7 +3,7 @@
 
 export const DESKTOP_PROTOCOL_VERSION = 11;
 
-export const DESKTOP_CONTRACT_DIGEST = "sha256:7450ce4f3c39ed7de137fd9a7c1c86021d0fc78ff2c72c415bf94b7e3cb662d5";
+export const DESKTOP_CONTRACT_DIGEST = "sha256:bcc8ed99e82ea5acecc95d4d2c746a4ac975e437534af81cd30bb667e53e39f1";
 
 export const DESKTOP_COMMANDS = [
   "AIRenameSession",
@@ -55,6 +55,7 @@ export const DESKTOP_COMMANDS = [
   "AssistantSaveSettings",
   "AssistantStatus",
   "AssistantTestConnectivity",
+  "AssistantTestEndpoint",
   "AttachDropped",
   "AttachDroppedForComposerTarget",
   "AttachDroppedForTab",
@@ -810,6 +811,7 @@ export const DESKTOP_EVENTS = [
   "InboxChanged",
   "agent:event",
   "agent:ready",
+  "assistant:config-changed",
   "config:load-warnings",
   "desktop:shell-status",
   "history-index:changed-v1",
@@ -1553,6 +1555,7 @@ export interface Event {
   retryAttempt?: number;
   retryMax?: number;
   retryScope?: string;
+  attemptFailure?: AttemptFailure | null;
   streamAttempt?: StreamAttempt | null;
   itemId?: string;
   sessionPath?: string;
@@ -1755,6 +1758,7 @@ export interface StreamAttempt {
   attempt?: number;
   max?: number;
   reason?: string;
+  failure?: AttemptFailure | null;
 }
 
 export interface Tool {
@@ -1938,6 +1942,8 @@ export interface AssistantApplyResult {
   backup_dir: string;
   applied_ops: number;
   message: string;
+  revision: string;
+  credential_revision: string;
 }
 
 export interface AssistantChatResult {
@@ -5318,6 +5324,22 @@ export interface ActionIdentity {
   resource_scope?: string;
 }
 
+export interface AttemptFailure {
+  attempt: number;
+  max: number;
+  kind: string;
+  phase?: string;
+  status?: number;
+  code?: string;
+  retryable: boolean;
+  backoffMs?: number;
+  elapsedMs?: number;
+  at?: number;
+  providerId?: string;
+  model?: string;
+  traceId?: string;
+}
+
 export interface CompletedRead {
   read_id: string;
   path: string;
@@ -6127,6 +6149,7 @@ export interface GeneratedDesktopCommands {
   AssistantSaveSettings(arg0: string, arg1: string, arg2: string, arg3: string): Promise<AssistantStatusView>;
   AssistantStatus(): Promise<AssistantStatusView>;
   AssistantTestConnectivity(arg0: string, arg1: string, arg2: string): Promise<AssistantConnectivity>;
+  AssistantTestEndpoint(arg0: string, arg1: string, arg2: string, arg3: string): Promise<AssistantConnectivity>;
   AttachDropped(arg0: string): Promise<DroppedItem>;
   AttachDroppedForComposerTarget(arg0: ComposerTarget, arg1: string): Promise<DroppedItem>;
   AttachDroppedForTab(arg0: string, arg1: string): Promise<DroppedItem>;

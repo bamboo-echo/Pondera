@@ -4,9 +4,12 @@ package diagnose
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -14,6 +17,8 @@ import (
 	"pondera/internal/assist/registry"
 	"pondera/internal/boot"
 	"pondera/internal/config"
+	"pondera/internal/netclient"
+	"pondera/internal/provider"
 )
 
 // Severity levels surfaced by the UI.
@@ -307,9 +312,61 @@ func Connectivity(ctx context.Context, root, provider, model, draftKey string) C
 	return result
 }
 
+// ConnectivityEndpoint probes the assistant's own (unsaved) endpoint. It never
+// reads or writes the main config provider, and a draft key stays request-local.
+func ConnectivityEndpoint(ctx context.Context, endpoint, kind, model, draftKey string) ConnectivityResult {
+	model = strings.TrimSpace(model)
+	result := ConnectivityResult{Provider: "assistant", Model: model}
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if endpoint == "" || model == "" {
+		result.Category = "unknown"
+		result.Message = "请先填写端点与模型，再测试连接"
+		return result
+	}
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind == "" {
+		kind = "openai"
+	}
+	entry := config.ProviderEntry{
+		Name: "assistant", Kind: kind, BaseURL: endpoint, Model: model, MaxOutputTokens: 16,
+	}
+	if strings.TrimSpace(draftKey) != "" {
+		entry = entry.WithAPIKeyForProbe(draftKey)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	started := time.Now()
+	err := boot.ProbeProviderConnection(ctx, entry, draftKey, netclient.ProxySpec{Mode: netclient.ModeAuto})
+	result.LatencyMS = time.Since(started).Milliseconds()
+	if err == nil {
+		result.OK = true
+		result.Category = "ok"
+		result.Message = "连接成功，端点、模型与密钥可用"
+		return result
+	}
+	result.Category, result.Message = classifyProbeError(err)
+	return result
+}
+
+// probeURLPattern strips request URLs before text classification: a random
+// local port ("...:40123/...") must never be read as an HTTP status.
+var probeURLPattern = regexp.MustCompile(`(?i)\bhttps?://[^\s"']+`)
+
 func classifyProbeError(err error) (string, string) {
-	msg := err.Error()
-	lower := strings.ToLower(msg)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout", "请求超时：检查网络或代理"
+	}
+	switch probeStatus(err) {
+	case http.StatusUnauthorized:
+		return "auth", "认证失败（401）：检查 API key 是否正确、是否过期"
+	case http.StatusForbidden:
+		return "forbidden", "权限不足（403）：该 key 无权访问该模型"
+	case http.StatusNotFound:
+		return "not_found", "端点或模型不存在（404）：检查 base_url 与模型名"
+	case http.StatusTooManyRequests:
+		return "rate_limit", "触发限流（429）：稍后重试或降低频率"
+	}
+	lower := strings.ToLower(probeURLPattern.ReplaceAllString(err.Error(), ""))
 	switch {
 	case strings.Contains(lower, "401") || strings.Contains(lower, "unauthorized") || strings.Contains(lower, "invalid api key"):
 		return "auth", "认证失败（401）：检查 API key 是否正确、是否过期"
@@ -326,5 +383,22 @@ func classifyProbeError(err error) (string, string) {
 	case strings.Contains(lower, "tls") || strings.Contains(lower, "certificate"):
 		return "tls", "TLS 证书错误：检查代理或系统证书"
 	}
-	return "unknown", msg
+	return "unknown", err.Error()
+}
+
+// probeStatus extracts an HTTP status from structured provider errors, so
+// classification never guesses from free-form text.
+func probeStatus(err error) int {
+	var api *provider.APIError
+	if errors.As(err, &api) && api.Status != 0 {
+		return api.Status
+	}
+	var auth *provider.AuthError
+	if errors.As(err, &auth) && auth.Status != 0 {
+		return auth.Status
+	}
+	if quota := provider.AsQuotaError(err); quota != nil && quota.Status != 0 {
+		return quota.Status
+	}
+	return 0
 }

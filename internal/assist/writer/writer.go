@@ -109,12 +109,23 @@ type BackupRef struct {
 	ConfigPath string `json:"config_path"`
 }
 
-// ApplyResult reports what the write committed.
+// ApplyResult reports what the write committed. Revision is the post-write
+// config content hash; CredentialRevision is the post-write credential-store
+// revision. Neither field contains a credential value.
 type ApplyResult struct {
-	Backup     BackupRef `json:"backup"`
-	ConfigPath string    `json:"config_path"`
-	Credential string    `json:"credential"`
-	AppliedOps int       `json:"applied_ops"`
+	Backup             BackupRef `json:"backup"`
+	ConfigPath         string    `json:"config_path"`
+	Credential         string    `json:"credential"`
+	AppliedOps         int       `json:"applied_ops"`
+	Revision           string    `json:"revision"`
+	CredentialRevision string    `json:"credential_revision"`
+}
+
+// credentialSnapshot is one credential's pre-change state. The value is secret
+// and stays in memory only.
+type credentialSnapshot struct {
+	Key      string
+	Snapshot config.CredentialRollbackSnapshot
 }
 
 // Apply runs the full transaction:
@@ -165,7 +176,19 @@ func (w *Writer) Apply(ctx context.Context, plan *patch.Plan) (ApplyResult, erro
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("backup failed; refuse to write: %w", err)
 	}
+	// Snapshot credentials before the first write. Any later failure restores
+	// both the config file and the credential store.
+	snapshots, err := w.snapshotCredentials(patch.Secrets(ops))
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("credential snapshot failed; refuse to write: %w", err)
+	}
+	credentialTouched := false
 	rollback := func(cause error) (ApplyResult, error) {
+		if credentialTouched {
+			if restoreErr := restoreCredentials(snapshots); restoreErr != nil {
+				return ApplyResult{}, fmt.Errorf("%v; credential rollback failed: %v", cause, restoreErr)
+			}
+		}
 		if restoreErr := w.restoreLocked(ref); restoreErr != nil {
 			return ApplyResult{}, fmt.Errorf("%v; automatic rollback failed: %v (backup %s)", cause, restoreErr, ref.Dir)
 		}
@@ -183,6 +206,7 @@ func (w *Writer) Apply(ctx context.Context, plan *patch.Plan) (ApplyResult, erro
 	for _, secret := range patch.Secrets(ops) {
 		key := secret.APIKeyEnv
 		value, _ := secret.Value.(string)
+		credentialTouched = true
 		target, applied, err := config.SetCredentialIfRevision(key, value, plan.CredentialRevision)
 		if err != nil {
 			return rollback(fmt.Errorf("write credential %s: %w", key, err))
@@ -201,8 +225,53 @@ func (w *Writer) Apply(ctx context.Context, plan *patch.Plan) (ApplyResult, erro
 		return rollback(err)
 	}
 
+	finalRaw, err := os.ReadFile(path)
+	if err != nil {
+		return rollback(fmt.Errorf("read committed config: %w", err))
+	}
 	w.prune()
-	return ApplyResult{Backup: ref, ConfigPath: path, Credential: credTarget, AppliedOps: len(ops)}, nil
+	return ApplyResult{
+		Backup:             ref,
+		ConfigPath:         path,
+		Credential:         credTarget,
+		AppliedOps:         len(ops),
+		Revision:           Hash(finalRaw),
+		CredentialRevision: config.CredentialStoreRevision(),
+	}, nil
+}
+
+// snapshotCredentials records each distinct secret key before any write. No
+// value is logged or persisted; snapshots live only for this transaction.
+func (w *Writer) snapshotCredentials(secrets []patch.ResolvedOp) ([]credentialSnapshot, error) {
+	seen := map[string]bool{}
+	out := make([]credentialSnapshot, 0, len(secrets))
+	for _, secret := range secrets {
+		key := strings.TrimSpace(secret.APIKeyEnv)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		snapshot, err := config.SnapshotCredentialForRollback(key)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot credential %s: %w", key, err)
+		}
+		out = append(out, credentialSnapshot{Key: key, Snapshot: snapshot})
+	}
+	return out, nil
+}
+
+// restoreCredentials restores every snapshot and re-reads the store to prove
+// the old value or absence is back. Errors never include a credential value.
+func restoreCredentials(snapshots []credentialSnapshot) error {
+	for _, item := range snapshots {
+		if err := config.RestoreCredentialForRollback(item.Key, item.Snapshot); err != nil {
+			return fmt.Errorf("restore credential %s: %w", item.Key, err)
+		}
+		if err := config.VerifyCredentialForRollback(item.Key, item.Snapshot); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // backup writes the raw pre-change bytes plus a redacted manifest.

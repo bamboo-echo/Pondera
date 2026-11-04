@@ -445,6 +445,60 @@ func CredentialStored(key string) bool {
 	return envFileHasValue(UserCredentialsPath(), key)
 }
 
+// CredentialRollbackSnapshot is the pre-change state of one credential. It is
+// deliberately unexported in spirit (internal package, rollback callers only):
+// Value is secret material and must never be logged or embedded in an event.
+type CredentialRollbackSnapshot struct {
+	Value   string
+	Existed bool
+}
+
+// SnapshotCredentialForRollback records the stored value (or its absence) so a
+// failed multi-step write can restore the credential store. For rollback use
+// only; never log Value or include it in a diff, manifest, or event.
+func SnapshotCredentialForRollback(key string) (CredentialRollbackSnapshot, error) {
+	key = strings.TrimSpace(key)
+	if !isCredentialKey(key) {
+		return CredentialRollbackSnapshot{}, fmt.Errorf("invalid credential key %q", key)
+	}
+	path := UserCredentialsPath()
+	if strings.TrimSpace(path) == "" {
+		return CredentialRollbackSnapshot{}, fmt.Errorf("credentials store unavailable")
+	}
+	lines, err := readCredentialFileLines(path)
+	if err != nil {
+		return CredentialRollbackSnapshot{}, err
+	}
+	value, ok := parseCredentialLines(lines)[key]
+	return CredentialRollbackSnapshot{Value: value, Existed: ok && strings.TrimSpace(value) != ""}, nil
+}
+
+// RestoreCredentialForRollback puts one credential back to its snapshot state.
+// A credential that did not exist is removed (the store records a tombstone).
+func RestoreCredentialForRollback(key string, snapshot CredentialRollbackSnapshot) error {
+	if snapshot.Existed {
+		_, err := SetCredential(key, snapshot.Value)
+		return err
+	}
+	return RemoveCredential(key)
+}
+
+// VerifyCredentialForRollback re-reads the credential and proves the restore
+// landed on the old value or on absence. Errors name the key only.
+func VerifyCredentialForRollback(key string, snapshot CredentialRollbackSnapshot) error {
+	got, err := SnapshotCredentialForRollback(key)
+	if err != nil {
+		return fmt.Errorf("verify credential rollback for %s: %w", key, err)
+	}
+	if got.Existed != snapshot.Existed {
+		return fmt.Errorf("credential %s did not return to its previous presence state", key)
+	}
+	if got.Existed && got.Value != snapshot.Value {
+		return fmt.Errorf("credential %s did not return to its previous value", key)
+	}
+	return nil
+}
+
 func credentialCurrentStoreHasKey(key string) bool {
 	key = strings.TrimSpace(key)
 	if key == "" {

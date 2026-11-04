@@ -734,6 +734,23 @@
       ]
     }
   },
+  "AssistantTestEndpoint": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantTestEndpoint",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-inputs",
+      "resolver": "App.AssistantTestEndpoint",
+      "inputs": [
+        "endpoint",
+        "kind",
+        "model",
+        "draftKey"
+      ]
+    }
+  },
   "AttachDropped": {
     "domain": "desktop/attachments_app.go",
     "owner": "App.AttachDropped",

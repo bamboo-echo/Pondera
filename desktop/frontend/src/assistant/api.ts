@@ -19,6 +19,8 @@ export const assistantApi = {
   diagnose: (): Promise<AssistantDiagnoseResult> => app.AssistantDiagnose(),
   testConnectivity: (provider: string, model: string, draftKey: string): Promise<AssistantConnectivity> =>
     app.AssistantTestConnectivity(provider, model, draftKey),
+  testEndpoint: (endpoint: string, kind: string, model: string, draftKey: string): Promise<AssistantConnectivity> =>
+    app.AssistantTestEndpoint(endpoint, kind, model, draftKey),
   history: (): Promise<AssistantHistoryRecord[]> => app.AssistantHistory(),
   rollback: (backupId: string): Promise<AssistantRollbackResult> => app.AssistantRollback(backupId),
 };

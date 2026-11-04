@@ -23,6 +23,40 @@ func assistantService() *assist.Assistant {
 	return assistantInstance
 }
 
+const assistantConfigChangedEvent = "assistant:config-changed"
+
+// assistantConfigChangedPayload carries hashes and redacted labels only. No
+// credential value or config value is included.
+type assistantConfigChangedPayload struct {
+	Revision           string                 `json:"revision"`
+	CredentialRevision string                 `json:"credential_revision"`
+	BackupID           string                 `json:"backup_id"`
+	Summary            []assist.ChangeSummary `json:"summary"`
+}
+
+var assistantEventOnce sync.Once
+
+// assistant returns the process-wide service and binds its post-commit event
+// outlet to the runtime event bridge exactly once.
+func (a *App) assistant() *assist.Assistant {
+	service := assistantService()
+	assistantEventOnce.Do(func() {
+		service.OnApplied = func(event assist.AppliedEvent) {
+			ctx := a.ctx
+			if ctx == nil {
+				ctx = a.reqCtx()
+			}
+			a.runtimeEvents.Emit(ctx, assistantConfigChangedEvent, assistantConfigChangedPayload{
+				Revision:           event.Revision,
+				CredentialRevision: event.CredentialRevision,
+				BackupID:           event.BackupID,
+				Summary:            event.Summary,
+			})
+		}
+	})
+	return service
+}
+
 // AssistantStatusView is the onboarding payload. It never contains a key.
 type AssistantStatusView struct {
 	Configured bool   `json:"configured"`
@@ -71,10 +105,12 @@ type AssistantChatResult struct {
 
 // AssistantApplyResult reports a committed change.
 type AssistantApplyResult struct {
-	BackupID   string `json:"backup_id"`
-	BackupDir  string `json:"backup_dir"`
-	AppliedOps int    `json:"applied_ops"`
-	Message    string `json:"message"`
+	BackupID           string `json:"backup_id"`
+	BackupDir          string `json:"backup_dir"`
+	AppliedOps         int    `json:"applied_ops"`
+	Message            string `json:"message"`
+	Revision           string `json:"revision"`
+	CredentialRevision string `json:"credential_revision"`
 }
 
 // AssistantFinding is one diagnostic result.
@@ -123,7 +159,7 @@ type AssistantRollbackResult struct {
 
 // AssistantStatus reports whether the assistant has its own endpoint configured.
 func (a *App) AssistantStatus() (AssistantStatusView, error) {
-	status, err := assistantService().Status()
+	status, err := a.assistant().Status()
 	if err != nil {
 		return AssistantStatusView{}, err
 	}
@@ -132,7 +168,7 @@ func (a *App) AssistantStatus() (AssistantStatusView, error) {
 
 // AssistantSaveSettings stores the assistant's own endpoint/model/key.
 func (a *App) AssistantSaveSettings(endpoint, key, model, kind string) (AssistantStatusView, error) {
-	status, err := assistantService().SaveSettings(endpoint, key, model, kind)
+	status, err := a.assistant().SaveSettings(endpoint, key, model, kind)
 	if err != nil {
 		return AssistantStatusView{}, err
 	}
@@ -141,7 +177,7 @@ func (a *App) AssistantSaveSettings(endpoint, key, model, kind string) (Assistan
 
 // AssistantChat asks the configured model for an explanation or a patch plan.
 func (a *App) AssistantChat(message string) (AssistantChatResult, error) {
-	view, err := assistantService().Chat(a.reqCtx(), message)
+	view, err := a.assistant().Chat(a.reqCtx(), message)
 	if err != nil {
 		return AssistantChatResult{}, err
 	}
@@ -161,7 +197,7 @@ func (a *App) AssistantChat(message string) (AssistantChatResult, error) {
 
 // AssistantApplyPlan commits a previewed plan after explicit confirmation.
 func (a *App) AssistantApplyPlan(planID string) (AssistantApplyResult, error) {
-	view, err := assistantService().ApplyPlan(a.reqCtx(), planID)
+	view, err := a.assistant().ApplyPlan(a.reqCtx(), planID)
 	if err != nil {
 		return AssistantApplyResult{}, err
 	}
@@ -170,7 +206,7 @@ func (a *App) AssistantApplyPlan(planID string) (AssistantApplyResult, error) {
 
 // AssistantDiagnose runs the read-only configuration checks.
 func (a *App) AssistantDiagnose() (AssistantDiagnoseResult, error) {
-	report := assistantService().Diagnose(a.activeWorkspaceRoot()).Report
+	report := a.assistant().Diagnose(a.activeWorkspaceRoot()).Report
 	out := AssistantDiagnoseResult{Checked: report.Checked, Findings: []AssistantFinding{}}
 	for _, finding := range report.Findings {
 		out.Findings = append(out.Findings, AssistantFinding(finding))
@@ -180,13 +216,20 @@ func (a *App) AssistantDiagnose() (AssistantDiagnoseResult, error) {
 
 // AssistantTestConnectivity probes one provider/model with a bounded request.
 func (a *App) AssistantTestConnectivity(provider, model, draftKey string) (AssistantConnectivity, error) {
-	view := assistantService().TestConnectivity(a.reqCtx(), a.activeWorkspaceRoot(), provider, model, draftKey)
+	view := a.assistant().TestConnectivity(a.reqCtx(), a.activeWorkspaceRoot(), provider, model, draftKey)
+	return AssistantConnectivity(view.Result), nil
+}
+
+// AssistantTestEndpoint probes the assistant's own unsaved endpoint; the draft
+// key stays inside this call and is never logged or emitted.
+func (a *App) AssistantTestEndpoint(endpoint, kind, model, draftKey string) (AssistantConnectivity, error) {
+	view := a.assistant().TestEndpoint(a.reqCtx(), endpoint, kind, model, draftKey)
 	return AssistantConnectivity(view.Result), nil
 }
 
 // AssistantHistory returns recent applied/rolled-back changes.
 func (a *App) AssistantHistory() ([]AssistantHistoryRecord, error) {
-	records, err := assistantService().History()
+	records, err := a.assistant().History()
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +245,7 @@ func (a *App) AssistantHistory() ([]AssistantHistoryRecord, error) {
 
 // AssistantRollback restores one backup by id.
 func (a *App) AssistantRollback(backupID string) (AssistantRollbackResult, error) {
-	view, err := assistantService().Rollback(backupID)
+	view, err := a.assistant().Rollback(backupID)
 	if err != nil {
 		return AssistantRollbackResult{}, err
 	}

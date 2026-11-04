@@ -9,6 +9,7 @@ var hostEventNames = []string{
 	"InboxChanged",
 	"agent:event",
 	"agent:ready",
+	"assistant:config-changed",
 	"config:load-warnings",
 	"desktop:shell-status",
 	"history-index:changed-v1",

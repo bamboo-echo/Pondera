@@ -123,6 +123,7 @@ export default function AssistantApp() {
           saving={saving}
           error={error}
           onSave={save}
+          onTest={(endpoint, key, model, kind) => assistantApi.testEndpoint(endpoint, kind, model, key)}
           onCancel={status?.configured ? () => setEditing(false) : undefined}
         />
       ) : null}

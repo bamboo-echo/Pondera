@@ -33,6 +33,9 @@ type Assistant struct {
 	// Client overrides the provider client (tests inject a fake).
 	Client engine.Client
 	Now    func() time.Time
+	// OnApplied, when set, runs after a successful ApplyPlan. It carries only
+	// revision/hash metadata and redacted labels; never a credential value.
+	OnApplied func(AppliedEvent)
 
 	mu    sync.Mutex
 	plans map[string]cachedPlan
@@ -223,12 +226,31 @@ func (a *Assistant) takePlan(id string) (cachedPlan, error) {
 	return cached, nil
 }
 
+// ChangeSummary describes one changed field without its value. Sensitive rows
+// are identified only by their label and a redaction flag.
+type ChangeSummary struct {
+	Label     string `json:"label"`
+	Risk      string `json:"risk"`
+	Sensitive bool   `json:"sensitive"`
+}
+
+// AppliedEvent is the post-commit broadcast payload. It contains revision hashes
+// and redacted labels only; secret values are never present.
+type AppliedEvent struct {
+	Revision           string          `json:"revision"`
+	CredentialRevision string          `json:"credential_revision"`
+	BackupID           string          `json:"backup_id"`
+	Summary            []ChangeSummary `json:"summary"`
+}
+
 // ApplyView reports a committed change.
 type ApplyView struct {
-	BackupID   string `json:"backup_id"`
-	BackupDir  string `json:"backup_dir"`
-	AppliedOps int    `json:"applied_ops"`
-	Message    string `json:"message"`
+	BackupID           string `json:"backup_id"`
+	BackupDir          string `json:"backup_dir"`
+	AppliedOps         int    `json:"applied_ops"`
+	Message            string `json:"message"`
+	Revision           string `json:"revision"`
+	CredentialRevision string `json:"credential_revision"`
 }
 
 // ApplyPlan commits one cached plan through the writer transaction.
@@ -250,7 +272,28 @@ func (a *Assistant) ApplyPlan(ctx context.Context, planID string) (ApplyView, er
 		BackupDir: result.Backup.Dir, Status: "ok",
 	}
 	_ = a.appendHistory(record)
-	return ApplyView{BackupID: result.Backup.ID, BackupDir: result.Backup.Dir, AppliedOps: result.AppliedOps, Message: "配置已保存"}, nil
+	if a.OnApplied != nil {
+		a.OnApplied(AppliedEvent{
+			Revision:           result.Revision,
+			CredentialRevision: result.CredentialRevision,
+			BackupID:           result.Backup.ID,
+			Summary:            summarizeChanges(cached.plan.Diff),
+		})
+	}
+	return ApplyView{
+		BackupID: result.Backup.ID, BackupDir: result.Backup.Dir, AppliedOps: result.AppliedOps,
+		Message: "配置已保存", Revision: result.Revision, CredentialRevision: result.CredentialRevision,
+	}, nil
+}
+
+// summarizeChanges keeps labels and risk only, so the broadcast can never
+// leak a before/after value even for non-secret fields.
+func summarizeChanges(diff []patch.DiffEntry) []ChangeSummary {
+	out := make([]ChangeSummary, 0, len(diff))
+	for _, row := range diff {
+		out = append(out, ChangeSummary{Label: row.Label, Risk: row.Risk, Sensitive: row.Sensitive})
+	}
+	return out
 }
 
 // DiagnoseView wraps the diagnostics report.
@@ -271,6 +314,20 @@ type ConnectivityView struct {
 // TestConnectivity probes a provider/model; a draft key stays request-local.
 func (a *Assistant) TestConnectivity(ctx context.Context, root, provider, model, draftKey string) ConnectivityView {
 	return ConnectivityView{Result: diagnose.Connectivity(ctx, root, provider, model, draftKey)}
+}
+
+// TestEndpoint probes the assistant's own unsaved endpoint. The draft key never
+// leaves this call; when it is empty the saved assistant key is reused.
+func (a *Assistant) TestEndpoint(ctx context.Context, endpoint, kind, model, draftKey string) ConnectivityView {
+	key := strings.TrimSpace(draftKey)
+	if key == "" {
+		if cfg, err := a.store().Load(); err == nil {
+			if saved, keyErr := store.GetAPIKey(cfg); keyErr == nil {
+				key = saved
+			}
+		}
+	}
+	return ConnectivityView{Result: diagnose.ConnectivityEndpoint(ctx, endpoint, kind, model, key)}
 }
 
 // HistoryRecord is one applied or rolled-back change.

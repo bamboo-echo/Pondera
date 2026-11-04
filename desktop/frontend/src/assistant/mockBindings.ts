@@ -10,6 +10,7 @@ export type MockAssistantBindings = Pick<
   | "AssistantApplyPlan"
   | "AssistantDiagnose"
   | "AssistantTestConnectivity"
+  | "AssistantTestEndpoint"
   | "AssistantHistory"
   | "AssistantRollback"
 >;
@@ -52,7 +53,14 @@ export function makeMockAssistantBindings(): MockAssistantBindings {
       return { reply: "context_window 决定何时触发上下文压缩。" };
     },
     async AssistantApplyPlan() {
-      return { backup_id: "mock-backup", backup_dir: "/mock/backups", applied_ops: 1, message: "配置已保存" };
+      return {
+        backup_id: "mock-backup",
+        backup_dir: "/mock/backups",
+        applied_ops: 1,
+        message: "配置已保存",
+        revision: "mock-config-revision",
+        credential_revision: "mock-credential-revision",
+      };
     },
     async AssistantDiagnose() {
       return {
@@ -64,6 +72,9 @@ export function makeMockAssistantBindings(): MockAssistantBindings {
     },
     async AssistantTestConnectivity(provider: string, model: string) {
       return { ok: true, category: "ok", message: "连接成功", latency_ms: 120, provider, model };
+    },
+    async AssistantTestEndpoint(_endpoint: string, _kind: string, model: string) {
+      return { ok: true, category: "ok", message: "连接成功", latency_ms: 120, provider: "assistant", model };
     },
     async AssistantHistory() {
       return [];

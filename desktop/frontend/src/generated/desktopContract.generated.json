@@ -1425,6 +1425,44 @@
     },
     {
       "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantTestEndpoint",
+      "owner": "App.AssistantTestEndpoint",
+      "params": [
+        {
+          "kind": "string"
+        },
+        {
+          "kind": "string"
+        },
+        {
+          "kind": "string"
+        },
+        {
+          "kind": "string"
+        }
+      ],
+      "result": {
+        "kind": "object",
+        "ref": "main.AssistantConnectivity"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [
+          "endpoint",
+          "kind",
+          "model",
+          "draftKey"
+        ],
+        "kind": "owner-inputs",
+        "resolver": "App.AssistantTestEndpoint"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
       "domain": "desktop/attachments_app.go",
       "name": "AttachDropped",
       "owner": "App.AttachDropped",
@@ -21854,6 +21892,7 @@
     "InboxChanged",
     "agent:event",
     "agent:ready",
+    "assistant:config-changed",
     "config:load-warnings",
     "desktop:shell-status",
     "history-index:changed-v1",
@@ -25841,6 +25880,17 @@
           }
         },
         {
+          "name": "attemptFailure",
+          "optional": true,
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "provider.AttemptFailure"
+            },
+            "kind": "nullable"
+          }
+        },
+        {
           "name": "streamAttempt",
           "optional": true,
           "type": {
@@ -26925,6 +26975,17 @@
           "type": {
             "kind": "string"
           }
+        },
+        {
+          "name": "failure",
+          "optional": true,
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "provider.AttemptFailure"
+            },
+            "kind": "nullable"
+          }
         }
       ]
     },
@@ -27926,6 +27987,18 @@
         },
         {
           "name": "message",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "revision",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "credential_revision",
           "type": {
             "kind": "string"
           }
@@ -45839,6 +45912,97 @@
         },
         {
           "name": "resource_scope",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "provider.AttemptFailure": {
+      "fields": [
+        {
+          "name": "attempt",
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "max",
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "kind",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "phase",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "status",
+          "optional": true,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "code",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "retryable",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "backoffMs",
+          "optional": true,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "elapsedMs",
+          "optional": true,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "at",
+          "optional": true,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "providerId",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "model",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "traceId",
           "optional": true,
           "type": {
             "kind": "string"
