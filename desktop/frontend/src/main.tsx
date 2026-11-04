@@ -2,6 +2,7 @@ import "./lib/compat";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import AssistantApp from "./assistant/AssistantApp";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installPerformancePressureMonitor } from "./lib/crash";
 import { installGlobalCrashHandlers } from "./lib/globalCrashHandlers";
@@ -108,12 +109,13 @@ async function mountApp() {
     return;
   }
   if (localeResult.status === "rejected") console.error("failed to preload desktop locale", localeResult.reason);
+  const assistantSurface = new URLSearchParams(window.location.search).get("assistant") === "1";
   createRoot(rootElement).render(
     <StrictMode>
       <ErrorBoundary>
         <LocaleProvider>
           <ToastProvider>
-            <App />
+            {assistantSurface ? <AssistantApp /> : <App />}
           </ToastProvider>
         </LocaleProvider>
       </ErrorBoundary>

@@ -40,6 +40,7 @@ import { installApplicationMenu } from "./menu.js";
 import { record } from "./params.js";
 import { APP_INDEX_URL, APP_SCHEME, registerAppProtocol, resolveDistRoot } from "./protocol.js";
 import { RemoteWindowHost } from "./remoteWindows.js";
+import { AssistantWindowHost } from "./assistantWindow.js";
 import { ServiceSupervisor } from "./service.js";
 import { ShellLifecycle } from "./shellLifecycle.js";
 import { resolveServiceBinary } from "./serviceBinary.js";
@@ -300,6 +301,13 @@ function bootstrap(dataHome: string): void {
     log,
     onClosed: (hostKey) => void service.hostEvent("remoteWindow.closed", { hostKey }),
   });
+  const assistantWindow = new AssistantWindowHost({
+    preloadPath: join(__dirname, "preload.cjs"),
+    appURL,
+    platform: process.platform,
+    icon: windowIcon,
+    log,
+  });
   const tray = new TrayHost({
     platform: process.platform,
     iconPath: firstExisting(icons.tray),
@@ -307,6 +315,7 @@ function bootstrap(dataHome: string): void {
       mainWindow.show("tray");
       void service.hostEvent("tray.open", {});
     },
+    onOpenAssistant: () => assistantWindow.show(),
     onQuit: () => void service.hostEvent("tray.quit", {}),
     log,
   });
@@ -364,6 +373,7 @@ function bootstrap(dataHome: string): void {
     cleanup: [
       { name: "browser views", run: async () => { await browserRecorder.close(); stopBrowserRecovery(); browserRecovery.save(browser.recoveryTabs()); browser.destroyAll(); browserDiagnosticExport.dispose(); } },
       { name: "remote windows", run: () => remote.closeAll() },
+      { name: "assistant window", run: () => assistantWindow.destroy() },
       { name: "main window", run: () => mainWindow.close() },
       { name: "tray", run: () => tray.destroy() },
       { name: "startup deadline", run: () => clearTimeout(startupTimer) },

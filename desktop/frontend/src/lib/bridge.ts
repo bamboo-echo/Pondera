@@ -249,11 +249,21 @@ interface DesktopWindowState {
   maximised: boolean;
 }
 import { makeLazySessionUIMock, type SessionUIBindings } from "./sessionUIBindings";
+import { makeMockAssistantBindings } from "../assistant/mockBindings";
 
 export interface AppBindings extends SessionUIBindings {}
 // AppBindings is the hand-written React-to-Go contract. _CheckGeneratedBindings
 // catches generated methods missing here; update this interface and typecheck.
 export interface AppBindings extends AttachmentBindings, SessionExportBindings, SessionLifecycleBindings, ForkTargetsBindings, ToolRecoveryBindings, ModelSettingsBindings, SessionCatalogBindings, ProjectTreeOrganizationBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings, QualityFloorBindings, SessionTitleBindings, ScrollDiagnosticBindings, RemoteProjectBindings, MCPAppBindings, PinnedContextBindings, FollowupBindings, InboxQueueBindings, TranscriptProtocolBindings, SessionReaderBindings, ExactInteractionBindings {
+  // Config assistant (separate window). See docs/ASSISTANT_DESIGN.zh-CN.md.
+  AssistantStatus(): Promise<import("../generated/desktopContract.generated").AssistantStatusView>;
+  AssistantSaveSettings(endpoint: string, key: string, model: string, kind: string): Promise<import("../generated/desktopContract.generated").AssistantStatusView>;
+  AssistantChat(message: string): Promise<import("../generated/desktopContract.generated").AssistantChatResult>;
+  AssistantApplyPlan(planId: string): Promise<import("../generated/desktopContract.generated").AssistantApplyResult>;
+  AssistantDiagnose(): Promise<import("../generated/desktopContract.generated").AssistantDiagnoseResult>;
+  AssistantTestConnectivity(provider: string, model: string, draftKey: string): Promise<import("../generated/desktopContract.generated").AssistantConnectivity>;
+  AssistantHistory(): Promise<import("../generated/desktopContract.generated").AssistantHistoryRecord[]>;
+  AssistantRollback(backupId: string): Promise<import("../generated/desktopContract.generated").AssistantRollbackResult>;
   GetLegacyEmptySessionCleanupStatus(): Promise<LegacyEmptySessionCleanupStatus>;
   RetryLegacyEmptySessionCleanup(): Promise<LegacyEmptySessionCleanupStatus>;
   OpenSessionDraft(workspaceId: string): Promise<SessionDraftView>;
@@ -2397,6 +2407,7 @@ function makeMockApp(): MockAppBindings {
     }),
     ...makeLazyPreviousDraftMock(),
 		...makeMockSessionExportBindings(),
+    ...makeMockAssistantBindings(),
     ...makeMockSessionCatalogBindings(cloneProjectTree),
     ...makeMockBlankProjectBindings(),
     async GetWorkspaceSnapshot() { return mockWorkspaceSnapshot(); },
