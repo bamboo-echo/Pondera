@@ -6559,7 +6559,7 @@ body > .mermaid-diagram--fullscreen {
   position: absolute;
   left: 14px;
   bottom: calc(100% + 6px);
-  z-index: 30;
+  z-index: var(--z-local-popover);
   min-width: 240px;
   max-width: min(440px, calc(100vw - 32px));
   padding: 9px 12px;

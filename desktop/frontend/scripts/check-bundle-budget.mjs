@@ -314,7 +314,11 @@ for (const path of localeChunks) {
   // 64606 / 65349 B, so both dialect ceilings ratchet to the next tenth.
   // Model-application copy on the read-pause base measures 64734 / 65499 B,
   // adding 128 / 150 B. Retain only the next one-decimal ceiling.
-  const budget = name.startsWith("zh-TW-") ? 64.0 * 1024 : 63.3 * 1024;
+  // The assistant onboarding/settings copy (test-connection states, unverified
+  // badge, config-changed reload prompt), the retry-reason detail panel, and
+  // the plugin marketplace strings add their labels to both dialects; the
+  // merged zh-TW chunk measures 65794 B, so ratchet its ceiling once more.
+  const budget = name.startsWith("zh-TW-") ? 64.3 * 1024 : 63.3 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
