@@ -12,7 +12,7 @@
   },
   "engines": {
     "node": ">=24",
-    "pnpm": ">=10 <11"
+    "pnpm": ">=11 <12"
   },
   "devDependencies": {
     "@jridgewell/trace-mapping": "0.3.31",

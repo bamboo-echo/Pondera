@@ -49,7 +49,7 @@ const pinnedNodeVersion = read(".node-version").trim();
 assert.match(pinnedNodeVersion, /^24\.\d+\.\d+$/);
 assert.equal(read("desktop/frontend/.nvmrc").trim(), "24");
 assert.equal(frontendPackage.engines?.node, ">=24");
-assert.equal(frontendPackage.engines?.pnpm, ">=10 <11");
+assert.equal(frontendPackage.engines?.pnpm, ">=11 <12");
 assert.ok(
   !fs.existsSync(path.join(repoRoot, "desktop/wails.json")),
   "desktop/wails.json must be retired with the Wails shell",
