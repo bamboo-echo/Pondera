@@ -1,5 +1,7 @@
 package event
 
+import "pondera/internal/provider"
+
 // StreamAttemptAction is the lifecycle phase of a local sampling attempt.
 type StreamAttemptAction string
 
@@ -17,6 +19,9 @@ type StreamAttemptInfo struct {
 	Attempt int // 1-based attempt number
 	Max     int // total attempts including the first
 	Reason  string
+	// Failure is the classified reason this attempt was discarded. It is shared
+	// with the retrying event and structured logs so every surface agrees.
+	Failure *provider.AttemptFailure
 	// Response is persisted locally; it is not part of the frontend wire schema.
 	Response *ResponseSummary
 }

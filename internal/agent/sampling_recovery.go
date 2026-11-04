@@ -17,6 +17,8 @@ type samplingRecoveryState struct {
 	billable                  *provider.Usage
 	// retries counts generic transient-failure replays spent this round.
 	retries int
+	// attemptStartedAt marks when the current HTTP attempt began, for elapsed_ms.
+	attemptStartedAt time.Time
 }
 
 func (a *Agent) samplingDeadline(ctx context.Context) (context.Context, context.CancelFunc, TaskBudget) {
@@ -75,7 +77,8 @@ func (a *Agent) streamWithSamplingRecovery(parent context.Context, turn int) (te
 			state.replay.persisted = true
 		}
 		id := newStreamAttemptID(attempt)
-		a.emitStreamAttempt(id, event.StreamAttemptBegin, attempt, "", nil)
+		state.attemptStartedAt = time.Now()
+		a.emitStreamAttempt(id, event.StreamAttemptBegin, attempt, "", nil, nil)
 		sink, attemptSink := a.samplingAttemptSinks()
 		a.freezeVisibleReads(state.frozen.req.Messages)
 		result := a.runSamplingAttempt(ctx, turn, attemptSink, &state.frozen, id)
@@ -161,8 +164,9 @@ func (a *Agent) handleSamplingCandidate(s *samplingRecoveryState, result streame
 		s.replay.local = true
 	}
 	sink.Discard()
-	a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "reasoning_replay", nil)
-	a.emitProtocolRetry(attempt, false)
+	failure := a.protocolAttemptFailure(attempt)
+	a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "reasoning_replay", nil, failure)
+	a.emitProtocolRetry(attempt, false, failure)
 	return true, streamedTurn{}
 }
 
@@ -180,12 +184,14 @@ func (a *Agent) trySamplingRepair(ctx context.Context, s *samplingRecoveryState,
 		a.learnOutputBudget(limit.MaxOutputTokens)
 		s.frozen.req.MaxTokens = limit.MaxOutputTokens
 		sink.Discard()
-		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "output_limit", result.err)
+		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "output_limit", result.err,
+			a.buildAttemptFailure(result.err, attempt, 0, s.attemptStartedAt))
 		return true
 	}
 	if next, ok, _ := a.recoverContextLimit(ctx, s.frozen, result.err, &s.context); ok {
 		sink.Discard()
-		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "context_limit", result.err)
+		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "context_limit", result.err,
+			a.buildAttemptFailure(result.err, attempt, 0, s.attemptStartedAt))
 		s.frozen = next
 		return true
 	}

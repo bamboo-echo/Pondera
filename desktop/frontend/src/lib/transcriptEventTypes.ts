@@ -1,12 +1,16 @@
 import type { StreamAttemptAction } from "./types";
 
+import type { WireAttemptFailure } from "./recoveryStatus";
+
 export interface WireStreamAttempt {
   id: string;
   action: StreamAttemptAction;
   attempt?: number;
   max?: number;
-  /** Fixed enum only: connection_reset | premature_eof | idle_timeout */
+  /** Action reason (retry / output_limit / context_limit / interrupt enum). */
   reason?: string;
+  /** Classified failure for a discarded attempt. */
+  failure?: WireAttemptFailure;
 }
 export interface WireCompaction {
   trigger?: string; // "auto" | "manual"

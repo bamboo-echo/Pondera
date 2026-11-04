@@ -279,22 +279,25 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 	return a.gracePause(state)
 }
 
-func (a *Agent) emitProtocolRetry(attempt int, hasFallback bool) {
+func (a *Agent) emitProtocolRetry(attempt int, hasFallback bool, failure *provider.AttemptFailure) {
 	maxAttempts := 1
 	if hasFallback {
 		maxAttempts = 2
 	}
 	a.svc.sink.Emit(event.Event{
 		Kind: event.Retrying, RetryAttempt: attempt, RetryMax: maxAttempts,
-		RetryScope: event.RetryScopeProtocol,
+		RetryScope: event.RetryScopeProtocol, AttemptFailure: failure,
 	})
 }
 
-func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, attempt int, reason string, err error, summary ...*event.ResponseSummary) {
+func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, attempt int, reason string, err error, failure *provider.AttemptFailure, summary ...*event.ResponseSummary) {
 	if reason == "" && err != nil {
 		reason = provider.StreamInterruptReason(err)
 	}
-	info := event.StreamAttemptInfo{ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts + a.retryCount, Reason: reason}
+	if failure == nil && err != nil {
+		failure = a.buildAttemptFailure(err, attempt, 0, time.Time{})
+	}
+	info := event.StreamAttemptInfo{ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts + a.retryCount, Reason: reason, Failure: failure}
 	if len(summary) > 0 {
 		info.Response = summary[0]
 	}
@@ -304,6 +307,9 @@ func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, a
 		AttemptID:     id,
 		StreamAttempt: info,
 	})
+	if action == event.StreamAttemptDiscard {
+		a.logAttemptFailure(id, attempt, reason, failure)
+	}
 }
 
 func newStreamAttemptID(_ int) string {
@@ -444,7 +450,7 @@ func (a *Agent) publishCommittedSample(streamed streamedTurn) {
 			Text: DisplayAssistantText(streamed.text), Reasoning: streamed.displayReasoning})
 	}
 	if streamed.settledAttemptID != "" {
-		a.emitStreamAttempt(streamed.settledAttemptID, event.StreamAttemptCommit, streamed.settledAttempt, "", nil, a.responseSummary(streamed))
+		a.emitStreamAttempt(streamed.settledAttemptID, event.StreamAttemptCommit, streamed.settledAttempt, "", nil, nil, a.responseSummary(streamed))
 	}
 	a.turn.terminal.answeringRecovery = false
 }

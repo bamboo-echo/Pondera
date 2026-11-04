@@ -19,7 +19,7 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 	if err != nil {
 		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: "transcript_save_failed", Text: "Interrupted output could not be saved; displayed output is retained."})
 	} else if messageID != "" {
-		a.emitStreamAttempt(messageID, event.StreamAttemptCommit, 0, "interrupted", nil)
+		a.emitStreamAttempt(messageID, event.StreamAttemptCommit, 0, "interrupted", nil, nil)
 	}
 }
 

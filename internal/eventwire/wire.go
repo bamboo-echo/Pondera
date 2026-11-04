@@ -69,11 +69,12 @@ type WorkspacePathChange struct {
 
 // StreamAttempt is the JSON form of event.StreamAttemptInfo.
 type StreamAttempt struct {
-	ID      string `json:"id"`
-	Action  string `json:"action"` // begin | discard | commit
-	Attempt int    `json:"attempt,omitempty"`
-	Max     int    `json:"max,omitempty"`
-	Reason  string `json:"reason,omitempty"` // connection_reset | premature_eof | idle_timeout
+	ID      string                   `json:"id"`
+	Action  string                   `json:"action"` // begin | discard | commit
+	Attempt int                      `json:"attempt,omitempty"`
+	Max     int                      `json:"max,omitempty"`
+	Reason  string                   `json:"reason,omitempty"` // failure kind or interrupt reason
+	Failure *provider.AttemptFailure `json:"failure,omitempty"`
 }
 
 // ToWire converts a typed runtime event into the shared frontend JSON contract.
@@ -156,6 +157,7 @@ func ToWire(e event.Event) Event {
 		w.Recovery = e.Recovery
 		w.RetryAttempt = e.RetryAttempt
 		w.RetryMax = e.RetryMax
+		w.AttemptFailure = e.AttemptFailure
 		if e.RetryScope != "" {
 			w.RetryScope = string(e.RetryScope)
 		}
@@ -166,6 +168,7 @@ func ToWire(e event.Event) Event {
 			Attempt: e.StreamAttempt.Attempt,
 			Max:     e.StreamAttempt.Max,
 			Reason:  e.StreamAttempt.Reason,
+			Failure: e.StreamAttempt.Failure,
 		}
 	case event.TurnPhase:
 		w.Phase = string(e.PhaseName)

@@ -54,6 +54,7 @@ type Event struct {
 	RetryAttempt     int                              `json:"retryAttempt,omitempty"`
 	RetryMax         int                              `json:"retryMax,omitempty"`
 	RetryScope       string                           `json:"retryScope,omitempty"` // "headers" | "stream" | "protocol"; omit for older clients
+	AttemptFailure   *provider.AttemptFailure         `json:"attemptFailure,omitempty"`
 	StreamAttempt    *StreamAttempt                   `json:"streamAttempt,omitempty"`
 	// ItemID correlates Steer / TurnDone / unapplied-steer with a durable
 	// session-inbox entry. Empty for legacy text-only guidance.

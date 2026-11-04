@@ -23,6 +23,7 @@ import { metaFromTab } from "./controllerTabMeta";
 import { outputQuarters, tokensFromQuarters, unbilledOutputTokens, type TurnRateSample } from "./turnMetrics";
 import { beginTurnModelActivity, endTurnModelActivity, sampleTurnArguments } from "./turnRateSample";
 import { normalizeToolApprovalMode } from "./types";
+import type { WireAttemptFailure } from "./recoveryStatus";
 export { metaFromTab } from "./controllerTabMeta";
 import { invalidateCache } from "./composerHistory";
 import { formatInboxCancelError, isPermissionSessionChanged } from "./inboxError";
@@ -340,7 +341,7 @@ export type Item = { turnId?: string } & (
   | { kind: "user"; id: string; messageId?: string; submissionId?: string; submissionState?: "sending" | "confirmed" | "failed" | "unknown"; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
   | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; turnFinal?: boolean; samplingCount?: number; toolCount?: number; wasStreamed?: true; reasoningComplete?: boolean; reasoningDurationMs?: number; workDurationMs?: number; turnDurationMs?: number; turnUsage?: TurnUsage; tokensPerSecond?: number; createdAt?: number; memoryCitations?: MemoryCitation[]; searchSources?: SearchSource[] }
   | { kind: "phase"; id: string; text: string }
-  | { kind: "notice"; id: string; local?: boolean; level: "info" | "warn"; text: string; detail?: string; diagnostic?: WireEvent["diagnostic"]; code?: string; title?: string; variant?: "delivery" | "completion"; action?: "continue_delivery" | "open_changes" | "recover_context"; recoveryId?: string; completionSummary?: WireCompletionSummary; decisionReceipt?: WireDecisionReceipt; missing?: string[]; inboxItemId?: string }
+  | { kind: "notice"; id: string; local?: boolean; level: "info" | "warn"; text: string; detail?: string; diagnostic?: WireEvent["diagnostic"]; retryTimeline?: WireAttemptFailure[]; code?: string; title?: string; variant?: "delivery" | "completion"; action?: "continue_delivery" | "open_changes" | "recover_context"; recoveryId?: string; completionSummary?: WireCompletionSummary; decisionReceipt?: WireDecisionReceipt; missing?: string[]; inboxItemId?: string }
   | {
       kind: "compaction";
       id: string;
@@ -574,7 +575,9 @@ export interface State extends ReadStatusHost, ForkTurnState {
   sessionTokens: number;
   sessionCost: number;
   sessionCurrency: string;
-  retry?: { attempt: number; max: number; observedAt: number; recovery?: WireEvent["recovery"] };
+  retry?: { attempt: number; max: number; observedAt: number; recovery?: WireEvent["recovery"]; failure?: WireAttemptFailure; history?: WireAttemptFailure[] };
+  // Per-turn failures that led to a retry, in attempt order. Cleared on turn_done.
+  retryHistory?: WireAttemptFailure[];
   seq: number;
   sessionGen: number;
   // Per-session counter bumped after hydration ancillary data (context, effort,
@@ -1071,6 +1074,20 @@ function streamInterruptReasonText(reason: string): string {
   }
 }
 
+// Merge one classified failure into the per-turn retry history. The retrying
+// event and the stream_attempt discard describe the same attempt, so entries
+// are merged by attempt number instead of appended twice. Bounded to the same
+// 60-entry budget the persisted timeline uses.
+function mergeRetryFailure(history: WireAttemptFailure[] | undefined, failure?: WireAttemptFailure): WireAttemptFailure[] | undefined {
+  if (!failure) return history;
+  const prior = history ?? [];
+  const index = prior.findIndex((entry) => entry.attempt === failure.attempt);
+  const merged = index >= 0
+    ? prior.map((entry, i) => (i === index ? { ...entry, ...failure } : entry))
+    : [...prior, failure];
+  return merged.slice(-60);
+}
+
 function applyStreamAttempt(s: State, e: WireEvent): State {
   const sa = e.streamAttempt;
   if (!sa?.id || !sa.action) return s;
@@ -1111,6 +1128,7 @@ function applyStreamAttempt(s: State, e: WireEvent): State {
           currentAssistant: ownsCurrent ? undefined : s.currentAssistant,
           streamAttemptJournal: ownsJournal ? undefined : journal,
           turnArgChars: ownsJournal ? journal.baselineTurnArgChars : s.turnArgChars,
+          retryHistory: mergeRetryFailure(s.retryHistory, sa.failure),
           lastStreamInterrupt: sa.reason ? { reason: sa.reason, attempt: sa.attempt ?? 0, at: promptEventClock() } : s.lastStreamInterrupt,
         };
       }
@@ -1142,6 +1160,7 @@ function applyStreamAttempt(s: State, e: WireEvent): State {
         currentAssistant: discardedMessageId ? undefined : s.currentAssistant,
         turnArgChars: journal.baselineTurnArgChars,
         streamAttemptJournal: undefined,
+        retryHistory: mergeRetryFailure(s.retryHistory, sa.failure),
         lastStreamInterrupt: sa.reason
           ? { reason: sa.reason, attempt: sa.attempt ?? 0, at: promptEventClock() }
           : s.lastStreamInterrupt,
@@ -1276,14 +1295,19 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
   }
   if (e.kind === "retrying") {
     // Recovery keeps Stop/Escape available despite stale idle snapshots.
+    const failure = e.attemptFailure;
+    const history = mergeRetryFailure(s.retryHistory, failure);
     return {
       ...s,
       retry: {
         recovery: e.recovery,
-        attempt: e.retryAttempt ?? 0,
-        max: e.retryMax ?? 0,
+        attempt: failure?.attempt ?? e.retryAttempt ?? 0,
+        max: failure?.max ?? e.retryMax ?? 0,
         observedAt: promptEventClock(),
+        ...(failure ? { failure } : {}),
+        ...(history ? { history } : {}),
       },
+      retryHistory: history,
       running: true,
       turnActive: true,
       cancellable: true,
@@ -1816,11 +1840,11 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
           });
         }
         if (e.err && e.diagnostic && e.diagnostic.kind !== "cancelled" && !s.streamInterruptNoticeShown) {
-          interruptItems.push({ kind: "notice", id: `e${s.seq + interruptItems.length}`, level: "warn", text: e.err, detail: e.detail, ...(e.diagnostic ? { diagnostic: e.diagnostic } : {}) });
+          interruptItems.push({ kind: "notice", id: `e${s.seq + interruptItems.length}`, level: "warn", text: e.err, detail: e.detail, ...(e.diagnostic ? { diagnostic: e.diagnostic } : {}), ...(s.retryHistory?.length ? { retryTimeline: s.retryHistory } : {}) });
         }
         items = [...finalized, ...interruptItems];
       } else if (e.err && !s.streamInterruptNoticeShown) {
-        items = [...finalized, { kind: "notice", id: `e${s.seq}`, level: "warn", text: e.err, detail: e.detail, ...(e.diagnostic ? { diagnostic: e.diagnostic } : {}) }];
+        items = [...finalized, { kind: "notice", id: `e${s.seq}`, level: "warn", text: e.err, detail: e.detail, ...(e.diagnostic ? { diagnostic: e.diagnostic } : {}), ...(s.retryHistory?.length ? { retryTimeline: s.retryHistory } : {}) }];
       }
       if (e.protocolRecovery?.id && e.status !== "interrupted" && !s.cancelRequested) {
         items = items.map(item => item.kind==="notice" && item.action==="recover_context" ? {...item,action:undefined} : item);
@@ -1849,6 +1873,8 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
         deliveryRecoveryActive: false,
         turnLifecycleObservedAt: promptEventClock(),
         seq: s.seq + Math.max(items.length - finalized.length, 1),
+        retry: undefined,
+        retryHistory: undefined,
         lastStreamInterrupt: undefined,
         streamInterruptNoticeShown: undefined,
       };

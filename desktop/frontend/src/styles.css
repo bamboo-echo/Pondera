@@ -3667,6 +3667,18 @@ a[href] {
   margin-top: 4px;
   white-space: pre-wrap;
 }
+.notice-retry-timeline {
+  margin: 6px 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.notice-retry-timeline li {
+  margin-top: 2px;
+}
+.notice-retry-timeline__copy {
+  margin-top: 8px;
+}
 
 /* ── Steer line (mid-turn user guidance, rendered on the user side) ── */
 .steer-line {
@@ -6460,6 +6472,7 @@ body > .mermaid-diagram--fullscreen {
   /* Lets the readings drop the rate by width instead of grinding it down to a
      half-cut number. */
   container-type: inline-size;
+  position: relative;
 }
 .composer-card--waiting .composer-run-strip {
   /* inherited from the card border tint; no extra rule needed */
@@ -6523,6 +6536,57 @@ body > .mermaid-diagram--fullscreen {
 }
 .composer-run-strip--waiting .composer-run-strip__dot {
   animation: none;
+}
+/* Retry details stay anchored to the strip so reading them never moves the
+   conversation or requires leaving the composer. */
+.composer-run-strip__toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+.composer-run-strip__toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.composer-retry-detail {
+  position: absolute;
+  left: 14px;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  min-width: 240px;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  color: var(--fg);
+  font-size: 12px;
+}
+.composer-retry-detail__title {
+  margin-bottom: 6px;
+  color: var(--fg-dim);
+}
+.composer-retry-detail ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.composer-retry-detail li {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 /* Attention handoff: while a prompt card is waiting on the user, the card
 /* Attention handoff: while a prompt card is waiting on the user, the card

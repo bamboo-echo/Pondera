@@ -522,6 +522,21 @@ func (c *Controller) v3EventsFor(e event.Event, projection session.Projection) (
 			}
 			out = append(out, session.Event{Kind: "diagnostic/response", Optional: true, Payload: payload})
 		}
+	case event.Retrying:
+		// Only stream-scope retries are user-visible failures. Protocol retries
+		// are internal repairs and already recorded as discarded attempts.
+		if e.RetryScope != event.RetryScopeStream || e.AttemptFailure == nil {
+			break
+		}
+		failure := e.AttemptFailure
+		payload, err := makePayload(map[string]any{
+			"schemaVersion": 1, "attempt": failure.Attempt, "max": failure.Max,
+			"scope": "stream", "failure": failure,
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, session.Event{Kind: "diagnostic/retry", Optional: true, Payload: payload})
 	case event.AskRequest, event.ApprovalRequest, event.MCPInteractionRequest:
 		kind := strings.TrimSpace(e.PromptKind)
 		if kind == "" {

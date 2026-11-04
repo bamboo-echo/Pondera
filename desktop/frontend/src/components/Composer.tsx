@@ -1,14 +1,14 @@
 import { clipboardFiles, clipboardHasImageHint, isPasteShortcut, dataURLHash } from "../lib/composerClipboard";
 import { composerDraftFingerprint, emptyComposerDraft, persistentComposerDraft, persistentSnapshot } from "./composerDraftState";
 import { SessionInputRecovery } from "./SessionInputRecovery";
-import { recoveryStatusText, type RecoveryRetry } from "../lib/recoveryStatus";
+import { recoveryStatusText, retryAttemptLine, type RecoveryRetry } from "../lib/recoveryStatus";
 import { useRuntimeSession } from "../lib/useRuntimeState";
 import { isCompactCommand } from "../lib/sessionMaintenanceOperation";
 import { pendingFollowups, confirmFollowup, followupNotSubmitted, followupSessionKey, queuedFollowupOutcome, type PendingFollowup } from "../lib/pendingFollowup";
 import { useAppNavigationStore } from "../store/appNavigation";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ClipboardEvent, DragEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { ArrowRight, ArrowUp, Brain, Check, CornerDownRight, Eye, FileText, Folder, Lightbulb, List, MessageSquare, Plus, Search, Square, Target, Trash2, X } from "lucide-react";
+import { ArrowRight, ArrowUp, Brain, Check, ChevronDown, CornerDownRight, Eye, FileText, Folder, Lightbulb, List, MessageSquare, Plus, Search, Square, Target, Trash2, X } from "lucide-react";
 import { asArray } from "../lib/array";
 import { filterAtMatches } from "../lib/atMatches";
 import { DedupIndex, sha256, ordinaryFileSource } from "../lib/attachDedup";
@@ -729,6 +729,8 @@ export function Composer({
   const nextInvocationId = useRef(1);
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState(false);
+  // Retry-detail popover stays closed on its own when the turn stops retrying.
+  const [retryDetailsOpen, setRetryDetailsOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // A saved manual height is a floor, not a hard cap: longer drafts may grow
   // above it and return to it when their content shrinks.
@@ -4646,6 +4648,18 @@ export function Composer({
             {!finishing && !runtimeState.unknown && <span className="composer-run-strip__dot" aria-hidden="true" />}
             <span className="composer-run-strip__text">
               <span className="composer-run-strip__state">{readStatusText || runStateText}</span>
+              {retry?.history?.length ? (
+                <button
+                  type="button"
+                  className="composer-run-strip__toggle"
+                  aria-expanded={retryDetailsOpen}
+                  aria-label={t("status.retryDetails")}
+                  title={t("status.retryDetails")}
+                  onClick={() => setRetryDetailsOpen((open) => !open)}
+                >
+                  <ChevronDown size={12} aria-hidden="true" />
+                </button>
+              ) : null}
               {runStrip && !compactSubmitting && !maintenanceActive && (
                 <span className="composer-run-strip__metrics">
                   {runStrip.stripParts.map((part) => (
@@ -4657,6 +4671,16 @@ export function Composer({
                 </span>
               )}
             </span>
+            {retry?.history?.length && retryDetailsOpen ? (
+              <div className="composer-retry-detail" role="dialog" aria-label={t("status.retryDetails")}>
+                <div className="composer-retry-detail__title">{t("status.retryDetails")}</div>
+                <ul>
+                  {retry.history.map((failure) => (
+                    <li key={`${failure.attempt}-${failure.kind}`}>{retryAttemptLine(t, failure)}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         )}
         <span className="sr-only" role="status">{readStatusText || runStateText}</span>

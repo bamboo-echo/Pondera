@@ -469,9 +469,10 @@ type Event struct {
 	DecisionReceipt    *provider.DecisionReceipt // Notice: durable user decision receipt
 	WriteIntent        bool                      // local write-ahead checkpoint, not a user notice
 	Recovery           *RecoveryStatus           // optional local recovery details
-	RetryAttempt       int                       // Retrying: 1-based protocol attempt, or stream retry index
-	RetryMax           int                       // Retrying: attempt/retry budget for the scope
+	RetryAttempt       int                       // Retrying: 1-based request attempt for this turn
+	RetryMax           int                       // Retrying: total request-attempt budget for this turn
 	RetryScope         RetryScope                // Retrying: optional "headers" | "stream"; empty for older emitters
+	AttemptFailure     *provider.AttemptFailure  // Retrying: classified reason, same object a discard carries
 	StreamAttempt      StreamAttemptInfo         // StreamAttempt lifecycle
 	ReadStatus         *ReadStatusPayload        // ReadStatus: one logical read's delivery state
 	ReadPause          *provider.ReadPause       // TurnDone: durable display-only pause receipt

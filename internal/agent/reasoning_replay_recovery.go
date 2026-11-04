@@ -63,7 +63,7 @@ func (a *Agent) tryRecoverReasoningReplay400(streamSink *deferredStreamSink, fro
 	if streamSink != nil {
 		streamSink.Discard()
 	}
-	a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, "reasoning_replay_400", err)
+	a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, "reasoning_replay_400", err, nil)
 	event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryReasoningReplay400Detected})
 	return next, true
 }

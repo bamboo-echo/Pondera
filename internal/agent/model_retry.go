@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"pondera/internal/event"
@@ -79,13 +80,76 @@ func (a *Agent) retryModelRequest(ctx context.Context, state *samplingRecoverySt
 	}
 	state.retries++
 	delay := modelRetryDelay(state.retries)
+	failure := a.buildAttemptFailure(result.err, attempt, delay, state.attemptStartedAt)
 	a.svc.sink.Emit(event.Event{
-		Kind:         event.Retrying,
-		RetryAttempt: state.retries,
-		RetryMax:     a.retryCount,
-		RetryScope:   event.RetryScopeStream,
+		Kind:           event.Retrying,
+		RetryAttempt:   attempt,
+		RetryMax:       maxSamplingAttempts + a.retryCount,
+		RetryScope:     event.RetryScopeStream,
+		AttemptFailure: failure,
 	})
 	sink.Discard()
-	a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "retry", result.err)
+	a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "retry", result.err, failure)
 	return retryWait(ctx, delay)
+}
+
+// buildAttemptFailure fills the timing and identity fields the provider layer
+// cannot know. It never includes error text.
+func (a *Agent) buildAttemptFailure(err error, attempt int, backoff time.Duration, started time.Time) *provider.AttemptFailure {
+	if err == nil {
+		return nil
+	}
+	failure := provider.ExplainFailure(err)
+	failure.Attempt = attempt
+	failure.Max = maxSamplingAttempts + a.retryCount
+	if backoff > 0 {
+		failure.BackoffMs = int(backoff / time.Millisecond)
+	}
+	if !started.IsZero() {
+		failure.ElapsedMs = time.Since(started).Milliseconds()
+	}
+	failure.At = time.Now().UnixMilli()
+	if failure.ProviderID == "" && a.svc.prov != nil {
+		failure.ProviderID = a.svc.prov.Name()
+	}
+	failure.Model = a.modelRef
+	return &failure
+}
+
+func (a *Agent) protocolAttemptFailure(attempt int) *provider.AttemptFailure {
+	return &provider.AttemptFailure{
+		Attempt:    attempt,
+		Max:        maxSamplingAttempts + a.retryCount,
+		Kind:       provider.FailureKindProtocol,
+		Phase:      "protocol",
+		Retryable:  true,
+		At:         time.Now().UnixMilli(),
+		ProviderID: a.svc.prov.Name(),
+		Model:      a.modelRef,
+	}
+}
+
+// logAttemptFailure writes one structured line per discarded attempt. It shares
+// the exact object sent to the UI, so there is a single source of truth.
+func (a *Agent) logAttemptFailure(id string, attempt int, reason string, failure *provider.AttemptFailure) {
+	if failure == nil {
+		return
+	}
+	slog.Warn("model request attempt failed",
+		"message_id", id,
+		"attempt", attempt,
+		"max", failure.Max,
+		"scope", "stream",
+		"reason", reason,
+		"kind", string(failure.Kind),
+		"phase", failure.Phase,
+		"status", failure.Status,
+		"code", failure.Code,
+		"retryable", failure.Retryable,
+		"backoff_ms", failure.BackoffMs,
+		"elapsed_ms", failure.ElapsedMs,
+		"provider_id", failure.ProviderID,
+		"model", failure.Model,
+		"trace_id", failure.TraceID,
+	)
 }

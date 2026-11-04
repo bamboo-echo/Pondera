@@ -3,8 +3,10 @@
 
 import { useState } from "react";
 import { ErrorMessage } from "./ErrorMessage";
-import { CheckCheck, ChevronRight, CirclePlay, ClipboardCheck, FileSearch, Info, TriangleAlert } from "lucide-react";
+import { CheckCheck, ChevronRight, CirclePlay, ClipboardCheck, Copy, FileSearch, Info, TriangleAlert } from "lucide-react";
 import { useT } from "../lib/i18n";
+import { redactDiagnosticText, retryAttemptLine, type WireAttemptFailure } from "../lib/recoveryStatus";
+import { writeClipboardText } from "../lib/clipboard";
 import type { Item } from "../lib/useController";
 import { sessionOperationStatus } from "../lib/sessionMaintenanceOperation";
 type CompactionItem = Extract<Item, { kind: "compaction" }>;
@@ -69,12 +71,29 @@ function DecisionReceiptLine({ receipt }: { receipt: NonNullable<NoticeItem["dec
   );
 }
 
+// One-click bug-report payload: every failed attempt plus the final message,
+// redacted client-side as defense in depth even though the server already
+// omits response bodies and credentials.
+function retryDiagnosticText(item: NoticeItem, timeline: WireAttemptFailure[]): string {
+  const lines = ["Pondera retry diagnostics", `final: ${item.text}`];
+  for (const failure of timeline) {
+    lines.push(
+      `#${failure.attempt}/${failure.max} kind=${failure.kind} status=${failure.status ?? "-"} code=${failure.code ?? "-"}`
+      + ` retryable=${failure.retryable} backoff=${failure.backoffMs ?? 0}ms elapsed=${failure.elapsedMs ?? 0}ms`
+      + ` provider=${failure.providerId ?? "-"} model=${failure.model ?? "-"} trace=${failure.traceId ?? "-"}`,
+    );
+  }
+  return redactDiagnosticText(lines.join("\n"));
+}
+
 export function NoticeCard({ item, onAction, onAccept, onOpenVerification, actionDisabled = false }: { item: NoticeItem; onAction?: () => void; onAccept?: () => void; onOpenVerification?: (summary: WireCompletionSummary) => void; actionDisabled?: boolean }) {
   const t = useT();
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const StatusIcon = item.level === "warn" ? TriangleAlert : Info;
   const ActionIcon = item.action === "open_changes" ? FileSearch : CirclePlay;
   const showVerification = item.variant === "completion" && Boolean(item.completionSummary && onOpenVerification);
   const result = item.variant === "completion" ? item.completionSummary : undefined;
+  const retryTimeline = item.retryTimeline?.length ? item.retryTimeline : undefined;
   const showActions = Boolean((item.action && onAction) || onAccept || showVerification);
   return (
     <div className={`notice-line notice-line--${item.level}${item.variant ? ` notice-line--${item.variant}` : ""}`} data-entrance={item.id} role={item.code === "incomplete_read" ? "status" : undefined}>
@@ -114,6 +133,29 @@ export function NoticeCard({ item, onAction, onAccept, onOpenVerification, actio
           <details className="notice-line__details">
             <summary>{t("notice.details")}</summary>
             <pre>{JSON.stringify(result, null, 2)}</pre>
+          </details>
+        ) : retryTimeline ? (
+          <details className="notice-line__details">
+            <summary>{t("notice.retryDetails")}</summary>
+            <ul className="notice-retry-timeline">
+              {retryTimeline.map((failure) => (
+                <li key={`${failure.attempt}-${failure.kind}`}>{retryAttemptLine(t, failure)}</li>
+              ))}
+            </ul>
+            {item.detail ? <div>{item.detail}</div> : null}
+            <button
+              className="btn btn--small notice-retry-timeline__copy"
+              type="button"
+              onClick={async () => {
+                if (await writeClipboardText(retryDiagnosticText(item, retryTimeline))) {
+                  setDiagnosticCopied(true);
+                  window.setTimeout(() => setDiagnosticCopied(false), 2000);
+                }
+              }}
+            >
+              <Copy size={13} aria-hidden="true" />
+              <span>{diagnosticCopied ? t("notice.retryDiagnosticCopied") : t("notice.copyRetryDiagnostic")}</span>
+            </button>
           </details>
         ) : item.detail ? (
           <details className="notice-line__details">

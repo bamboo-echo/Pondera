@@ -39,8 +39,34 @@ func TestModelRetryReplaysTransientFailuresWithConfiguredBackoff(t *testing.T) {
 		t.Fatalf("waits = %v, want [2s 4s]", *waits)
 	}
 	retries := sink.kinds(event.Retrying)
-	if len(retries) != 2 || retries[0].RetryAttempt != 1 || retries[1].RetryAttempt != 2 || retries[0].RetryMax != 3 {
+	wantMax := maxSamplingAttempts + 3
+	if len(retries) != 2 || retries[0].RetryAttempt != 1 || retries[1].RetryAttempt != 2 || retries[0].RetryMax != wantMax {
 		t.Fatalf("retrying events = %+v", retries)
+	}
+	wantKinds := []provider.FailureKind{provider.FailureKindServerError, provider.FailureKindServerError}
+	wantBackoff := []int{2000, 4000}
+	for i, retry := range retries {
+		failure := retry.AttemptFailure
+		if failure == nil {
+			t.Fatalf("retry %d has no attempt failure", i+1)
+		}
+		if failure.Kind != wantKinds[i] || failure.Status != 503 || !failure.Retryable || failure.BackoffMs != wantBackoff[i] {
+			t.Fatalf("retry %d failure = %+v", i+1, failure)
+		}
+		if failure.Attempt != retry.RetryAttempt || failure.Max != retry.RetryMax {
+			t.Fatalf("retry %d denominators disagree: retry=%d/%d failure=%d/%d", i+1, retry.RetryAttempt, retry.RetryMax, failure.Attempt, failure.Max)
+		}
+	}
+	for _, attempt := range sink.kinds(event.StreamAttempt) {
+		if attempt.StreamAttempt.Action != event.StreamAttemptDiscard {
+			continue
+		}
+		if attempt.StreamAttempt.Max != wantMax {
+			t.Fatalf("stream attempt max = %d, retry max = %d, want both %d", attempt.StreamAttempt.Max, wantMax, wantMax)
+		}
+		if attempt.StreamAttempt.Failure == nil || attempt.StreamAttempt.Failure.Status != 503 {
+			t.Fatalf("discard failure = %+v", attempt.StreamAttempt.Failure)
+		}
 	}
 }
 
