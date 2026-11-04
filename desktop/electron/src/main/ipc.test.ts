@@ -155,3 +155,71 @@ test("renderer invokes are gated by sender identity and the contract allowlist",
   assert.ok(warningMessages.some(message => message === "renderer diagnostics rate limited dropped=1"));
   assert.equal(logMessages.length, 11, "the next rate window accepts diagnostics again");
 });
+
+test("an extra trusted window is limited to Assistant commands", async () => {
+  const { ipcMain, handlers, listeners } = fakeIpc();
+  const mainSender = { id: 1 };
+  const mainFrame = {};
+  const assistantSender = { id: 2 };
+  const assistantFrame = {};
+  const invoked: Array<{ method: string; args: unknown[] }> = [];
+  const warningMessages: string[] = [];
+  registerRendererIpc({
+    ipcMain,
+    contract: parseContract({ digest: "sha256:b", commands: ["OpenProjectTab", "AssistantStatus"] }),
+    window: {
+      isTrustedSender: (sender, frame) => sender === mainSender && frame === mainFrame,
+      minimise() {},
+      toggleMaximise() {},
+      isMaximised: () => false,
+      close() {},
+      bounds: () => ({ x: 0, y: 0, width: 0, height: 0, maximised: false }),
+      setTheme() {},
+      setBackgroundColour() {},
+      getAppZoom: async () => 1,
+      setAppZoom: async () => 1,
+      resetAppZoom: async () => 1,
+    },
+    extraTrustedSender: (sender, frame) => sender === assistantSender && frame === assistantFrame,
+    serviceState: () => ({ phase: "ready" as const, generation: "g-test" }),
+    invoke: async (method, args) => {
+      invoked.push({ method, args });
+      return { method, args };
+    },
+    clipboard: { writeText: async () => undefined, readText: async () => "clip" },
+    openExternal: async () => undefined,
+    log: { info() {}, warn: (message) => warningMessages.push(message), error() {} },
+  });
+
+  const invoke = handlers.get(IPC.invoke);
+  assert.ok(invoke);
+  const main = { sender: mainSender, senderFrame: mainFrame };
+  const assistant = { sender: assistantSender, senderFrame: assistantFrame };
+
+  assert.deepEqual(await invoke(main, "OpenProjectTab", ["/p"]), { ok: true, value: { method: "OpenProjectTab", args: ["/p"] } });
+  assert.deepEqual(await invoke(assistant, "AssistantStatus", []), { ok: true, value: { method: "AssistantStatus", args: [] } });
+  assert.deepEqual(await invoke(assistant, "OpenProjectTab", ["/p"]), {
+    ok: false,
+    message: "untrusted sender: assistant window command not allowed",
+  });
+  assert.match(warningMessages.at(-1) ?? "", /rejected assistant-window IPC command from untrusted scope/);
+  assert.deepEqual(await invoke({ sender: assistantSender, senderFrame: mainFrame }, "AssistantStatus", []), {
+    ok: false,
+    message: "untrusted sender",
+  });
+  assert.deepEqual(await invoke({ sender: { id: 3 }, senderFrame: assistantFrame }, "AssistantStatus", []), {
+    ok: false,
+    message: "untrusted sender",
+  });
+  assert.deepEqual(invoked.map((call) => call.method), ["OpenProjectTab", "AssistantStatus"]);
+
+  const contract = listeners.get(IPC.contract);
+  assert.ok(contract);
+  const event: { sender: unknown; senderFrame: unknown; returnValue?: unknown } = { ...assistant };
+  contract(event);
+  assert.deepEqual(event.returnValue, {
+    protocolVersion: 1,
+    digest: "sha256:b",
+    commands: ["OpenProjectTab", "AssistantStatus"],
+  });
+});

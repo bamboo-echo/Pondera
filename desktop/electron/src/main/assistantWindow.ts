@@ -1,4 +1,4 @@
-import { BrowserWindow, type WebContents } from "electron";
+import { BrowserWindow, type WebContents, type WebFrameMain } from "electron";
 import { APP_ORIGIN } from "./protocol.js";
 import { errorText, type Logger } from "./log.js";
 
@@ -31,6 +31,13 @@ export class AssistantWindowHost {
 
   get browserWindow(): BrowserWindow | null {
     return this.win && !this.win.isDestroyed() ? this.win : null;
+  }
+
+  // The assistant window shares the host preload and thus the renderer IPC
+  // contract, so the main process must accept it as a trusted sender too.
+  isTrustedSender(sender: WebContents, frame: WebFrameMain | null | undefined): boolean {
+    const win = this.browserWindow;
+    return Boolean(win) && sender === win?.webContents && frame != null && frame === win.webContents.mainFrame;
   }
 
   show(): void {

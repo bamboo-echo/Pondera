@@ -645,6 +645,7 @@ function bootstrap(dataHome: string): void {
         ipcMain,
         contract,
         window: mainWindow,
+        extraTrustedSender: (sender, frame) => assistantWindow.isTrustedSender(sender, frame),
         invoke: async (method, args) => {
           const generation = service.generation;
           const recovery = ["PrepareSession", "GetSessionPreparation", "StartTopicActivation"].includes(method);

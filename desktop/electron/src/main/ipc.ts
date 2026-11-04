@@ -67,6 +67,8 @@ export interface RendererIpcDeps {
   browserControl?: BrowserControlApi;
   openExternal(url: string): Promise<void>;
   browser?: BrowserRendererApi;
+  /** Extra renderer windows accepted by the IPC gate, e.g. the assistant shell. */
+  extraTrustedSender?(sender: IpcMainEvent["sender"], frame: IpcMainEvent["senderFrame"]): boolean;
   log: Logger;
 }
 
@@ -162,14 +164,29 @@ export function isOpenableExternalURL(value: unknown): value is string {
   }
 }
 
+const ASSISTANT_COMMAND = /^Assistant[A-Z]/;
+
 export function registerRendererIpc(deps: RendererIpcDeps): void {
+  const senderTrust = (event: IpcMainEvent | IpcMainInvokeEvent): { main: boolean; extra: boolean } => ({
+    main: deps.window.isTrustedSender(event.sender, event.senderFrame),
+    extra: Boolean(deps.extraTrustedSender?.(event.sender, event.senderFrame)),
+  });
   const trusted = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => {
-    const ok = deps.window.isTrustedSender(event.sender, event.senderFrame);
+    const { main, extra } = senderTrust(event);
+    const ok = main || extra;
     if (!ok) deps.log.warn(`rejected IPC from untrusted sender (webContents ${event.sender.id})`);
     return ok;
   };
-  const handle = (channel: string, run: (...args: unknown[]) => Promise<unknown> | unknown) => {
+  const handle = (
+    channel: string,
+    run: (...args: unknown[]) => Promise<unknown> | unknown,
+    authorize?: (event: IpcMainEvent | IpcMainInvokeEvent, args: unknown[]) => string | null,
+  ) => {
     deps.ipcMain.handle(channel, async (event, ...args: unknown[]): Promise<IpcResult> => {
+      // authorize runs before the generic trust check so a secondary trusted
+      // window can still be held to a narrower command set.
+      const denial = authorize?.(event, args);
+      if (denial) return { ok: false, message: denial };
       if (!trusted(event)) return { ok: false, message: "untrusted sender" };
       try {
         return { ok: true, value: await run(...args) };
@@ -207,6 +224,14 @@ export function registerRendererIpc(deps: RendererIpcDeps): void {
     if (method === "IsMainWindowMaximised") return deps.window.isMaximised();
     if (method === "CloseMainWindow") return deps.window.close();
     return deps.invoke(method, Array.isArray(args) ? args : []);
+  }, (event, args) => {
+    const { main, extra } = senderTrust(event);
+    // Unknown senders fall through to the generic untrusted-sender rejection.
+    if (main || !extra) return null;
+    const method = args[0];
+    if (typeof method === "string" && ASSISTANT_COMMAND.test(method)) return null;
+    deps.log.warn(`rejected assistant-window IPC command from untrusted scope (webContents ${event.sender.id})`);
+    return "untrusted sender: assistant window command not allowed";
   });
   handle(IPC.serviceStateGet, () => deps.serviceState());
   handle(IPC.processDiagnostics, () => deps.processDiagnostics?.() ?? null);
