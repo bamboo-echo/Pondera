@@ -3,7 +3,7 @@
 
 export const DESKTOP_PROTOCOL_VERSION = 11;
 
-export const DESKTOP_CONTRACT_DIGEST = "sha256:2c166b0cdbb5c89a4bd5f54225ef233045793795d7dcea3a0ad9f30dfdb873da";
+export const DESKTOP_CONTRACT_DIGEST = "sha256:c8c6900807307d8b8c2774eaf3348dff600c084922850d84c61aa7b23f57dda0";
 
 export const DESKTOP_COMMANDS = [
   "AIRenameSession",
@@ -47,6 +47,14 @@ export const DESKTOP_COMMANDS = [
   "ApproveTabForTurn",
   "ArchiveCanonicalSession",
   "ArchiveSessionTarget",
+  "AssistantApplyPlan",
+  "AssistantChat",
+  "AssistantDiagnose",
+  "AssistantHistory",
+  "AssistantRollback",
+  "AssistantSaveSettings",
+  "AssistantStatus",
+  "AssistantTestConnectivity",
   "AttachDropped",
   "AttachDroppedForComposerTarget",
   "AttachDroppedForTab",
@@ -1920,6 +1928,93 @@ export interface AgentView {
   compactRatio?: number;
   effectiveCompactRatio?: number;
   compactRatioOverridden?: boolean;
+}
+
+export interface AssistantApplyResult {
+  backup_id: string;
+  backup_dir: string;
+  applied_ops: number;
+  message: string;
+}
+
+export interface AssistantChatResult {
+  reply: string;
+  rejection?: AssistantRejection | null;
+  plan?: AssistantPlanView | null;
+}
+
+export interface AssistantConnectivity {
+  ok: boolean;
+  category: string;
+  message: string;
+  latency_ms: number;
+  provider: string;
+  model: string;
+}
+
+export interface AssistantDiagnoseResult {
+  findings: AssistantFinding[];
+  checked: number;
+}
+
+export interface AssistantFinding {
+  code: string;
+  severity: string;
+  title: string;
+  detail: string;
+  provider?: string;
+  fix?: string;
+}
+
+export interface AssistantHistoryRecord {
+  id: string;
+  kind: string;
+  created_at: string;
+  intent: string;
+  diff: AssistantPlanRow[];
+  backup_id: string;
+  backup_dir: string;
+  status: string;
+}
+
+export interface AssistantPlanRow {
+  label: string;
+  before: string;
+  after: string;
+  sensitive: boolean;
+  risk: string;
+}
+
+export interface AssistantPlanView {
+  id: string;
+  intent: string;
+  reply: string;
+  diff: AssistantPlanRow[];
+  requires_confirmation: boolean;
+  comment_warning: string;
+  op_count: number;
+  expires_at: string;
+}
+
+export interface AssistantRejection {
+  reason: string;
+  message: string;
+}
+
+export interface AssistantRollbackResult {
+  backup_id: string;
+  message: string;
+}
+
+export interface AssistantStatusView {
+  configured: boolean;
+  endpoint: string;
+  model: string;
+  kind: string;
+  key_set: boolean;
+  config_path: string;
+  home_dir: string;
+  note: string;
 }
 
 export interface AttachmentTargetView {
@@ -5987,6 +6082,14 @@ export interface GeneratedDesktopCommands {
   ApproveTabForTurn(arg0: string, arg1: string, arg2: string, arg3: string, arg4: boolean, arg5: boolean, arg6: boolean): Promise<void>;
   ArchiveCanonicalSession(arg0: SessionRef): Promise<void>;
   ArchiveSessionTarget(arg0: SessionSelector): Promise<SessionMutationResult>;
+  AssistantApplyPlan(arg0: string): Promise<AssistantApplyResult>;
+  AssistantChat(arg0: string): Promise<AssistantChatResult>;
+  AssistantDiagnose(): Promise<AssistantDiagnoseResult>;
+  AssistantHistory(): Promise<AssistantHistoryRecord[]>;
+  AssistantRollback(arg0: string): Promise<AssistantRollbackResult>;
+  AssistantSaveSettings(arg0: string, arg1: string, arg2: string, arg3: string): Promise<AssistantStatusView>;
+  AssistantStatus(): Promise<AssistantStatusView>;
+  AssistantTestConnectivity(arg0: string, arg1: string, arg2: string): Promise<AssistantConnectivity>;
   AttachDropped(arg0: string): Promise<DroppedItem>;
   AttachDroppedForComposerTarget(arg0: ComposerTarget, arg1: string): Promise<DroppedItem>;
   AttachDroppedForTab(arg0: string, arg1: string): Promise<DroppedItem>;

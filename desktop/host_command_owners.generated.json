@@ -623,6 +623,117 @@
       ]
     }
   },
+  "AssistantApplyPlan": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantApplyPlan",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-inputs",
+      "resolver": "App.AssistantApplyPlan",
+      "inputs": [
+        "planID"
+      ]
+    }
+  },
+  "AssistantChat": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantChat",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-inputs",
+      "resolver": "App.AssistantChat",
+      "inputs": [
+        "message"
+      ]
+    }
+  },
+  "AssistantDiagnose": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantDiagnose",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-state",
+      "resolver": "App.AssistantDiagnose",
+      "inputs": []
+    }
+  },
+  "AssistantHistory": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantHistory",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-state",
+      "resolver": "App.AssistantHistory",
+      "inputs": []
+    }
+  },
+  "AssistantRollback": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantRollback",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-inputs",
+      "resolver": "App.AssistantRollback",
+      "inputs": [
+        "backupID"
+      ]
+    }
+  },
+  "AssistantSaveSettings": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantSaveSettings",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-inputs",
+      "resolver": "App.AssistantSaveSettings",
+      "inputs": [
+        "endpoint",
+        "key",
+        "model",
+        "kind"
+      ]
+    }
+  },
+  "AssistantStatus": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantStatus",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-state",
+      "resolver": "App.AssistantStatus",
+      "inputs": []
+    }
+  },
+  "AssistantTestConnectivity": {
+    "domain": "desktop/assistant_app.go",
+    "owner": "App.AssistantTestConnectivity",
+    "sources": [
+      "desktop/assistant_app.go"
+    ],
+    "scope": {
+      "kind": "owner-inputs",
+      "resolver": "App.AssistantTestConnectivity",
+      "inputs": [
+        "provider",
+        "model",
+        "draftKey"
+      ]
+    }
+  },
   "AttachDropped": {
     "domain": "desktop/attachments_app.go",
     "owner": "App.AttachDropped",

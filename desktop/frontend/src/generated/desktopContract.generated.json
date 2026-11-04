@@ -1212,6 +1212,219 @@
     },
     {
       "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantApplyPlan",
+      "owner": "App.AssistantApplyPlan",
+      "params": [
+        {
+          "kind": "string"
+        }
+      ],
+      "result": {
+        "kind": "object",
+        "ref": "main.AssistantApplyResult"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [
+          "planID"
+        ],
+        "kind": "owner-inputs",
+        "resolver": "App.AssistantApplyPlan"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantChat",
+      "owner": "App.AssistantChat",
+      "params": [
+        {
+          "kind": "string"
+        }
+      ],
+      "result": {
+        "kind": "object",
+        "ref": "main.AssistantChatResult"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [
+          "message"
+        ],
+        "kind": "owner-inputs",
+        "resolver": "App.AssistantChat"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantDiagnose",
+      "owner": "App.AssistantDiagnose",
+      "params": [],
+      "result": {
+        "kind": "object",
+        "ref": "main.AssistantDiagnoseResult"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [],
+        "kind": "owner-state",
+        "resolver": "App.AssistantDiagnose"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantHistory",
+      "owner": "App.AssistantHistory",
+      "params": [],
+      "result": {
+        "elem": {
+          "kind": "object",
+          "ref": "main.AssistantHistoryRecord"
+        },
+        "kind": "array"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [],
+        "kind": "owner-state",
+        "resolver": "App.AssistantHistory"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantRollback",
+      "owner": "App.AssistantRollback",
+      "params": [
+        {
+          "kind": "string"
+        }
+      ],
+      "result": {
+        "kind": "object",
+        "ref": "main.AssistantRollbackResult"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [
+          "backupID"
+        ],
+        "kind": "owner-inputs",
+        "resolver": "App.AssistantRollback"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantSaveSettings",
+      "owner": "App.AssistantSaveSettings",
+      "params": [
+        {
+          "kind": "string"
+        },
+        {
+          "kind": "string"
+        },
+        {
+          "kind": "string"
+        },
+        {
+          "kind": "string"
+        }
+      ],
+      "result": {
+        "kind": "object",
+        "ref": "main.AssistantStatusView"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [
+          "endpoint",
+          "key",
+          "model",
+          "kind"
+        ],
+        "kind": "owner-inputs",
+        "resolver": "App.AssistantSaveSettings"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantStatus",
+      "owner": "App.AssistantStatus",
+      "params": [],
+      "result": {
+        "kind": "object",
+        "ref": "main.AssistantStatusView"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [],
+        "kind": "owner-state",
+        "resolver": "App.AssistantStatus"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
+      "domain": "desktop/assistant_app.go",
+      "name": "AssistantTestConnectivity",
+      "owner": "App.AssistantTestConnectivity",
+      "params": [
+        {
+          "kind": "string"
+        },
+        {
+          "kind": "string"
+        },
+        {
+          "kind": "string"
+        }
+      ],
+      "result": {
+        "kind": "object",
+        "ref": "main.AssistantConnectivity"
+      },
+      "returnsError": true,
+      "scope": {
+        "inputs": [
+          "provider",
+          "model",
+          "draftKey"
+        ],
+        "kind": "owner-inputs",
+        "resolver": "App.AssistantTestConnectivity"
+      },
+      "sources": [
+        "desktop/assistant_app.go"
+      ]
+    },
+    {
+      "cancellation": "before-dispatch",
       "domain": "desktop/attachments_app.go",
       "name": "AttachDropped",
       "owner": "App.AttachDropped",
@@ -27626,6 +27839,398 @@
           "optional": true,
           "type": {
             "kind": "boolean"
+          }
+        }
+      ]
+    },
+    "main.AssistantApplyResult": {
+      "fields": [
+        {
+          "name": "backup_id",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "backup_dir",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "applied_ops",
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "message",
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.AssistantChatResult": {
+      "fields": [
+        {
+          "name": "reply",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "rejection",
+          "optional": true,
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "main.AssistantRejection"
+            },
+            "kind": "nullable"
+          }
+        },
+        {
+          "name": "plan",
+          "optional": true,
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "main.AssistantPlanView"
+            },
+            "kind": "nullable"
+          }
+        }
+      ]
+    },
+    "main.AssistantConnectivity": {
+      "fields": [
+        {
+          "name": "ok",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "category",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "message",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "latency_ms",
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "provider",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "model",
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.AssistantDiagnoseResult": {
+      "fields": [
+        {
+          "name": "findings",
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "main.AssistantFinding"
+            },
+            "kind": "array"
+          }
+        },
+        {
+          "name": "checked",
+          "type": {
+            "kind": "integer"
+          }
+        }
+      ]
+    },
+    "main.AssistantFinding": {
+      "fields": [
+        {
+          "name": "code",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "severity",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "title",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "detail",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "provider",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "fix",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.AssistantHistoryRecord": {
+      "fields": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "kind",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "created_at",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "intent",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "diff",
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "main.AssistantPlanRow"
+            },
+            "kind": "array"
+          }
+        },
+        {
+          "name": "backup_id",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "backup_dir",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "status",
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.AssistantPlanRow": {
+      "fields": [
+        {
+          "name": "label",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "before",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "after",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "sensitive",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "risk",
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.AssistantPlanView": {
+      "fields": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "intent",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "reply",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "diff",
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "main.AssistantPlanRow"
+            },
+            "kind": "array"
+          }
+        },
+        {
+          "name": "requires_confirmation",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "comment_warning",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "op_count",
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "expires_at",
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.AssistantRejection": {
+      "fields": [
+        {
+          "name": "reason",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "message",
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.AssistantRollbackResult": {
+      "fields": [
+        {
+          "name": "backup_id",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "message",
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "main.AssistantStatusView": {
+      "fields": [
+        {
+          "name": "configured",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "endpoint",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "model",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "kind",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "key_set",
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "config_path",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "home_dir",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "note",
+          "type": {
+            "kind": "string"
           }
         }
       ]
