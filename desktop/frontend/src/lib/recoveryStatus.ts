@@ -40,6 +40,8 @@ export interface WireAttemptFailure {
   code?: string;
   retryable: boolean;
   backoffMs?: number;
+  /** Raw server Retry-After, when one was sent and exceeded the schedule. */
+  retryAfterMs?: number;
   elapsedMs?: number;
   at?: number;
   providerId?: string;
@@ -101,7 +103,11 @@ export function retryFailureText(t: Translator, failure?: WireAttemptFailure, no
   if (!failure) return "";
   const reason = retryKindLabel(t, failure);
   const seconds = retryCountdownSeconds(failure, now);
-  if (seconds > 0) return t("status.retryBackoff", { reason, seconds });
+  if (seconds > 0) {
+    return failure.retryAfterMs
+      ? t("status.retryServerWait", { reason, seconds, requested: Math.ceil(failure.retryAfterMs / 1000) })
+      : t("status.retryBackoff", { reason, seconds });
+  }
   return failure.backoffMs ? t("status.retryingNow") : reason;
 }
 

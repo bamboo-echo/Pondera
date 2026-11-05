@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -14,6 +15,11 @@ const (
 	firstRetryDelay    = 2 * time.Second
 	secondRetryDelay   = 4 * time.Second
 	laterRetryDelay    = 8 * time.Second
+	// maxServerRetryAfter is the longest wait Pondera will honour from a
+	// Retry-After header. Beyond it the retry chain stops: replaying early only
+	// re-earns the same 429, and the retry budget cannot shorten a window the
+	// server has already fixed.
+	maxServerRetryAfter = 60 * time.Second
 )
 
 // retryWait owns the backoff sleep so tests can replace it. Production waits
@@ -77,18 +83,44 @@ func retryableModelFailure(err error) bool {
 	}
 }
 
+// retryAfterRefusal ends the retry chain when the server asks for longer than
+// maxServerRetryAfter. It wraps the transport error so classification (and
+// errors.As) still points at the original 429/5xx, while the message tells the
+// reader how long the server wanted.
+type retryAfterRefusal struct {
+	err  error
+	wait time.Duration
+}
+
+func (e *retryAfterRefusal) Error() string {
+	return fmt.Sprintf("%s (server asked to wait %d seconds before retrying; Pondera stopped instead of retrying early)", e.err.Error(), int(e.wait/time.Second))
+}
+
+func (e *retryAfterRefusal) Unwrap() error { return e.err }
+
 // retryModelRequest waits out the backoff and replays the frozen request. It
 // returns false when the budget is spent, the failure is not retryable, the
 // attempt already produced visible output, or the user cancelled.
-func (a *Agent) retryModelRequest(ctx context.Context, state *samplingRecoveryState, result streamedTurn, sink *deferredStreamSink, attempt int, id string) bool {
+func (a *Agent) retryModelRequest(ctx context.Context, state *samplingRecoveryState, result *streamedTurn, sink *deferredStreamSink, attempt int, id string) bool {
 	if a.retryCount <= 0 || state.retries >= a.retryCount || ctx.Err() != nil {
 		return false
 	}
 	if !retryableModelFailure(result.err) || !isEmptyStreamResult(result.text, result.reasoning, result.calls, result.responsesItems, result.serverSearch) {
 		return false
 	}
+	// The server's own Retry-After is authoritative inside the cap: waiting the
+	// schedule instead just earns another 429. Outside the cap, refuse before
+	// spending a retry so the failure names the wait the server demanded.
+	serverWait := provider.ClassifyRecovery(result.err).RetryAfter
+	if serverWait > maxServerRetryAfter {
+		result.err = &retryAfterRefusal{err: result.err, wait: serverWait}
+		return false
+	}
 	state.retries++
 	delay := modelRetryDelay(state.retries)
+	if serverWait > delay {
+		delay = serverWait
+	}
 	// Denominator = every request this round can still send at most: attempts
 	// already made (sampling repairs included), the remaining retries, and the
 	// final attempt that ends the chain. Repairs do not consume the retry
@@ -121,6 +153,9 @@ func (a *Agent) buildAttemptFailure(err error, attempt, max int, backoff time.Du
 	failure.Max = max
 	if backoff > 0 {
 		failure.BackoffMs = int(backoff / time.Millisecond)
+	}
+	if wait := provider.ClassifyRecovery(err).RetryAfter; wait > 0 {
+		failure.RetryAfterMs = int(wait / time.Millisecond)
 	}
 	if !started.IsZero() {
 		failure.ElapsedMs = time.Since(started).Milliseconds()
@@ -166,6 +201,7 @@ func (a *Agent) logAttemptFailure(id string, attempt int, reason string, failure
 		"code", failure.Code,
 		"retryable", failure.Retryable,
 		"backoff_ms", failure.BackoffMs,
+		"retry_after_ms", failure.RetryAfterMs,
 		"elapsed_ms", failure.ElapsedMs,
 		"provider_id", failure.ProviderID,
 		"model", failure.Model,

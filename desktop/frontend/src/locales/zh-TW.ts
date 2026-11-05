@@ -975,6 +975,7 @@ export const zhTW: Record<DictKey, string> = {
   "status.retrying": "正在重試 ({attempt}/{max})…",
   "status.retryReason": " · {reason}",
   "status.retryBackoff": "{reason}，{seconds} 秒後重試",
+  "status.retryServerWait": "{reason}，{seconds} 秒後重試（服務端要求等待 {requested} 秒）",
   "status.retryingNow": "正在重試…",
   "status.retryElapsedBackoff": "退避 {seconds}s",
   "status.retryElapsed": "耗時 {seconds}s",

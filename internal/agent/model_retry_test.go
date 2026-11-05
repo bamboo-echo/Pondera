@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -233,6 +234,81 @@ func TestModelRetrySkipsAttemptsThatAlreadyProducedOutput(t *testing.T) {
 	_ = a.Run(withNoClosedLoop(context.Background()), "go")
 	if p.CallCount() != 1 {
 		t.Fatalf("calls = %d, want 1", p.CallCount())
+	}
+}
+
+func TestModelRetryHonoursServerRetryAfterInsideCap(t *testing.T) {
+	waits := withoutRetryWait(t)
+	sink := &recordSink{}
+	p := testutil.NewMock("limited",
+		testutil.Turn{StreamError: &provider.APIError{Status: 429, RetryAfter: 30 * time.Second}},
+		testutil.Turn{Text: "ok"},
+	)
+	a := New(p, echoRegistry(), NewSession(""), Options{RetryCount: 3}, sink)
+	if err := a.Run(withNoClosedLoop(context.Background()), "go"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(*waits) != 1 || (*waits)[0] != 30*time.Second {
+		t.Fatalf("waits = %v, want [30s] (the server Retry-After wins over the 2s schedule)", *waits)
+	}
+	retries := sink.kinds(event.Retrying)
+	if len(retries) != 1 {
+		t.Fatalf("retrying events = %d, want 1", len(retries))
+	}
+	failure := retries[0].AttemptFailure
+	if failure == nil || failure.BackoffMs != 30000 || failure.RetryAfterMs != 30000 {
+		t.Fatalf("failure = %+v, want backoff and retry-after both 30000ms", failure)
+	}
+}
+
+func TestModelRetryRefusesServerWaitBeyondCap(t *testing.T) {
+	previous := retryWait
+	retryWait = func(context.Context, time.Duration) bool {
+		t.Fatal("a wait beyond the cap must stop instead of sleeping")
+		return false
+	}
+	t.Cleanup(func() { retryWait = previous })
+
+	sink := &recordSink{}
+	p := testutil.NewMock("limited",
+		testutil.Turn{StreamError: &provider.APIError{Status: 429, RetryAfter: 120 * time.Second}},
+		testutil.Turn{Text: "never"},
+	)
+	a := New(p, echoRegistry(), NewSession(""), Options{RetryCount: 15}, sink)
+	err := a.Run(withNoClosedLoop(context.Background()), "go")
+	if err == nil {
+		t.Fatal("want a failure naming the server wait")
+	}
+	if !strings.Contains(err.Error(), "120") {
+		t.Fatalf("err = %v, want the server wait in seconds", err)
+	}
+	var api *provider.APIError
+	if !errors.As(err, &api) || api.Status != 429 {
+		t.Fatalf("err = %v, want the original 429 preserved for classification", err)
+	}
+	if p.CallCount() != 1 || len(sink.kinds(event.Retrying)) != 0 {
+		t.Fatalf("calls = %d, retries = %d, want 1 and 0", p.CallCount(), len(sink.kinds(event.Retrying)))
+	}
+}
+
+func TestModelRetryFallsBackToScheduleWhenRetryAfterIsZero(t *testing.T) {
+	// parseRetryAfter yields 0 for a missing header and for an elapsed HTTP-date,
+	// so both land on the unchanged 2s schedule.
+	waits := withoutRetryWait(t)
+	sink := &recordSink{}
+	p := testutil.NewMock("limited",
+		testutil.Turn{StreamError: &provider.APIError{Status: 429}},
+		testutil.Turn{Text: "ok"},
+	)
+	a := New(p, echoRegistry(), NewSession(""), Options{RetryCount: 3}, sink)
+	if err := a.Run(withNoClosedLoop(context.Background()), "go"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(*waits) != 1 || (*waits)[0] != 2*time.Second {
+		t.Fatalf("waits = %v, want [2s]", *waits)
+	}
+	if failure := sink.kinds(event.Retrying)[0].AttemptFailure; failure == nil || failure.RetryAfterMs != 0 || failure.BackoffMs != 2000 {
+		t.Fatalf("failure = %+v, want no retry-after and the 2000ms schedule", failure)
 	}
 }
 

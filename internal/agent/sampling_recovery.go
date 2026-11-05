@@ -100,7 +100,7 @@ func (a *Agent) streamWithSamplingRecovery(parent context.Context, turn int) (te
 		if attempt < maxSamplingAttempts && a.trySamplingRepair(ctx, &state, result, sink, attempt, id) {
 			continue
 		}
-		if a.retryModelRequest(ctx, &state, result, sink, attempt, id) {
+		if a.retryModelRequest(ctx, &state, &result, sink, attempt, id) {
 			continue
 		}
 		sink.Flush()

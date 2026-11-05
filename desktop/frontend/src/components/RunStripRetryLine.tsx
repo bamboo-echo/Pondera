@@ -25,14 +25,13 @@ export function RunStripRetryLine({ t, stateText, history, children }: RunStripR
   const toggleRef = useRef<HTMLButtonElement>(null);
   const detailsRef = useRef<HTMLDivElement>(null);
   const detailsId = useId();
-  const expanded = Boolean(history?.length && open);
+  const expanded = !!(history?.length && open);
 
   useEffect(() => {
-    if (!history?.length && open) setOpen(false);
-  }, [history?.length, open]);
-
-  useEffect(() => {
-    if (!expanded) return;
+    if (!expanded) {
+      setOpen(false);
+      return;
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -68,14 +67,13 @@ export function RunStripRetryLine({ t, stateText, history, children }: RunStripR
         className="composer-run-strip__toggle composer-run-strip__toggle--wide"
         aria-expanded={expanded}
         aria-controls={detailsId}
-        title={t("status.retryDetails")}
         onClick={() => setOpen((value) => !value)}
       >
         <span className="composer-run-strip__state">{stateText}</span>
         {children}
         <ChevronDown size={12} aria-hidden="true" />
       </button>
-      <div ref={detailsRef} id={detailsId} className="composer-retry-detail" role="dialog" aria-label={t("status.retryDetails")} hidden={!expanded}>
+      <div ref={detailsRef} id={detailsId} className="composer-retry-detail" hidden={!expanded}>
         <div className="composer-retry-detail__title">{t("status.retryDetails")}</div>
         <ul>
           {history.map((failure) => (

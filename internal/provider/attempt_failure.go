@@ -39,7 +39,11 @@ type AttemptFailure struct {
 	Code       string      `json:"code,omitempty"`
 	Retryable  bool        `json:"retryable"`
 	BackoffMs  int         `json:"backoffMs,omitempty"`
-	ElapsedMs  int64       `json:"elapsedMs,omitempty"`
+	// RetryAfterMs is the server's raw Retry-After request. It is kept separate
+	// from BackoffMs so the UI can say what the server asked for even when the
+	// applied delay differs (the schedule was longer, or the cap refused it).
+	RetryAfterMs int   `json:"retryAfterMs,omitempty"`
+	ElapsedMs    int64 `json:"elapsedMs,omitempty"`
 	At         int64       `json:"at,omitempty"`
 	ProviderID string      `json:"providerId,omitempty"`
 	Model      string      `json:"model,omitempty"`

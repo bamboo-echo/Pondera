@@ -1198,6 +1198,7 @@ export const en = {
   "status.retrying": "retrying ({attempt}/{max})…",
   "status.retryReason": " · {reason}",
   "status.retryBackoff": "{reason}, retrying in {seconds}s",
+  "status.retryServerWait": "{reason}, {seconds}s (server: {requested}s)",
   "status.retryingNow": "retrying now…",
   "status.retryElapsedBackoff": "backoff {seconds}s",
   "status.retryElapsed": "took {seconds}s",
