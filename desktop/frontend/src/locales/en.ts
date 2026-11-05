@@ -1210,6 +1210,7 @@ export const en = {
   "status.retryKind.context_overflow": "context overflow",
   "status.retryKind.output_limit": "output limit",
   "status.retryKind.protocol_replay": "protocol replay",
+  "status.retryKind.client_error": "request rejected",
   "status.retryKind.unknown": "unknown error",
   "status.balanceTitle": "Wallet balance",
   "status.spendTitle": "Estimated billable spend in this session, including model, subagent, and helper calls",

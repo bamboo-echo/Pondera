@@ -987,6 +987,7 @@ export const zhTW: Record<DictKey, string> = {
   "status.retryKind.context_overflow": "上下文超限",
   "status.retryKind.output_limit": "輸出長度超限",
   "status.retryKind.protocol_replay": "推理回放異常",
+  "status.retryKind.client_error": "請求被拒絕",
   "status.retryKind.unknown": "未知錯誤",
   "status.balanceTitle": "錢包餘額",
   "status.spendTitle": "本會話估算計費費用，包含主模型、子代理和輔助呼叫",

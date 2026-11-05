@@ -363,8 +363,19 @@ func classifyProbeError(err error) (string, string) {
 		return "forbidden", "权限不足（403）：该 key 无权访问该模型"
 	case http.StatusNotFound:
 		return "not_found", "端点或模型不存在（404）：检查 base_url 与模型名"
+	case http.StatusMethodNotAllowed:
+		return "client_error", "请求被拒绝（405）：该端点不接受这个请求方式，检查 base_url 是否多带了路径前缀"
+	case http.StatusRequestEntityTooLarge:
+		return "client_error", "请求被拒绝（413）：请求体过大，检查输入长度或模型限制"
+	case http.StatusUnprocessableEntity:
+		return "client_error", "请求被拒绝（422）：参数校验失败，检查模型名与请求参数"
+	case http.StatusBadRequest:
+		return "client_error", "请求被拒绝（400）：端点不接受该请求，检查 base_url 与模型名"
 	case http.StatusTooManyRequests:
 		return "rate_limit", "触发限流（429）：稍后重试或降低频率"
+	}
+	if status := probeStatus(err); status >= 400 && status <= 499 {
+		return "client_error", fmt.Sprintf("请求被拒绝（%d）：端点不接受该请求，检查 base_url 与模型名", status)
 	}
 	lower := strings.ToLower(probeURLPattern.ReplaceAllString(err.Error(), ""))
 	switch {
@@ -383,7 +394,9 @@ func classifyProbeError(err error) (string, string) {
 	case strings.Contains(lower, "tls") || strings.Contains(lower, "certificate"):
 		return "tls", "TLS 证书错误：检查代理或系统证书"
 	}
-	return "unknown", err.Error()
+	// Never echo the provider error text here: it may contain a raw response
+	// body. The deterministic fallback is enough to tell the user what to try.
+	return "unknown", "请求失败：无法识别的原因，检查端点、模型名与网络后重试"
 }
 
 // probeStatus extracts an HTTP status from structured provider errors, so

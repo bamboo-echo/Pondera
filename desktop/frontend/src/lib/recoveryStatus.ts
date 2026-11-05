@@ -26,6 +26,7 @@ export type RetryFailureKind =
   | "context_overflow"
   | "output_limit"
   | "protocol_replay"
+  | "client_error"
   | "unknown";
 
 // Mirrors provider.AttemptFailure. Display-safe by construction: the backend

@@ -18,6 +18,8 @@ func TestExplainFailureClassifiesRetryReasons(t *testing.T) {
 		{"rate limit", &APIError{Status: 429}, FailureKindRateLimit, 429, true},
 		{"server error", &APIError{Status: 502}, FailureKindServerError, 502, true},
 		{"auth", &AuthError{Status: 401}, FailureKindAuth, 401, false},
+		{"auth 401 headers", &APIError{Status: 401}, FailureKindAuth, 401, false},
+		{"auth 403 headers", &APIError{Status: 403}, FailureKindAuth, 403, false},
 		{"quota", &QuotaError{Status: 402}, FailureKindQuota, 402, false},
 		{"context limit", &ContextLimitError{APIError: &APIError{Status: 400}}, FailureKindContextLimit, 400, true},
 		{"output limit", &OutputLimitError{APIError: &APIError{Status: 400}}, FailureKindOutputLimit, 400, true},
@@ -26,7 +28,10 @@ func TestExplainFailureClassifiesRetryReasons(t *testing.T) {
 		{"connection reset", &StreamInterruptedError{Reason: StreamInterruptConnectionReset}, FailureKindNetwork, 0, true},
 		{"empty response", ErrEmptyResponse, FailureKindEmptyResponse, 0, true},
 		{"deadline stays unknown", context.DeadlineExceeded, FailureKindUnknown, 0, false},
-		{"permanent 400", &APIError{Status: 400}, FailureKindUnknown, 400, false},
+		{"permanent 400", &APIError{Status: 400}, FailureKindClientError, 400, false},
+		{"method not allowed 405", &APIError{Status: 405}, FailureKindClientError, 405, false},
+		{"payload too large 413", &APIError{Status: 413}, FailureKindClientError, 413, false},
+		{"unprocessable 422", &APIError{Status: 422}, FailureKindClientError, 422, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

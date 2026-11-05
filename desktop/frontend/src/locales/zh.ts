@@ -1211,6 +1211,7 @@ export const zh: Record<DictKey, string> = {
   "status.retryKind.context_overflow": "上下文超限",
   "status.retryKind.output_limit": "输出长度超限",
   "status.retryKind.protocol_replay": "推理回放异常",
+  "status.retryKind.client_error": "请求被拒绝",
   "status.retryKind.unknown": "未知错误",
   "status.balanceTitle": "钱包余额",
   "status.spendTitle": "当前会话估算计费费用，包含主模型、子代理和辅助调用",

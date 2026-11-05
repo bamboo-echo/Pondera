@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -155,16 +156,100 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	label := ProviderDisplayLabel(e.Provider, e.ProviderDisplayName, e.Protocol)
-	var base string
-	if e.Body == "" {
-		base = fmt.Sprintf("%s: status %d", label, e.Status)
-	} else {
-		base = fmt.Sprintf("%s: status %d: %s", label, e.Status, e.Body)
+	base := fmt.Sprintf("%s: status %d", label, e.Status)
+	switch detail := readableErrorDetail(e.Body); {
+	case detail != "":
+		base += ": " + detail
+	case strings.TrimSpace(e.Body) != "":
+		if json.Valid([]byte(strings.TrimSpace(e.Body))) {
+			base += "（响应缺少错误详情）"
+		} else {
+			base += "（响应非 JSON）"
+		}
 	}
 	if e.ToolContext != "" {
 		return base + "\n" + e.ToolContext
 	}
 	return base
+}
+
+// readableErrorDetail extracts only the whitelisted structured error fields.
+// The raw response body is never surfaced: HTML pages, trace dumps and echoed
+// credentials must not reach a user-visible message.
+const maxErrorDetailRunes = 160
+
+func readableErrorDetail(body string) string {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" || !json.Valid([]byte(trimmed)) {
+		return ""
+	}
+	var parsed struct {
+		Error struct {
+			Type    string          `json:"type"`
+			Message string          `json:"message"`
+			Code    json.RawMessage `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal([]byte(trimmed), &parsed) != nil {
+		return ""
+	}
+	code := ""
+	if len(parsed.Error.Code) > 0 {
+		var asString string
+		if json.Unmarshal(parsed.Error.Code, &asString) == nil {
+			code = asString
+		} else {
+			code = strings.Trim(string(parsed.Error.Code), `"`)
+		}
+	}
+	for _, field := range []string{parsed.Error.Message, parsed.Error.Type, code} {
+		if detail := displaySafeErrorText(field); detail != "" {
+			return detail
+		}
+	}
+	return ""
+}
+
+// displaySafeErrorText strips markup/control characters, drops anything that
+// looks like a credential, and hard-truncates the remainder.
+func displaySafeErrorText(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	lower := strings.ToLower(value)
+	for _, marker := range []string{"sk-", "bearer", "authorization", "api_key", "apikey", "token=", "secret"} {
+		if strings.Contains(lower, marker) {
+			return ""
+		}
+	}
+	var b strings.Builder
+	inTag := false
+	runes := 0
+	for _, r := range value {
+		switch {
+		case r == '<':
+			inTag = true
+			continue
+		case r == '>':
+			inTag = false
+			continue
+		case inTag:
+			continue
+		case r < 0x20 || r == 0x7f:
+			if r != '\t' && r != '\n' && r != '\r' {
+				continue
+			}
+		}
+		if runes >= maxErrorDetailRunes {
+			b.WriteString("…")
+			break
+		}
+		b.WriteRune(r)
+		runes++
+	}
+	text := strings.Join(strings.Fields(b.String()), " ")
+	return strings.TrimSpace(text)
 }
 
 // RetryableStatus reports whether a backoff can plausibly recover from status s:

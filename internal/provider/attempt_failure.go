@@ -21,7 +21,10 @@ const (
 	FailureKindContextLimit  FailureKind = "context_overflow"
 	FailureKindOutputLimit   FailureKind = "output_limit"
 	FailureKindProtocol      FailureKind = "protocol_replay"
-	FailureKindUnknown       FailureKind = "unknown"
+	// FailureKindClientError covers non-auth 4xx responses: the endpoint
+	// rejected the request itself (400/405/413/422, …). Retrying cannot help.
+	FailureKindClientError FailureKind = "client_error"
+	FailureKindUnknown     FailureKind = "unknown"
 )
 
 // AttemptFailure describes one failed model request attempt. It deliberately
@@ -106,6 +109,12 @@ func ExplainFailure(err error) AttemptFailure {
 			out.Kind = FailureKindTimeout
 		case out.Status >= 500 && out.Status <= 599:
 			out.Kind = FailureKindServerError
+		case out.Status == 401 || out.Status == 403:
+			// Auth normally arrives as *AuthError; keep raw header errors
+			// classified the same way.
+			out.Kind, out.Retryable = FailureKindAuth, false
+		case out.Status >= 400 && out.Status <= 499:
+			out.Kind, out.Retryable = FailureKindClientError, false
 		default:
 			out.Kind = FailureKindUnknown
 		}

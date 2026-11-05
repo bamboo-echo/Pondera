@@ -69,3 +69,28 @@ func TestConnectivityEndpointClassifies(t *testing.T) {
 		t.Fatalf("category = %q, want timeout (port must not be read as a status)", category)
 	}
 }
+
+// TestConnectivityEndpoint405NonJSON covers a real-world probe against a
+// non-API endpoint: a 405 page must classify as client_error and the HTML body
+// must never reach the user-visible message.
+func TestConnectivityEndpoint405NonJSON(t *testing.T) {
+	const body = "<html><head><title>Example Domain</title></head><body><h1>Example Domain</h1></body></html>"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	result := ConnectivityEndpoint(context.Background(), server.URL+"/v1", "openai", "draft-model", "sk-draft-secret")
+	if result.Category != "client_error" {
+		t.Fatalf("category = %q, want client_error (message %q)", result.Category, result.Message)
+	}
+	for _, forbidden := range []string{"<", ">", "Example Domain", "html", "sk-"} {
+		if strings.Contains(result.Message, forbidden) {
+			t.Fatalf("probe message leaked %q: %q", forbidden, result.Message)
+		}
+	}
+	if result.Message == "" || !strings.Contains(result.Message, "405") {
+		t.Fatalf("message should name the status deterministically: %q", result.Message)
+	}
+}
