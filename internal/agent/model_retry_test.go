@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -39,7 +40,7 @@ func TestModelRetryReplaysTransientFailuresWithConfiguredBackoff(t *testing.T) {
 		t.Fatalf("waits = %v, want [2s 4s]", *waits)
 	}
 	retries := sink.kinds(event.Retrying)
-	wantMax := maxSamplingAttempts + 3
+	wantMax := 1 + 3
 	if len(retries) != 2 || retries[0].RetryAttempt != 1 || retries[1].RetryAttempt != 2 || retries[0].RetryMax != wantMax {
 		t.Fatalf("retrying events = %+v", retries)
 	}
@@ -67,6 +68,51 @@ func TestModelRetryReplaysTransientFailuresWithConfiguredBackoff(t *testing.T) {
 		if attempt.StreamAttempt.Failure == nil || attempt.StreamAttempt.Failure.Status != 503 {
 			t.Fatalf("discard failure = %+v", attempt.StreamAttempt.Failure)
 		}
+	}
+}
+
+func TestModelRetryDenominatorMatchesRealRequestBound(t *testing.T) {
+	// retry_count 0/1/2 plus the config default (3): the denominator must be
+	// the number of requests the loop can actually send, 1+retry_count.
+	for _, retryCount := range []int{0, 1, 2, 3} {
+		t.Run(fmt.Sprintf("retry-%d", retryCount), func(t *testing.T) {
+			waits := withoutRetryWait(t)
+			statusErr := &provider.APIError{Status: 429}
+			turns := make([]testutil.Turn, retryCount+1)
+			for i := range turns {
+				turns[i] = testutil.Turn{StreamError: statusErr}
+			}
+			p := testutil.NewMock("always-down", turns...)
+			sink := &recordSink{}
+			a := New(p, echoRegistry(), NewSession(""), Options{RetryCount: retryCount}, sink)
+			_ = a.Run(withNoClosedLoop(context.Background()), "go")
+
+			wantMax := 1 + retryCount
+			if p.CallCount() != wantMax {
+				t.Fatalf("calls = %d, want %d (initial + %d retries)", p.CallCount(), wantMax, retryCount)
+			}
+			if len(*waits) != retryCount {
+				t.Fatalf("waits = %d, want %d", len(*waits), retryCount)
+			}
+			retries := sink.kinds(event.Retrying)
+			if len(retries) != retryCount {
+				t.Fatalf("retrying events = %d, want %d", len(retries), retryCount)
+			}
+			for i, retry := range retries {
+				if retry.RetryAttempt != i+1 {
+					t.Fatalf("retry %d numerator = %d, want %d", i+1, retry.RetryAttempt, i+1)
+				}
+				if retry.RetryAttempt > retry.RetryMax {
+					t.Fatalf("retry counter %d/%d exceeds denominator", retry.RetryAttempt, retry.RetryMax)
+				}
+				if retry.RetryMax != wantMax {
+					t.Fatalf("retry %d denominator = %d, want %d", i+1, retry.RetryMax, wantMax)
+				}
+				if retry.AttemptFailure == nil || retry.AttemptFailure.Attempt != retry.RetryAttempt || retry.AttemptFailure.Max != retry.RetryMax {
+					t.Fatalf("retry %d failure counters disagree: %+v", i+1, retry.AttemptFailure)
+				}
+			}
+		})
 	}
 }
 

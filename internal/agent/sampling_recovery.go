@@ -185,13 +185,13 @@ func (a *Agent) trySamplingRepair(ctx context.Context, s *samplingRecoveryState,
 		s.frozen.req.MaxTokens = limit.MaxOutputTokens
 		sink.Discard()
 		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "output_limit", result.err,
-			a.buildAttemptFailure(result.err, attempt, 0, s.attemptStartedAt))
+			a.buildAttemptFailure(result.err, attempt, maxSamplingAttempts, 0, s.attemptStartedAt))
 		return true
 	}
 	if next, ok, _ := a.recoverContextLimit(ctx, s.frozen, result.err, &s.context); ok {
 		sink.Discard()
 		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "context_limit", result.err,
-			a.buildAttemptFailure(result.err, attempt, 0, s.attemptStartedAt))
+			a.buildAttemptFailure(result.err, attempt, maxSamplingAttempts, 0, s.attemptStartedAt))
 		s.frozen = next
 		return true
 	}

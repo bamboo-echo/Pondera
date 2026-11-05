@@ -295,9 +295,17 @@ func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, a
 		reason = provider.StreamInterruptReason(err)
 	}
 	if failure == nil && err != nil {
-		failure = a.buildAttemptFailure(err, attempt, 0, time.Time{})
+		max := maxSamplingAttempts
+		if reason == "retry" {
+			max = a.transportAttemptLimit()
+		}
+		failure = a.buildAttemptFailure(err, attempt, max, 0, time.Time{})
 	}
-	info := event.StreamAttemptInfo{ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts + a.retryCount, Reason: reason, Failure: failure}
+	max := maxSamplingAttempts
+	if failure != nil && failure.Max > 0 {
+		max = failure.Max
+	}
+	info := event.StreamAttemptInfo{ID: id, Action: action, Attempt: attempt, Max: max, Reason: reason, Failure: failure}
 	if len(summary) > 0 {
 		info.Response = summary[0]
 	}

@@ -39,6 +39,15 @@ func normalizeRetryCount(n int) int {
 	return n
 }
 
+// transportAttemptLimit is the real upper bound of the transport replay chain
+// for one model round: the initial request plus one replay per configured
+// retry. maxSamplingAttempts bounds a separate repair chain (output/context/
+// protocol); adding the two produced a denominator (6 for retry_count=2) that
+// the loop could never reach because only 1+retry_count requests are sent.
+func (a *Agent) transportAttemptLimit() int {
+	return 1 + a.retryCount
+}
+
 // modelRetryDelay returns the wait before retry number `retry` (1-based):
 // 2s, 4s, then 8s for every later attempt.
 func modelRetryDelay(retry int) time.Duration {
@@ -80,11 +89,15 @@ func (a *Agent) retryModelRequest(ctx context.Context, state *samplingRecoverySt
 	}
 	state.retries++
 	delay := modelRetryDelay(state.retries)
-	failure := a.buildAttemptFailure(result.err, attempt, delay, state.attemptStartedAt)
+	failure := a.buildAttemptFailure(result.err, attempt, a.transportAttemptLimit(), delay, state.attemptStartedAt)
+	retryMax := a.transportAttemptLimit()
+	if failure != nil {
+		retryMax = failure.Max
+	}
 	a.svc.sink.Emit(event.Event{
 		Kind:           event.Retrying,
 		RetryAttempt:   attempt,
-		RetryMax:       maxSamplingAttempts + a.retryCount,
+		RetryMax:       retryMax,
 		RetryScope:     event.RetryScopeStream,
 		AttemptFailure: failure,
 	})
@@ -94,14 +107,16 @@ func (a *Agent) retryModelRequest(ctx context.Context, state *samplingRecoverySt
 }
 
 // buildAttemptFailure fills the timing and identity fields the provider layer
-// cannot know. It never includes error text.
-func (a *Agent) buildAttemptFailure(err error, attempt int, backoff time.Duration, started time.Time) *provider.AttemptFailure {
+// cannot know. It never includes error text. max is the attempt budget of the
+// chain that produced the failure, so the numerator and denominator share one
+// counting scheme.
+func (a *Agent) buildAttemptFailure(err error, attempt, max int, backoff time.Duration, started time.Time) *provider.AttemptFailure {
 	if err == nil {
 		return nil
 	}
 	failure := provider.ExplainFailure(err)
 	failure.Attempt = attempt
-	failure.Max = maxSamplingAttempts + a.retryCount
+	failure.Max = max
 	if backoff > 0 {
 		failure.BackoffMs = int(backoff / time.Millisecond)
 	}
@@ -118,8 +133,10 @@ func (a *Agent) buildAttemptFailure(err error, attempt int, backoff time.Duratio
 
 func (a *Agent) protocolAttemptFailure(attempt int) *provider.AttemptFailure {
 	return &provider.AttemptFailure{
-		Attempt:    attempt,
-		Max:        maxSamplingAttempts + a.retryCount,
+		Attempt: attempt,
+		// The protocol repair chain has one replay; emitProtocolRetry reports
+		// the same one-attempt budget, so the counters share a base.
+		Max:        1,
 		Kind:       provider.FailureKindProtocol,
 		Phase:      "protocol",
 		Retryable:  true,

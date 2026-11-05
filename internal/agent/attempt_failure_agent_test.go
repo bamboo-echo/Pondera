@@ -28,7 +28,7 @@ func TestBuildAttemptFailureKindsAndBackoff(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			failure := a.buildAttemptFailure(tc.err, tc.attempt, tc.backoff, time.Now())
+			failure := a.buildAttemptFailure(tc.err, tc.attempt, a.transportAttemptLimit(), tc.backoff, time.Now())
 			if failure == nil {
 				t.Fatal("nil failure")
 			}
@@ -38,8 +38,8 @@ func TestBuildAttemptFailureKindsAndBackoff(t *testing.T) {
 			if failure.BackoffMs != int(tc.backoff/time.Millisecond) {
 				t.Fatalf("backoff = %d, want %d", failure.BackoffMs, int(tc.backoff/time.Millisecond))
 			}
-			if failure.Attempt != tc.attempt || failure.Max != maxSamplingAttempts+15 {
-				t.Fatalf("denominator = %d/%d, want %d/%d", failure.Attempt, failure.Max, tc.attempt, maxSamplingAttempts+15)
+			if failure.Attempt != tc.attempt || failure.Max != 1+15 {
+				t.Fatalf("denominator = %d/%d, want %d/%d", failure.Attempt, failure.Max, tc.attempt, 1+15)
 			}
 			if failure.Model != "deepseek-chat" || failure.At == 0 {
 				t.Fatalf("identity missing: %+v", failure)
@@ -51,7 +51,7 @@ func TestBuildAttemptFailureKindsAndBackoff(t *testing.T) {
 func TestBuildAttemptFailureIgnoresContextDeadline(t *testing.T) {
 	a := new(Agent)
 	a.retryCount = 3
-	failure := a.buildAttemptFailure(context.DeadlineExceeded, 1, 0, time.Time{})
+	failure := a.buildAttemptFailure(context.DeadlineExceeded, 1, maxSamplingAttempts, 0, time.Time{})
 	if failure == nil || failure.Kind != provider.FailureKindUnknown || failure.Retryable {
 		t.Fatalf("deadline classified as %+v, want unknown and non-retryable", failure)
 	}
