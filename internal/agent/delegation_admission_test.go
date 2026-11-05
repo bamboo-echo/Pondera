@@ -40,6 +40,7 @@ func (s *admissionSink) RecordDelegationAdmission(a event.DelegationAdmissionAud
 func TestObserveDelegationAdmissionRecordsOnlyGatedTools(t *testing.T) {
 	sink := &admissionSink{}
 	a := &Agent{svc: agentServices{sink: sink}}
+	a.turn = a.allocateTurn()
 	a.turn.recoveryTaskSummary = "fix the failing date parser"
 	a.observeDelegationAdmission([]provider.ToolCall{
 		{Name: "read_file", Arguments: `{"path":"a.go"}`},

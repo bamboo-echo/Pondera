@@ -31,7 +31,7 @@ func TestRunSkillMissingNestedArgumentsDoesNotStartSubagent(t *testing.T) {
 	})
 	reg.Add(proxy)
 	a := New(nil, reg, NewSession("sys"), Options{}, event.Discard)
-	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+	out := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 		ID: "bad-1", Name: "use_capability",
 		Arguments: `{"action":"call","capability_id":"skill:team-architect","arguments":{}}`,
 	})
@@ -61,7 +61,7 @@ func TestMCPInvalidArgumentsDoNotCallRemote(t *testing.T) {
 	reg.Add(proxy)
 	audit := &capability.Audit{}
 	a := New(nil, reg, NewSession("sys"), Options{CapabilityAudit: audit}, event.Discard)
-	out := a.executeOne(ctx, &a.turn, provider.ToolCall{
+	out := a.executeOne(ctx, a.turn, provider.ToolCall{
 		ID: "mcp-bad", Name: "use_capability",
 		Arguments: `{"action":"call","capability_id":"mcp-tool:svc/search","arguments":{}}`,
 	})
@@ -74,7 +74,7 @@ func TestMCPInvalidArgumentsDoNotCallRemote(t *testing.T) {
 	if got := audit.Snapshot().Arguments.RemoteDispatch; got != 0 {
 		t.Fatalf("remote dispatch audit = %d, want 0", got)
 	}
-	valid := a.executeOne(ctx, &a.turn, provider.ToolCall{
+	valid := a.executeOne(ctx, a.turn, provider.ToolCall{
 		ID: "mcp-good", Name: "use_capability",
 		Arguments: `{"action":"call","capability_id":"mcp-tool:svc/search","arguments":{"q":"pondera"}}`,
 	})
@@ -92,7 +92,7 @@ func TestUnavailableMCPCallPreservesResolutionReason(t *testing.T) {
 	reg := tool.NewRegistry()
 	reg.Add(proxy)
 	a := New(nil, reg, NewSession("sys"), Options{}, event.Discard)
-	out := a.executeOne(t.Context(), &a.turn, provider.ToolCall{
+	out := a.executeOne(t.Context(), a.turn, provider.ToolCall{
 		ID: "mcp-missing", Name: "use_capability",
 		Arguments: `{"action":"call","capability_id":"mcp-tool:never-configured/ping","arguments":{}}`,
 	})

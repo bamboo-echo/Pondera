@@ -327,7 +327,7 @@ func TestExecuteBatchParallelReadOnly(t *testing.T) {
 	a := New(nil, reg, NewSession(""), Options{}, event.Discard)
 
 	start := time.Now()
-	batch := a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{Name: "a"}, {Name: "b"}, {Name: "c"}})
+	batch := a.executeBatch(context.Background(), a.turn, []provider.ToolCall{{Name: "a"}, {Name: "b"}, {Name: "c"}})
 	results := batch.results
 	elapsed := time.Since(start)
 
@@ -350,7 +350,7 @@ func TestExecuteBatchDoesNotRunAnyToolWhenDispatchPersistenceFails(t *testing.T)
 	reg.Add(fakeTool{name: "read_file", readOnly: true, calls: &calls})
 	reg.Add(fakeTool{name: "write_file", calls: &calls})
 	a := New(nil, reg, NewSession(""), Options{}, failingToolDispatchSink{err: wantErr})
-	batch := a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
+	batch := a.executeBatch(context.Background(), a.turn, []provider.ToolCall{
 		{ID: "read", Name: "read_file"},
 		{ID: "write", Name: "write_file"},
 	})
@@ -371,7 +371,7 @@ func TestExecuteBatchStampsToolResultTimestamps(t *testing.T) {
 	a := New(nil, reg, NewSession(""), Options{}, sink)
 
 	before := time.Now().UnixMilli()
-	a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{Name: "a"}})
+	a.executeBatch(context.Background(), a.turn, []provider.ToolCall{{Name: "a"}})
 	after := time.Now().UnixMilli()
 
 	results := sink.kinds(event.ToolResult)
@@ -396,7 +396,7 @@ func TestExecuteBatchMarksOnlyExecutedWritersForWorkspaceRefresh(t *testing.T) {
 	reg.Add(fakeTool{name: "read_file", readOnly: true})
 	sink := &recordSink{}
 	a := New(nil, reg, NewSession(""), Options{}, sink)
-	a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
+	a.executeBatch(context.Background(), a.turn, []provider.ToolCall{
 		{Name: "write_file", Arguments: `{"path":"pkg/main.go","content":"x"}`},
 		{Name: "read_file", Arguments: `{"path":"pkg/main.go"}`},
 	})
@@ -417,7 +417,7 @@ func TestExecuteBatchMarksFailedWriterForWorkspaceRefresh(t *testing.T) {
 	reg.Add(fakeTool{name: "write_file", err: errors.New("partial write")})
 	sink := &recordSink{}
 	a := New(nil, reg, NewSession(""), Options{}, sink)
-	a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{Name: "write_file", Arguments: `{"path":"partial.go"}`}})
+	a.executeBatch(context.Background(), a.turn, []provider.ToolCall{{Name: "write_file", Arguments: `{"path":"partial.go"}`}})
 	results := sink.kinds(event.ToolResult)
 	if len(results) != 1 || !results[0].Tool.WorkspaceMutation {
 		t.Fatalf("failed writer did not invalidate workspace: %+v", results)
@@ -435,7 +435,7 @@ func TestExecuteBatchPublishesWorkspaceMutationBeforeLaterToolCompletes(t *testi
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
+		a.executeBatch(context.Background(), a.turn, []provider.ToolCall{
 			{Name: "write_file", Arguments: `{"path":"ready.go","content":"x"}`},
 			{Name: "slow_read", Arguments: `{}`},
 		})
@@ -494,7 +494,7 @@ func TestExecuteBatchCancelledCallsCarryNoTimestamps(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	a.executeBatch(ctx, &a.turn, []provider.ToolCall{{Name: "a"}})
+	a.executeBatch(ctx, a.turn, []provider.ToolCall{{Name: "a"}})
 
 	results := sink.kinds(event.ToolResult)
 	if len(results) != 1 {
@@ -524,7 +524,7 @@ func TestExecuteBatchSegmentsAroundWrites(t *testing.T) {
 	a := New(nil, reg, NewSession(""), Options{}, event.Discard)
 
 	start := time.Now()
-	batch := a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
+	batch := a.executeBatch(context.Background(), a.turn, []provider.ToolCall{
 		{Name: "ro1"},
 		{Name: "ro2"},
 		{Name: "rw"},
@@ -559,7 +559,7 @@ func TestExecuteBatchPairsRetiredCompleteStepWithoutBlockingPeers(t *testing.T) 
 	a := New(nil, reg, NewSession(""), Options{}, event.Discard)
 
 	a.SeedTodoState([]evidence.TodoItem{{Content: "Run checks", Status: "pending"}})
-	batch := a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
+	batch := a.executeBatch(context.Background(), a.turn, []provider.ToolCall{
 		{Name: "bash", Arguments: `{"command":"go test ./internal/..."}`},
 		{Name: "complete_step", Arguments: `{
 			"step":"Run checks",
@@ -582,7 +582,7 @@ func TestExecuteOneFailedReceiptDoesNotVerify(t *testing.T) {
 	reg.Add(fakeTool{name: "bash", readOnly: false, err: errors.New("boom")})
 	a := New(nil, reg, NewSession(""), Options{}, event.Discard)
 
-	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"go test ./..."}`})
+	out := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"go test ./..."}`})
 	if out.errMsg == "" {
 		t.Fatal("failing fake tool should return an error outcome")
 	}
@@ -597,7 +597,7 @@ func TestRunResetsEvidenceLedger(t *testing.T) {
 	prov := &mockProvider{name: "p", chunks: []provider.Chunk{{Type: provider.ChunkText, Text: "done"}}}
 	a := New(prov, reg, NewSession(""), Options{}, event.Discard)
 
-	a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"go test ./..."}`})
+	a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"go test ./..."}`})
 	if !a.task.ledger.HasSuccessfulCommand("go test ./...") {
 		t.Fatal("setup failed to record evidence")
 	}

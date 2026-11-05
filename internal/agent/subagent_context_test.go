@@ -35,7 +35,7 @@ func TestApplyReviewBudgetDefaults(t *testing.T) {
 }
 
 func TestFillChildFactsFromParentTurnAndLedger(t *testing.T) {
-	turn := &turnRuntime{}
+	turn := &turnRuntime{loop: &turnLoopState{}}
 	turn.loop.rememberDecision("dec-9", "ship?", "yes")
 	ledger := evidence.NewLedger()
 	ledger.Record(evidence.Receipt{

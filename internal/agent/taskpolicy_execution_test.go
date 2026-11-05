@@ -38,7 +38,7 @@ func TestTaskPolicyUsesStructuredCommandEffects(t *testing.T) {
 	a.turn.constraints = runtimepolicy.Constraints{ForbidMutation: true}
 	a.turn.engine = runtimepolicy.NewEngine(a.turn.constraints)
 
-	listing := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"git branch -a"}`})
+	listing := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"git branch -a"}`})
 	if listing.blocked || listing.errMsg != "" {
 		t.Fatalf("branch listing outcome = %+v, want execution", listing)
 	}
@@ -63,7 +63,7 @@ func TestTaskPolicyUsesStructuredCommandEffects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "bash", Arguments: string(args)})
+			got := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "bash", Arguments: string(args)})
 			if !got.blocked || !strings.Contains(got.output, "forbid") {
 				t.Fatalf("command %q outcome = %+v, want mutation block", tt.command, got)
 			}
@@ -85,7 +85,7 @@ func TestTaskPolicyEnforcesVerificationAllowlist(t *testing.T) {
 	setTurnConstraints(a, "fix it; only run go test ./internal/parser")
 
 	for _, command := range []string{"npm test", "go vet ./...", "golangci-lint run", "npm run typecheck"} {
-		blocked := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+		blocked := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 			Name: "bash", Arguments: `{"command":` + strconv.Quote(command) + `}`,
 		})
 		if !blocked.blocked || !strings.Contains(blocked.errMsg, "allowlist") {
@@ -95,7 +95,7 @@ func TestTaskPolicyEnforcesVerificationAllowlist(t *testing.T) {
 	if got := atomic.LoadInt32(&calls); got != 0 {
 		t.Fatalf("disallowed verification commands executed %d times, want 0", got)
 	}
-	allowed := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"go test ./internal/parser"}`})
+	allowed := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"go test ./internal/parser"}`})
 	if allowed.blocked || allowed.errMsg != "" {
 		t.Fatalf("allowed go test outcome = %+v", allowed)
 	}
@@ -112,7 +112,7 @@ func TestTaskPolicyForbidTestsBlocksEveryVerifier(t *testing.T) {
 	setTurnConstraints(a, "fix it; don't run tests")
 
 	for _, command := range []string{"go test ./...", "go vet ./...", "golangci-lint run", "npm run typecheck"} {
-		got := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+		got := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 			Name: "bash", Arguments: `{"command":` + strconv.Quote(command) + `}`,
 		})
 		if !got.blocked || !strings.Contains(got.output, "forbid") {
@@ -140,7 +140,7 @@ func TestTaskPolicyBlocksExternalActionCommandVariants(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "bash", Arguments: string(args)})
+		got := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "bash", Arguments: string(args)})
 		if !got.blocked || !(strings.Contains(got.output, "external") || strings.Contains(got.output, "push") || strings.Contains(got.output, "publish") || strings.Contains(got.output, "deploy")) {
 			t.Fatalf("command %q outcome = %+v, want task-policy block", command, got)
 		}
@@ -158,7 +158,7 @@ func TestTaskPolicyBlocksResolvedExternalCapability(t *testing.T) {
 	a := New(nil, reg, NewSession("sys"), Options{}, event.Discard)
 	setTurnConstraints(a, "prepare the release, but don't deploy")
 
-	got := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+	got := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 		ID: "deploy-1", Name: "use_capability", Arguments: `{"action":"call","capability_id":"mcp-tool:vercel/deploy_project"}`,
 	})
 	if !got.blocked || !strings.Contains(got.output, "deploy") {
@@ -177,7 +177,7 @@ func TestTaskPolicyReportsPostMutationVerificationGapWithoutBlockingTargetedTurn
 	a := &Agent{
 		task: taskRuntime{ledger: readinessLedger(check, writer)},
 		svc:  agentServices{tools: reg},
-		turn: turnRuntime{engine: runtimepolicy.NewEngine(runtimepolicy.Constraints{})},
+		turn: &turnRuntime{engine: runtimepolicy.NewEngine(runtimepolicy.Constraints{})},
 	}
 	if got := a.ReadinessResult(); got.Reason != "" {
 		t.Fatalf("targeted readiness = %+v, want quality gap to remain non-blocking", got)
@@ -196,7 +196,7 @@ func TestPolicyEscalatesBeforeFirstSensitiveMutation(t *testing.T) {
 	a := New(nil, reg, NewSession("sys"), Options{Gate: permission}, event.Discard)
 	setTurnConstraints(a, "fix the typo in README.md")
 
-	got := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+	got := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 		Name:      "edit_file",
 		Arguments: `{"path":"internal/auth/session.go","old_string":"old","new_string":"new"}`,
 	})
@@ -222,7 +222,7 @@ func TestPolicyEscalatesDeepAbsoluteSensitiveMutationBeforeExecution(t *testing.
 		t.Fatal(err)
 	}
 
-	got := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "edit_file", Arguments: string(args)})
+	got := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "edit_file", Arguments: string(args)})
 	if got.blocked {
 		t.Fatalf("ordinary production file must not be pre-classified as schema/auth: %+v", got)
 	}
@@ -236,7 +236,7 @@ func TestPlannedLowRiskMutationKeepsOrdinaryPath(t *testing.T) {
 	a := New(nil, reg, NewSession("sys"), Options{Gate: permission}, event.Discard)
 	setTurnConstraints(a, "fix the typo in README.md")
 
-	got := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+	got := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 		Name:      "edit_file",
 		Arguments: `{"path":"README.md","old_string":"teh","new_string":"the"}`,
 	})

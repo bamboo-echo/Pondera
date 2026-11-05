@@ -29,7 +29,7 @@ func TestInvalidArgumentsDoNotReachToolBeforeExtension(t *testing.T) {
 	reg := tool.NewRegistry()
 	reg.Add(rec)
 	a := New(nil, reg, NewSession(""), Options{Extensions: d}, event.Discard)
-	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "read_file", Arguments: `{"unexpected":true}`})
+	out := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "read_file", Arguments: `{"unexpected":true}`})
 	if out.errMsg == "" || !strings.Contains(out.output, "argument validation failed") {
 		t.Fatalf("outcome = %+v, want host validation failure", out)
 	}
@@ -55,7 +55,7 @@ func TestInvalidReplacementArgumentsRemainCorrectable(t *testing.T) {
 	gate := &stubGate{}
 	a := New(nil, reg, NewSession(""), Options{Extensions: d, Gate: gate}, event.Discard)
 	for range 3 {
-		out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "read_file", Arguments: `{"path":"original"}`})
+		out := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "read_file", Arguments: `{"path":"original"}`})
 		if out.blocked || !strings.Contains(out.output, `sole "arguments" wrapper`) {
 			t.Fatalf("replacement error: %+v", out)
 		}

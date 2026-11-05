@@ -47,7 +47,7 @@ func (d *wholeWorkspaceDelegate) Execute(ctx context.Context, _ json.RawMessage)
 		WriteWorkspaceRoot: d.root,
 		SubagentDepth:      1,
 	}, event.Discard)
-	d.child = child.executeOne(WithSubagentClaimID(ctx, id), &child.turn, provider.ToolCall{
+	d.child = child.executeOne(WithSubagentClaimID(ctx, id), child.turn, provider.ToolCall{
 		ID:        "child-write",
 		Name:      "write_file",
 		Arguments: `{"path":"` + filepath.ToSlash(filepath.Join(d.root, "out.md")) + `","content":"x"}`,
@@ -69,7 +69,7 @@ func TestDepthZeroDelegationIsNotBlockedByItsOwnHookParentClaim(t *testing.T) {
 
 	done := make(chan toolOutcome, 1)
 	go func() {
-		done <- a.executeOne(context.Background(), &a.turn, provider.ToolCall{ID: "d-1", Name: "delegate", Arguments: `{}`})
+		done <- a.executeOne(context.Background(), a.turn, provider.ToolCall{ID: "d-1", Name: "delegate", Arguments: `{}`})
 	}()
 	var out toolOutcome
 	select {

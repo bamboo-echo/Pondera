@@ -353,9 +353,17 @@ type Agent struct {
 	// inheritedExec is the writer parent's host execution context.
 	inheritedExec *runtimepolicy.InheritedExecutionContext
 
-	// turn is the state of the Run currently executing; beginRunTurn replaces
-	// it wholesale. See turnruntime.go.
-	turn turnRuntime
+	// turn is the state of the Run currently executing; beginRunTurn allocates a
+	// fresh object per turn instead of zeroing the previous one, so abandoned
+	// tool goroutines keep mutating the object they were handed. See
+	// turnruntime.go.
+	turn *turnRuntime
+
+	// loop holds the per-turn dispatch bookkeeping together with its mutex. It
+	// lives on the Agent, not in turnRuntime, so replacing a turn can never
+	// recreate a mutex a straggler is still holding; beginRunTurn only clears its
+	// contents.
+	loop turnLoopState
 
 	// ablation names the subsystems a benchmark arm switched off. The zero value
 	// is the control arm.
@@ -1067,6 +1075,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 	a.SetResponseLanguage(opts.ResponseLanguage)
 	a.SetReasoningLanguage(opts.ReasoningLanguage)
 	a.bindCapabilityObservers()
+	a.turn = a.allocateTurn()
 	a.maybeArmForkFromEnv()
 	a.maybeWrapForkCaptureProvider()
 	if warnDeprecatedRetention {
@@ -1092,7 +1101,7 @@ func deprecatedContextRetentionConfigured(opts Options) bool {
 // capability call preference, post-write verification, review, and sign-off.
 // It is authoritative only for host control flow, never for tool schemas.
 func (a *Agent) closedLoopActive() bool {
-	return a != nil && a.turn.deliveryScopeActive
+	return a != nil && a.turn != nil && a.turn.deliveryScopeActive
 }
 
 func usageSourceOrDefault(source, fallback string) string {

@@ -39,7 +39,7 @@ func TestSameBatchReadEditBashEditUsesExecutionOrder(t *testing.T) {
 		{ID: "e2", Name: "edit_file", Arguments: `{"path":"中文.txt","old_string":"gamma","new_string":"GAMMA"}`},
 	}
 	a.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: calls})
-	batch := a.executeBatch(context.Background(), &a.turn, calls)
+	batch := a.executeBatch(context.Background(), a.turn, calls)
 	if batch.err != nil {
 		t.Fatal(batch.err)
 	}
@@ -81,7 +81,7 @@ func TestThreeReadEditCommandEditCyclesIncludingMoveAndDelete(t *testing.T) {
 			{ID: fmt.Sprintf("e%db", i), Name: "edit_file", Arguments: `{"path":"` + name + `","old_string":"gamma","new_string":"GAMMA"}`},
 		}
 		a.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: calls})
-		batch := a.executeBatch(context.Background(), &a.turn, calls)
+		batch := a.executeBatch(context.Background(), a.turn, calls)
 		if batch.err != nil {
 			t.Fatal(batch.err)
 		}
@@ -97,7 +97,7 @@ func TestThreeReadEditCommandEditCyclesIncludingMoveAndDelete(t *testing.T) {
 		{ID: "delete", Name: "delete_range", Arguments: `{"path":"循环-二.txt","start_anchor":"BETA","end_anchor":"GAMMA","inclusive":true}`},
 	}
 	a.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: post})
-	batch := a.executeBatch(context.Background(), &a.turn, post)
+	batch := a.executeBatch(context.Background(), a.turn, post)
 	if batch.err != nil {
 		t.Fatal(batch.err)
 	}
@@ -125,19 +125,19 @@ func TestObservationSurvivesOrdinaryTurnButIsAgentLocal(t *testing.T) {
 
 	read := []provider.ToolCall{{ID: "read", Name: "read_file", Arguments: `{"path":"state.txt","limit":1}`}}
 	parent.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: read})
-	if batch := parent.executeBatch(context.Background(), &parent.turn, read); batch.err != nil || batch.outcomes[0].errMsg != "" {
+	if batch := parent.executeBatch(context.Background(), parent.turn, read); batch.err != nil || batch.outcomes[0].errMsg != "" {
 		t.Fatalf("read failed: %+v", batch)
 	}
-	parent.turn = turnRuntime{} // ordinary user turn replaces only per-turn state
+	parent.turn = parent.allocateTurn() // ordinary user turn replaces only per-turn state
 	edit := []provider.ToolCall{{ID: "edit", Name: "edit_file", Arguments: `{"path":"state.txt","old_string":"old","new_string":"parent"}`}}
 	parent.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: edit})
-	if batch := parent.executeBatch(context.Background(), &parent.turn, edit); batch.err != nil || batch.outcomes[0].errMsg != "" {
+	if batch := parent.executeBatch(context.Background(), parent.turn, edit); batch.err != nil || batch.outcomes[0].errMsg != "" {
 		t.Fatalf("cross-turn edit failed: %+v", batch)
 	}
 
 	childEdit := []provider.ToolCall{{ID: "child-edit", Name: "edit_file", Arguments: `{"path":"state.txt","old_string":"parent","new_string":"child"}`}}
 	child.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: childEdit})
-	batch := child.executeBatch(context.Background(), &child.turn, childEdit)
+	batch := child.executeBatch(context.Background(), child.turn, childEdit)
 	if len(batch.outcomes) != 1 || !strings.Contains(batch.outcomes[0].errMsg, string(tool.FSNotObserved)) {
 		t.Fatalf("child inherited parent observation: %+v", batch)
 	}
@@ -193,7 +193,7 @@ func TestUnknownPriorEffectIsFactNotExecutionBarrier(t *testing.T) {
 
 	newCalls := []provider.ToolCall{{ID: "new", Name: target.Name(), Arguments: `{}`}}
 	a.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: newCalls})
-	batch := a.executeBatch(context.Background(), &a.turn, newCalls)
+	batch := a.executeBatch(context.Background(), a.turn, newCalls)
 	if batch.err != nil || len(batch.outcomes) != 1 || batch.outcomes[0].errMsg != "" || batch.outcomes[0].blocked {
 		t.Fatalf("new call was blocked by historical unknown: %+v", batch)
 	}
@@ -209,7 +209,7 @@ func TestRetiredProofToolReturnsOrdinaryPairedResult(t *testing.T) {
 	a := New(nil, tool.NewRegistry(), NewSession(""), Options{}, event.Discard)
 	calls := []provider.ToolCall{{ID: "old", Name: "complete_step", Arguments: `{}`}}
 	a.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: calls})
-	batch := a.executeBatch(context.Background(), &a.turn, calls)
+	batch := a.executeBatch(context.Background(), a.turn, calls)
 	if batch.err != nil || len(batch.results) != 1 || !strings.Contains(batch.results[0], "tool_retired") {
 		t.Fatalf("retired result = %+v", batch)
 	}

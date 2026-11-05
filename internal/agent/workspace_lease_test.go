@@ -87,7 +87,7 @@ func TestDeliveryWriterWaitsBeforeToolExecutionButReaderDoesNot(t *testing.T) {
 	second.BeginRun()
 	defer second.EndRun()
 
-	if outcome := a.executeOne(context.Background(), &a.turn, providerToolCall("read", reader.Name())); outcome.errMsg != "" {
+	if outcome := a.executeOne(context.Background(), a.turn, providerToolCall("read", reader.Name())); outcome.errMsg != "" {
 		t.Fatalf("reader was blocked by another Delivery writer: %+v", outcome)
 	}
 	if got := reader.calls.Load(); got != 1 {
@@ -98,7 +98,7 @@ func TestDeliveryWriterWaitsBeforeToolExecutionButReaderDoesNot(t *testing.T) {
 	a.svc.hooks = hooks
 	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
 	defer cancel()
-	outcome := a.executeOne(ctx, &a.turn, providerToolCall("write", writer.Name()))
+	outcome := a.executeOne(ctx, a.turn, providerToolCall("write", writer.Name()))
 	if !outcome.blocked || outcome.errMsg != "blocked: workspace write lease unavailable" {
 		t.Fatalf("writer outcome = %+v, want lease block", outcome)
 	}
@@ -118,7 +118,7 @@ func TestDeniedDeliveryWriterDoesNotAcquireWorkspaceLease(t *testing.T) {
 	a := deliveryLeaseTestAgent(t, deniedOwner, writer)
 	a.svc.setGate(workspaceLeaseDenyGate{})
 	deniedOwner.BeginRun()
-	outcome := a.executeOne(context.Background(), &a.turn, providerToolCall("write", writer.Name()))
+	outcome := a.executeOne(context.Background(), a.turn, providerToolCall("write", writer.Name()))
 	deniedOwner.EndRun()
 	if !outcome.blocked || outcome.errMsg != "blocked by permission policy" {
 		t.Fatalf("denied outcome = %+v", outcome)
@@ -154,7 +154,7 @@ func TestReadOnlyBashDoesNotTakeWorkspaceLease(t *testing.T) {
 	a := deliveryLeaseTestAgent(t, readerOwner, bash)
 	readerOwner.BeginRun()
 	defer readerOwner.EndRun()
-	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+	out := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 		ID:        "st",
 		Name:      "bash",
 		Arguments: `{"command":"git status"}`,
@@ -191,14 +191,14 @@ func TestPathWriteReleasesLeaseAfterToolReturns(t *testing.T) {
 	second.BeginRun()
 	defer first.EndRun()
 	defer second.EndRun()
-	out1 := a1.executeOne(context.Background(), &a1.turn, provider.ToolCall{
+	out1 := a1.executeOne(context.Background(), a1.turn, provider.ToolCall{
 		ID: "w1", Name: "write_file",
 		Arguments: string(mustJSON(t, map[string]string{"path": filepath.Join(repo, "a.go"), "content": "a"})),
 	})
 	if out1.blocked || out1.errMsg != "" {
 		t.Fatalf("first write: %+v", out1)
 	}
-	out2 := a2.executeOne(context.Background(), &a2.turn, provider.ToolCall{
+	out2 := a2.executeOne(context.Background(), a2.turn, provider.ToolCall{
 		ID: "w2", Name: "write_file",
 		Arguments: string(mustJSON(t, map[string]string{"path": filepath.Join(repo, "b.go"), "content": "b"})),
 	})
@@ -247,7 +247,7 @@ func TestNestedRepoWriteFileLeasesDoNotBlock(t *testing.T) {
 	defer first.EndRun()
 	defer second.EndRun()
 
-	out1 := a1.executeOne(context.Background(), &a1.turn, provider.ToolCall{
+	out1 := a1.executeOne(context.Background(), a1.turn, provider.ToolCall{
 		ID:   "w1",
 		Name: "write_file",
 		Arguments: string(mustJSON(t, map[string]string{
@@ -257,7 +257,7 @@ func TestNestedRepoWriteFileLeasesDoNotBlock(t *testing.T) {
 	if out1.blocked || out1.errMsg != "" {
 		t.Fatalf("first nested write: %+v", out1)
 	}
-	out2 := a2.executeOne(context.Background(), &a2.turn, provider.ToolCall{
+	out2 := a2.executeOne(context.Background(), a2.turn, provider.ToolCall{
 		ID:   "w2",
 		Name: "write_file",
 		Arguments: string(mustJSON(t, map[string]string{

@@ -72,7 +72,7 @@ func TestBindWritePathsKeepsCapabilitySchemaButBlocksResolvedWriter(t *testing.T
 		t.Fatal("path-bound wrapper changed provider-visible use_capability contract")
 	}
 	a := New(nil, bound, NewSession("sys"), Options{}, event.Discard)
-	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+	out := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 		ID: "writer", Name: "use_capability",
 		Arguments: `{"action":"call","capability_id":"mcp-tool:fs/write","arguments":{}}`,
 	})
@@ -102,7 +102,7 @@ func TestBindWritePathsAllowsResolvedReadOnlyCapability(t *testing.T) {
 	}})
 	bound, _ := BindWritePaths(reg, claim, root, false)
 	a := New(nil, bound, NewSession("sys"), Options{}, event.Discard)
-	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+	out := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 		ID: "reader", Name: "use_capability",
 		Arguments: `{"action":"call","capability_id":"mcp-tool:search/query","arguments":{}}`,
 	})
@@ -249,7 +249,7 @@ func TestAgentReservesParentWriteBeforePreToolUse(t *testing.T) {
 		WriteWorkspaceRoot: root,
 	}, event.Discard)
 
-	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
+	out := a.executeOne(context.Background(), a.turn, provider.ToolCall{
 		ID:        "write-1",
 		Name:      "write_file",
 		Arguments: string(mustJSON(t, map[string]string{"path": "hook-race.md", "content": "parent"})),
@@ -313,7 +313,7 @@ func TestAgentSubagentRealizeOnPathBoundWrite(t *testing.T) {
 		SubagentDepth:      1,
 	}, event.Discard)
 
-	out := a.executeOne(WithSubagentClaimID(context.Background(), id1), &a.turn, provider.ToolCall{
+	out := a.executeOne(WithSubagentClaimID(context.Background(), id1), a.turn, provider.ToolCall{
 		ID:        "write-1",
 		Name:      "write_file",
 		Arguments: string(mustJSON(t, map[string]string{"path": filepath.Join(root, "src", "a.go"), "content": "one"})),
@@ -321,7 +321,7 @@ func TestAgentSubagentRealizeOnPathBoundWrite(t *testing.T) {
 	if out.blocked || out.errMsg != "" {
 		t.Fatalf("first write: %+v", out)
 	}
-	out = a.executeOne(WithSubagentClaimID(context.Background(), id2), &a.turn, provider.ToolCall{
+	out = a.executeOne(WithSubagentClaimID(context.Background(), id2), a.turn, provider.ToolCall{
 		ID:        "write-2",
 		Name:      "write_file",
 		Arguments: string(mustJSON(t, map[string]string{"path": filepath.Join(root, "src", "a.go"), "content": "two"})),

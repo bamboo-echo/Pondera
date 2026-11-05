@@ -5,10 +5,11 @@ import (
 	"pondera/internal/runtimepolicy"
 )
 
-// turnRuntime is the host state for exactly one Agent.Run. beginRunTurn builds
-// it in a single assignment, so a field added here starts the next turn zeroed.
-// State an external caller arms before a Run lives in pendingTurn; state that
-// outlives the Run lives in taskRuntime or sessionRuntime.
+// turnRuntime is the host state for exactly one Agent.Run. beginRunTurn allocates
+// a fresh object per turn instead of zeroing the previous one, so a straggler
+// goroutine holding the old pointer keeps writing to dead state rather than
+// racing the new turn. State an external caller arms before a Run lives in
+// pendingTurn; state that outlives the Run lives in taskRuntime or sessionRuntime.
 type turnRuntime struct {
 	runMaxSteps    int
 	runMaxStepsKey string
@@ -38,7 +39,10 @@ type turnRuntime struct {
 
 	repeatKey   string
 	repeatCount int
-	loop        turnLoopState
+	// loop points at the Agent-owned turnLoopState. The object and its mutex
+	// outlive every turn, so a fresh turnRuntime never hands a straggler a
+	// re-created lock; beginRunTurn clears the maps instead of the state object.
+	loop *turnLoopState
 
 	// constraints and engine are frozen at the start of the Run.
 	constraints runtimepolicy.Constraints

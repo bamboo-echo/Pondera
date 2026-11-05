@@ -53,6 +53,16 @@ func (s streamedTurn) assistantMessage() provider.Message {
 	}
 }
 
+// allocateTurn gives a Run its own turnRuntime. Replacing the pointer — rather
+// than zeroing the object the previous turn used — is what makes an abandoned
+// tool goroutine harmless: it keeps mutating the object it was handed, which no
+// later turn reads. The loop state is Agent-owned, so resetting its contents
+// never re-creates a mutex a straggler might still hold.
+func (a *Agent) allocateTurn() *turnRuntime {
+	a.loop.resetForTurn()
+	return &turnRuntime{loop: &a.loop}
+}
+
 // beginRunTurn handles evidence scope, delivery classification, background-job
 // evidence re-lease, and the initial user-turn persistence. Callers still own
 // all Run-level defers (workspace lease, evidence commit, delivery checkpoint,
@@ -60,11 +70,26 @@ func (s streamedTurn) assistantMessage() provider.Message {
 func (a *Agent) beginRunTurn(ctx context.Context, input string, pinned pinnedRevisionPlan) (rawInput string, state *turnRuntime, err error) {
 	rawInput = RawUserInput(ctx, input)
 	providerInput := input
-	// A fresh user turn starts from zeroed per-turn host state; the new turn's
-	// values are computed below. Cross-turn state (checkpoint, scope, failure
-	// budgets) lives in taskRuntime and is reconciled there.
-	a.stragglers.drain(ctx, parallelStragglerGrace)
-	a.turn = turnRuntime{}
+	// A fresh user turn starts from a fresh turnRuntime; the new turn's values
+	// are computed below. Cross-turn state (checkpoint, scope, failure budgets)
+	// lives in taskRuntime and is reconciled there.
+	//
+	// Old parallel tool goroutines may still be inside the agent after their
+	// batch gave up: they were handed the previous turnRuntime and keep writing
+	// to it. Wait for them, and if they still refuse to leave, delay one more
+	// grace and then refuse this turn with a readable error rather than let
+	// them observe state from a turn they do not belong to.
+	if !a.stragglers.drain(ctx, parallelStragglerGrace) {
+		if !a.stragglers.drain(ctx, parallelStragglerGrace) {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return rawInput, nil, ctxErr
+			}
+			return rawInput, nil, errPreviousTurnStragglers(a.stragglers.live.Load())
+		}
+	}
+	a.turn = a.allocateTurn()
+	// Advance the read generation so the new turn gets its own registry; a
+	// cursor held by the previous turn can never resolve into this one.
 	a.reads.runGen++
 	a.reads.tasks = newReadTasks(a.sess.path, a.reads.runGen)
 	a.reads.deliveries = make(map[string]readDelivery)
@@ -150,8 +175,8 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string, pinned pinnedRev
 
 	// The loop fields join the classification computed above rather than
 	// opening a second object: one turn, one turnRuntime. The zero values the
-	// old literal spelled out are already there from the reset at the top.
-	state = &a.turn
+	// old literal spelled out are already there from allocateTurn.
+	state = a.turn
 	state.input = input
 	state.budget = runBudget{started: time.Now()}
 	return rawInput, state, nil

@@ -33,7 +33,7 @@ func TestToolResultDurabilityFailureStopsNextWriter(t *testing.T) {
 	calls := []provider.ToolCall{{ID: "one", Name: "first", Arguments: `{}`}, {ID: "two", Name: "second", Arguments: `{}`}}
 	session.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: calls})
 	a := New(nil, reg, session, Options{}, resultFailureSink{failure})
-	batch := a.executeBatch(context.Background(), &a.turn, calls)
+	batch := a.executeBatch(context.Background(), a.turn, calls)
 	if !errors.Is(batch.err, failure) || atomic.LoadInt32(&first) != 1 || atomic.LoadInt32(&second) != 0 {
 		t.Fatalf("err=%v calls=%d,%d", batch.err, first, second)
 	}

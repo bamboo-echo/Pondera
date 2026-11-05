@@ -71,7 +71,7 @@ func TestToolBeforeWorkspaceMutationUsesExecutedReplacement(t *testing.T) {
 		reg.Add(&recordingTool{name: "write_file", readOnly: false})
 		sink := newWorkspaceSignalSink()
 		a := New(nil, reg, NewSession(""), Options{Extensions: newExtDispatcher(client, true, nil, extension.PointToolBefore)}, sink)
-		a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{ID: "call", Name: "read_file", Arguments: `{"path":"original.go"}`}})
+		a.executeBatch(context.Background(), a.turn, []provider.ToolCall{{ID: "call", Name: "read_file", Arguments: `{"path":"original.go"}`}})
 
 		select {
 		case mutation := <-sink.mutations:
@@ -99,7 +99,7 @@ func TestToolBeforeWorkspaceMutationUsesExecutedReplacement(t *testing.T) {
 		reg.Add(&recordingTool{name: "read_file", readOnly: true})
 		sink := newWorkspaceSignalSink()
 		a := New(nil, reg, NewSession(""), Options{Extensions: newExtDispatcher(client, true, nil, extension.PointToolBefore)}, sink)
-		a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{ID: "call", Name: "write_file", Arguments: `{"path":"original.go","content":"x"}`}})
+		a.executeBatch(context.Background(), a.turn, []provider.ToolCall{{ID: "call", Name: "write_file", Arguments: `{"path":"original.go","content":"x"}`}})
 
 		select {
 		case mutation := <-sink.mutations:
@@ -138,7 +138,7 @@ func TestToolBeforeWriterReplacementSignalsBeforeParallelPeerCompletes(t *testin
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
+		a.executeBatch(context.Background(), a.turn, []provider.ToolCall{
 			{ID: "writer", Name: "read_file", Arguments: `{"path":"original.go"}`},
 			{ID: "reader", Name: "slow_read", Arguments: `{}`},
 		})
@@ -185,7 +185,7 @@ func TestToolBeforeFailedWriterReplacementDoesNotBlockNextCall(t *testing.T) {
 	reg.Add(fakeTool{name: "write_one", err: errors.New("partial write")})
 	reg.Add(fakeTool{name: "write_two", calls: &secondCalls})
 	a := New(nil, reg, NewSession(""), Options{Extensions: newExtDispatcher(client, true, nil, extension.PointToolBefore)}, event.Discard)
-	batch := a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
+	batch := a.executeBatch(context.Background(), a.turn, []provider.ToolCall{
 		{ID: "first", Name: "read_file", Arguments: `{"path":"original.go"}`},
 		{ID: "second", Name: "write_two", Arguments: `{"path":"second.go"}`},
 	})

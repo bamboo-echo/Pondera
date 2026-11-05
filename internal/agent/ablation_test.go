@@ -11,17 +11,17 @@ func TestEvidenceAblationStandsDownTheReadinessGate(t *testing.T) {
 	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"a.go"}}
 	todo := evidence.Receipt{ToolName: "todo_write", Success: true, Todos: []evidence.TodoItem{{Content: "edit", Status: "in_progress"}}}
 
-	gated := &Agent{task: taskRuntime{ledger: readinessLedger(writer, todo)}, turn: turnRuntime{deliveryScopeActive: true}}
+	gated := &Agent{task: taskRuntime{ledger: readinessLedger(writer, todo)}, turn: &turnRuntime{deliveryScopeActive: true}}
 	if gated.ReadinessResult().Reason != "" {
 		t.Fatal("control arm must still gate an incomplete todo after a write")
 	}
 
-	off := &Agent{task: taskRuntime{ledger: readinessLedger(writer, todo)}, turn: turnRuntime{deliveryScopeActive: true}, ablation: ablation.New(ablation.Evidence)}
+	off := &Agent{task: taskRuntime{ledger: readinessLedger(writer, todo)}, turn: &turnRuntime{deliveryScopeActive: true}, ablation: ablation.New(ablation.Evidence)}
 	if got := off.ReadinessResult().Reason; got != "" {
 		t.Fatalf("evidence ablation still gated the final answer: %q", got)
 	}
 
-	unrelated := &Agent{task: taskRuntime{ledger: readinessLedger(writer, todo)}, turn: turnRuntime{deliveryScopeActive: true}, ablation: ablation.New(ablation.Planner)}
+	unrelated := &Agent{task: taskRuntime{ledger: readinessLedger(writer, todo)}, turn: &turnRuntime{deliveryScopeActive: true}, ablation: ablation.New(ablation.Planner)}
 	if unrelated.ReadinessResult().Reason != "" {
 		t.Fatal("an unrelated ablation must not disable the readiness gate")
 	}

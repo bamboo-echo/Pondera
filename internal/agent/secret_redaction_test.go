@@ -23,8 +23,9 @@ func TestExecuteOnePreservesToolResultBeforeHistory(t *testing.T) {
 	reg := tool.NewRegistry()
 	reg.Add(secretOutputTool{})
 	a := &Agent{svc: agentServices{tools: reg}, sess: sessionRuntime{conversation: NewSession("")}}
+	a.turn = a.allocateTurn()
 
-	outcome := a.executeOne(context.Background(), &a.turn, provider.ToolCall{ID: "call_1", Name: "secret_output", Arguments: `{}`})
+	outcome := a.executeOne(context.Background(), a.turn, provider.ToolCall{ID: "call_1", Name: "secret_output", Arguments: `{}`})
 	const want = "DEEPSEEK_API_KEY=sk-real-secret-value-123456\n"
 	if outcome.output != want {
 		t.Fatalf("tool outcome = %q, want byte-preserving output %q", outcome.output, want)

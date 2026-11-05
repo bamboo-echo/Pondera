@@ -23,7 +23,7 @@ func (r *recordingAsker) Ask(_ context.Context, questions []event.AskQuestion) (
 }
 
 func TestAskToolReusesAcceptedDecisionAndRejectsSpoofedID(t *testing.T) {
-	turn := &turnRuntime{}
+	turn := &turnRuntime{loop: &turnLoopState{}}
 	asker := &recordingAsker{}
 	ctx := withTurnState(withCallContext(context.Background(), "call", event.Discard, asker, false), turn)
 	args := []byte(`{"decision_id":"dec-original","questions":[{"header":"Direction","question":"Which path?","options":[{"label":"Keep going"},{"label":"Stop"}]}]}`)

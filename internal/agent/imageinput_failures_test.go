@@ -66,7 +66,7 @@ func TestRejectedToolImagesNeverInvokeVision(t *testing.T) {
 	reg := tool.NewRegistry()
 	reg.Add(&fakeImageTool{text: "saved", images: []string{"data:image/png;base64,QUFB"}})
 	a := New(nil, reg, NewSession("sys"), Options{ImageInput: cfg, Extensions: newExtDispatcher(client, true, nil, extension.PointToolAfter)}, event.Discard)
-	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "shot", Arguments: `{}`})
+	out := a.executeOne(context.Background(), a.turn, provider.ToolCall{Name: "shot", Arguments: `{}`})
 	if out.errMsg == "" || vp.calls.Load() != 0 {
 		t.Fatalf("error=%q calls=%d", out.errMsg, vp.calls.Load())
 	}

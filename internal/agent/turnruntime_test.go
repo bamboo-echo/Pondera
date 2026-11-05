@@ -7,12 +7,11 @@ import (
 	"testing"
 )
 
-// beginRunTurn opens with `a.turn = turnRuntime{}`, so a new field starts the
-// next turn zeroed. That holds only while the type stays assignable: one mutex
-// or atomic makes it a vet copylocks error, and the lifetime degrades to
-// whatever the call sites happen to reset. sessionRuntime already pays that
-// price; this layer must not.
-func TestTurnRuntimeStaysAssignable(t *testing.T) {
+// turnRuntime is replaced wholesale every turn (`a.turn = a.allocateTurn()`),
+// so it may own no lock of its own: cross-turn synchronization lives in the
+// Agent-level turnLoopState. A mutex here would be re-created per turn while a
+// straggler from the previous turn still held the old one.
+func TestTurnRuntimeOwnsNoLock(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "turnruntime.go", nil, 0)
 	if err != nil {
@@ -111,14 +110,17 @@ func TestBeginRunTurnReplacesTheWholeTurn(t *testing.T) {
 			if !ok || sel.Sel.Name != "turn" {
 				return true
 			}
-			if lit, ok := assign.Rhs[0].(*ast.CompositeLit); ok {
-				if ident, ok := lit.Type.(*ast.Ident); ok && ident.Name == "turnRuntime" {
-					if len(lit.Elts) != 0 {
-						t.Error("beginRunTurn seeds fields in the replacement literal; keep it empty so nothing is carried by accident")
-					}
-					replaced = true
-				}
+			call, ok := assign.Rhs[0].(*ast.CallExpr)
+			if !ok {
+				t.Error("beginRunTurn assigns a.turn something other than a fresh turnRuntime; a straggler would observe the new turn")
+				return true
 			}
+			fun, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || fun.Sel.Name != "allocateTurn" {
+				t.Error("beginRunTurn no longer allocates a fresh turn; a per-field reset can forget a field")
+				return true
+			}
+			replaced = true
 			return true
 		})
 		return false

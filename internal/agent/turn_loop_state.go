@@ -16,6 +16,17 @@ type turnLoopState struct {
 	previousErrorCategories map[string]struct{}
 }
 
+// resetForTurn clears the per-turn contents while keeping the state object — and
+// therefore its mutex — stable. beginRunTurn calls this for every new turn; a
+// straggler from the previous turn can only ever reach the turn it was handed.
+func (s *turnLoopState) resetForTurn() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dispatchClasses = nil
+	s.acceptedDecisions = nil
+	s.previousErrorCategories = nil
+}
+
 func (s *turnLoopState) setDispatchClasses(classes map[string]tool.CallClass) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

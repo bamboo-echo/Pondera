@@ -9,6 +9,7 @@ import (
 
 func TestRepeatReminderAtThreeFiveEightNeverBlocks(t *testing.T) {
 	a := &Agent{}
+	a.turn = a.allocateTurn()
 	call := provider.ToolCall{Name: "read_file", Arguments: `{"limit":1,"path":"secret.txt"}`}
 	for count := 1; count <= 8; count++ {
 		results := []string{"ok"}
@@ -25,6 +26,7 @@ func TestRepeatReminderAtThreeFiveEightNeverBlocks(t *testing.T) {
 
 func TestRepeatReminderCanonicalizesJSONAndResetsOnChange(t *testing.T) {
 	a := &Agent{}
+	a.turn = a.allocateTurn()
 	for _, args := range []string{`{"path":"a","limit":1}`, `{"limit":1,"path":"a"}`, `{"path":"a", "limit":1}`} {
 		results := []string{"ok"}
 		a.applyRepeatReminders([]provider.ToolCall{{Name: "read_file", Arguments: args}}, results)

@@ -49,7 +49,7 @@ func TestTodoResultCommitsBeforeFollowingToolWithoutPreviewState(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
+		a.executeBatch(context.Background(), a.turn, []provider.ToolCall{
 			{ID: "todo-1", Name: "todo_write", Arguments: `{"todos":[{"content":"Ship the fix","status":"in_progress"}]}`},
 			{ID: "read-1", Name: "slow_read", Arguments: `{}`},
 		})

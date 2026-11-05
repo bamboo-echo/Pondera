@@ -64,7 +64,7 @@ func TestToolStartedNotEmittedForRejectedCalls(t *testing.T) {
 			reg.Add(target)
 			sink := &startBarrierSink{}
 			a := New(nil, reg, NewSession(""), tc.opts, sink)
-			batch := a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{ID: "rejected", Name: target.Name(), Arguments: tc.args}})
+			batch := a.executeBatch(context.Background(), a.turn, []provider.ToolCall{{ID: "rejected", Name: target.Name(), Arguments: tc.args}})
 			if len(target.inputs) != 0 {
 				t.Fatalf("rejected tool executed %d times", len(target.inputs))
 			}
@@ -84,7 +84,7 @@ func TestToolStartedPersistenceFailureDoesNotExecuteOrBecomeUnknown(t *testing.T
 	reg.Add(fakeTool{name: "barrier_probe", readOnly: true, calls: &executions})
 	sink := &startBarrierSink{failStart: true}
 	a := New(nil, reg, NewSession(""), Options{}, sink)
-	batch := a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{ID: "not-started", Name: "barrier_probe", Arguments: `{}`}})
+	batch := a.executeBatch(context.Background(), a.turn, []provider.ToolCall{{ID: "not-started", Name: "barrier_probe", Arguments: `{}`}})
 	if got := atomic.LoadInt32(&executions); got != 0 {
 		t.Fatalf("tool executed %d times despite failed start persistence", got)
 	}
@@ -119,7 +119,7 @@ func TestToolStartedAcknowledgedBeforeConcreteExecution(t *testing.T) {
 	reg := tool.NewRegistry()
 	reg.Add(target)
 	a := New(nil, reg, NewSession(""), Options{}, sink)
-	batch := a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{ID: "executed", Name: target.Name(), Arguments: `{}`}})
+	batch := a.executeBatch(context.Background(), a.turn, []provider.ToolCall{{ID: "executed", Name: target.Name(), Arguments: `{}`}})
 	if batch.err != nil || len(batch.outcomes) != 1 || batch.outcomes[0].errMsg != "" {
 		t.Fatalf("execution failed: %+v", batch)
 	}

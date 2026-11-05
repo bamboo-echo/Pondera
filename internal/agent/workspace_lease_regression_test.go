@@ -90,7 +90,7 @@ func TestFleetMetaToolDoesNotTakeOuterWorkspaceLease(t *testing.T) {
 	a.writeWorkspaceRoot = root
 	done := make(chan toolOutcome, 1)
 	go func() {
-		done <- a.executeOne(context.Background(), &a.turn, providerToolCall("fleet", fleet.Name()))
+		done <- a.executeOne(context.Background(), a.turn, providerToolCall("fleet", fleet.Name()))
 	}()
 
 	select {
@@ -161,7 +161,7 @@ func TestKillShellDoesNotWaitForBackgroundWriterLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := a.executeOne(ctx, &a.turn, provider.ToolCall{ID: "kill", Name: "kill_shell", Arguments: string(args)})
+	out := a.executeOne(ctx, a.turn, provider.ToolCall{ID: "kill", Name: "kill_shell", Arguments: string(args)})
 	if out.blocked || out.errMsg != "" {
 		t.Fatalf("kill_shell waited for the background writer lease: %+v", out)
 	}
@@ -189,7 +189,7 @@ func TestWritableHooksUseWorkspaceLease(t *testing.T) {
 	call := providerToolCall("write", writer.Name())
 	call.Arguments = `{"path":"probe.go","content":"probe"}`
 	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
-	out := a.executeOne(ctx, &a.turn, call)
+	out := a.executeOne(ctx, a.turn, call)
 	cancel()
 	if !out.blocked || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		t.Fatalf("hook-capable writer was not blocked by active workspace write: %+v", out)
@@ -199,7 +199,7 @@ func TestWritableHooksUseWorkspaceLease(t *testing.T) {
 	}
 
 	releaseProtected()
-	out = a.executeOne(context.Background(), &a.turn, call)
+	out = a.executeOne(context.Background(), a.turn, call)
 	if out.blocked || out.errMsg != "" {
 		t.Fatalf("writer after release: %+v", out)
 	}
@@ -223,7 +223,7 @@ func TestWritableHooksReserveWholeParentWorkspace(t *testing.T) {
 	a.writeWorkspaceRoot = root
 	call := providerToolCall("write", writer.Name())
 	call.Arguments = `{"path":"probe.go","content":"probe"}`
-	out := a.executeOne(context.Background(), &a.turn, call)
+	out := a.executeOne(context.Background(), a.turn, call)
 	if out.blocked || out.errMsg != "" {
 		t.Fatalf("executeOne failed: %+v", out)
 	}
@@ -253,7 +253,7 @@ func TestWritableHooksSerializeReadOnlyToolBatch(t *testing.T) {
 	if len(batches) != 1 || batches[0].parallel {
 		t.Fatalf("hook-capable read batches = %+v, want one serial batch", batches)
 	}
-	result := a.executeBatch(context.Background(), &a.turn, calls)
+	result := a.executeBatch(context.Background(), a.turn, calls)
 	for i, outcome := range result.outcomes {
 		if outcome.blocked || outcome.errMsg != "" {
 			t.Fatalf("read-only call %d was dropped by hook coordination: %+v", i, outcome)

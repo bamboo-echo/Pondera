@@ -30,7 +30,7 @@ func TestRebuiltAgentKeepsLiveFileObservationsAndRealShellWorks(t *testing.T) {
 	run := func(a *Agent, calls []provider.ToolCall) {
 		t.Helper()
 		a.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: calls})
-		batch := a.executeBatch(context.Background(), &a.turn, calls)
+		batch := a.executeBatch(context.Background(), a.turn, calls)
 		if batch.err != nil {
 			t.Fatal(batch.err)
 		}

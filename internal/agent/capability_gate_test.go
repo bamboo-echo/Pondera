@@ -30,7 +30,7 @@ func TestGoalScopeDoesNotRequireRiskDrivenReview(t *testing.T) {
 	for _, path := range []string{"internal/auth/session.go", "schema/migration.sql", "README.md"} {
 		ledger := evidence.NewLedger()
 		ledger.Record(evidence.ReceiptFromToolCall("edit_file", json.RawMessage(`{"path":"`+path+`"}`), true, false))
-		a := &Agent{task: taskRuntime{ledger: ledger}, turn: turnRuntime{deliveryScopeActive: true}}
+		a := &Agent{task: taskRuntime{ledger: ledger}, turn: &turnRuntime{deliveryScopeActive: true}}
 		if result := a.ReadinessResult(); !result.Ready || len(result.Missing) != 0 {
 			t.Fatalf("%s acquired a review gate: %+v", path, result)
 		}

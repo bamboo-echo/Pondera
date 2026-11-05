@@ -28,6 +28,7 @@ func (g *genShiftTool) ClassifyCall(json.RawMessage) tool.CallClass {
 func TestDispatchGenerationGateBlocksStaleClassification(t *testing.T) {
 	target := &genShiftTool{gen: "v1"}
 	a := &Agent{}
+	a.turn = a.allocateTurn()
 	a.turn.loop.setDispatchClasses(map[string]tool.CallClass{
 		"c1": {Known: true, ReadOnly: true, ParallelSafe: true, Generation: "v1"},
 	})

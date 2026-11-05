@@ -23,7 +23,7 @@ func TestAskRejectsMoreThanThreeQuestions(t *testing.T) {
 }
 
 func TestAskReusesAcceptedDecisionWithoutNewEvidence(t *testing.T) {
-	turn := &turnRuntime{}
+	turn := &turnRuntime{loop: &turnLoopState{}}
 	turn.loop.rememberDecision("dec-1", "Which path?", "Keep going")
 	ctx := withTurnState(context.Background(), turn)
 	out, err := NewAskTool().Execute(ctx, []byte(`{
@@ -39,7 +39,7 @@ func TestAskReusesAcceptedDecisionWithoutNewEvidence(t *testing.T) {
 }
 
 func TestAskAllowsReopenWithNewEvidence(t *testing.T) {
-	turn := &turnRuntime{}
+	turn := &turnRuntime{loop: &turnLoopState{}}
 	turn.loop.rememberDecision("dec-1", "Which path?", "Keep going")
 	asker := &recordingAsker{}
 	ctx := withCallContext(withTurnState(context.Background(), turn), "c1", event.Discard, asker, false)
