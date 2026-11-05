@@ -45,9 +45,15 @@ func http2CodeName(code uint64) string {
 	return http2.ErrCode(code).String()
 }
 
-// net/http bundles private equivalents of x/net's types. Inspect only those
+// net/http exposes private equivalents of x/net's types. Inspect only those
 // exact package/type identities and uint32 fields; unknown layouts fail closed.
 // Real TLS fixtures guard this adapter against Go toolchain changes.
+//
+// Go 1.27 moved the bundled HTTP/2 implementation from net/http into
+// net/http/internal/http2, which declares exported ConnectionError,
+// StreamError and GoAwayError types. streamError still converts itself through
+// As, but the connection and GOAWAY types do not, so they must be read here or
+// every GOAWAY/protocol failure loses its transport code.
 func bundledHTTP2Code(err error) string {
 	if err == nil {
 		return ""
@@ -56,7 +62,8 @@ func bundledHTTP2Code(err error) string {
 	if v.Kind() == reflect.Pointer && !v.IsNil() {
 		v = v.Elem()
 	}
-	if v.Type().PkgPath() == "net/http" {
+	switch v.Type().PkgPath() {
+	case "net/http":
 		switch v.Type().Name() {
 		case "http2ConnectionError":
 			if v.Kind() == reflect.Uint32 {
@@ -65,6 +72,17 @@ func bundledHTTP2Code(err error) string {
 		case "http2StreamError":
 			return bundledHTTP2Field(v, "Code")
 		case "http2GoAwayError":
+			return bundledHTTP2Field(v, "ErrCode")
+		}
+	case "net/http/internal/http2":
+		switch v.Type().Name() {
+		case "ConnectionError":
+			if v.Kind() == reflect.Uint32 {
+				return http2CodeName(v.Uint())
+			}
+		case "StreamError":
+			return bundledHTTP2Field(v, "Code")
+		case "GoAwayError":
 			return bundledHTTP2Field(v, "ErrCode")
 		}
 	}

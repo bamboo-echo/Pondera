@@ -3,9 +3,19 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
+
+// testRegistrySeq keeps dynamically registered test kinds unique across
+// repeated runs in one binary (go test -count=N re-runs each test in place).
+var testRegistrySeq int
+
+func testRegistryKind(prefix string, t *testing.T) string {
+	testRegistrySeq++
+	return fmt.Sprintf("%s-%s-%d", prefix, t.Name(), testRegistrySeq)
+}
 
 // SanitizeToolPairing
 
@@ -630,14 +640,14 @@ func TestNewUnknownKind(t *testing.T) {
 
 func TestNewWithRegisteredKind(t *testing.T) {
 	// Register a mock factory.
-	Register("test-mock-__"+t.Name(), func(cfg Config) (Provider, error) {
+	Register(testRegistryKind("test-mock", t), func(cfg Config) (Provider, error) {
 		return nil, nil
 	})
 	// We can't easily unregister, but we can test it doesn't panic.
 }
 
 func TestNewRejectsTypedNilProvider(t *testing.T) {
-	kind := "test-typed-nil-__" + t.Name()
+	kind := testRegistryKind("test-typed-nil", t)
 	Register(kind, func(cfg Config) (Provider, error) {
 		var p *mockProvider
 		return p, nil
