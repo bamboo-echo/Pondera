@@ -136,7 +136,12 @@ func TestProtectedWritePath(t *testing.T) {
 	if IsProtectedWritePath(filepath.Join(state, "skills", "x.md"), state) {
 		t.Fatal("ordinary state files are not protected")
 	}
-	for _, allowed := range []string{filepath.Join(state, "skills"), filepath.Join(state, "memory", "notes.md")} {
+	for _, allowed := range []string{
+		filepath.Join(state, "skills"),
+		filepath.Join(state, "memory", "notes.md"),
+		filepath.Join(state, "global-workspace"),
+		filepath.Join(state, "global-workspace", "notes.md"),
+	} {
 		if IsProtectedWritePath(allowed, state) {
 			t.Fatalf("allowlisted state path %q must not be protected", allowed)
 		}
@@ -152,6 +157,8 @@ func TestProtectedWritePath(t *testing.T) {
 		filepath.Join(state, "sessions"),
 		filepath.Join(state, "projects", "slug"),
 		filepath.Join(state, "launch-hooks"),
+		filepath.Join(state, "global-workspace.bak"),
+		filepath.Join(state, "global-workspace-backup", "notes.md"),
 		filepath.Join(state, "config.toml"),
 		filepath.Join(state, ".env"),
 		filepath.Join(state, "plugin-packages.json"),
@@ -159,6 +166,12 @@ func TestProtectedWritePath(t *testing.T) {
 		if !IsProtectedWritePath(denied, state) {
 			t.Fatalf("state path %q must be protected", denied)
 		}
+	}
+	if err := ValidateWriteDir(filepath.Join(state, "global-workspace"), state); err != nil {
+		t.Fatalf("requesting the default global workspace should be allowed: %v", err)
+	}
+	if err := ValidateWriteDir(filepath.Join(state, "global-workspace.bak"), state); err == nil {
+		t.Fatal("requesting a global-workspace look-alike should be rejected")
 	}
 	if err := ValidateWriteDir(filepath.Join(state, "plugins"), state); err == nil {
 		t.Fatal("requesting plugins should be rejected")

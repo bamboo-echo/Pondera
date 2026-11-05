@@ -82,17 +82,19 @@ func TestBwrapProtectedWriteArgsReallowsOnlyAllowlistedStateChild(t *testing.T) 
 	state := t.TempDir()
 	skills := filepath.Join(state, "skills")
 	memory := filepath.Join(state, "memory")
+	global := filepath.Join(state, "global-workspace")
 	plugins := filepath.Join(state, "plugins", "hooked")
 	sessions := filepath.Join(state, "sessions")
 	unknown := filepath.Join(state, "some-future-dir")
-	for _, dir := range []string{skills, memory, plugins, sessions, unknown} {
+	lookalike := filepath.Join(state, "global-workspace.bak")
+	for _, dir := range []string{skills, memory, global, plugins, sessions, unknown, lookalike} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	argv := bwrapBaseArgs(Spec{
 		Mode:                "enforce",
-		WriteRoots:          []string{skills, memory, plugins, sessions, unknown},
+		WriteRoots:          []string{skills, memory, global, plugins, sessions, unknown, lookalike},
 		ProtectedWriteRoots: ProtectedWriteRoots(state),
 		MinimalWrites:       true,
 	})
@@ -100,12 +102,12 @@ func TestBwrapProtectedWriteArgsReallowsOnlyAllowlistedStateChild(t *testing.T) 
 	if protect < 0 {
 		t.Fatalf("state root must be remounted read-only: %v", argv)
 	}
-	for _, allowed := range []string{skills, memory} {
+	for _, allowed := range []string{skills, memory, global} {
 		if indexArgs(argv[protect+1:], "--bind", allowed, allowed) < 0 {
 			t.Fatalf("allowlisted state child %q must be reopened after parent protection: %v", allowed, argv)
 		}
 	}
-	for _, denied := range []string{plugins, sessions, unknown} {
+	for _, denied := range []string{plugins, sessions, unknown, lookalike} {
 		if indexArgs(argv[protect+1:], "--bind", denied, denied) >= 0 {
 			t.Fatalf("protected state child %q must not be reopened: %v", denied, argv)
 		}

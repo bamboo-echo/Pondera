@@ -244,10 +244,16 @@ func ProtectedWriteRoots(stateRoot string) []string {
 // may make writable. Everything else under the state root is protected, so a
 // model-approved write into plugins/, assistant/, remote/, repair/, logs/ or a
 // directory added later cannot persist code the host runs with full privileges.
-var stateWriteAllowlist = []string{"skills", "memory"}
+//
+// global-workspace is the desktop's default user workspace (desktop/tabs.go
+// builds it from PonderaHomeDir): it exists to hold user files, and nothing in
+// the startup chain executes from it, so allowing writes there adds no
+// persistence surface. Entries are exact directory names, never prefixes, so a
+// look-alike such as global-workspace.bak stays protected.
+var stateWriteAllowlist = []string{"skills", "memory", "global-workspace"}
 
 // IsProtectedWritePath reports whether abs lies inside the Pondera state root
-// outside the skills/memory allowlist, i.e. whether it must stay read-only.
+// outside the stateWriteAllowlist, i.e. whether it must stay read-only.
 // Unknown children are protected (fail-closed).
 func IsProtectedWritePath(abs, stateRoot string) bool {
 	abs = canonicalDir(abs)
