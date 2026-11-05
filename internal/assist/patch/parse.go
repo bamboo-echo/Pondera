@@ -45,6 +45,8 @@ const (
 	OpSet              = "set"
 	OpSetProviderField = "set_provider_field"
 	OpSetSecret        = "set_secret"
+	OpAddProvider      = "add_provider"
+	OpRemoveProvider   = "remove_provider"
 )
 
 var credentialKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
@@ -213,8 +215,22 @@ func ValidateShape(env *Envelope) error {
 			if strings.TrimSpace(op.APIKeyEnv) == "" || op.Path != "" || op.Provider != "" || op.Field != "" {
 				return reject("invalid_op", "第 %d 个 set_secret 需要 api_key_env", i+1)
 			}
+		case OpAddProvider:
+			if strings.TrimSpace(op.Provider) == "" || op.Path != "" || op.Field != "" || op.APIKeyEnv != "" {
+				return reject("invalid_op", "第 %d 个 add_provider 需要 provider，且不能带 path/field/api_key_env", i+1)
+			}
+			if len(bytes.TrimSpace(op.Value)) == 0 {
+				return reject("invalid_op", "第 %d 个 add_provider 缺少 provider 描述 value", i+1)
+			}
+		case OpRemoveProvider:
+			if strings.TrimSpace(op.Provider) == "" || op.Path != "" || op.Field != "" || op.APIKeyEnv != "" {
+				return reject("invalid_op", "第 %d 个 remove_provider 需要 provider，且不能带 path/field/api_key_env", i+1)
+			}
+			if len(bytes.TrimSpace(op.Value)) != 0 {
+				return reject("invalid_op", "第 %d 个 remove_provider 不能带 value", i+1)
+			}
 		default:
-			return reject("unknown_op", "不支持的操作 %q（MVP 只接受 set / set_provider_field / set_secret）", op.Op)
+			return reject("unknown_op", "不支持的操作 %q（MVP 只接受 set / set_provider_field / set_secret / add_provider / remove_provider）", op.Op)
 		}
 		key := op.Op + "\x00" + op.Path + "\x00" + op.Provider + "\x00" + op.Field + "\x00" + op.APIKeyEnv
 		if seen[key] {

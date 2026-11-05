@@ -7,21 +7,10 @@ import (
 	"pondera/internal/assist/patch"
 )
 
-// assistantMu guards the lazily-created service. The assistant keeps a short
-// in-memory plan cache; one instance per host process is enough.
+// assistantMu guards creation of each App's own assistant service.
 var (
-	assistantMu       sync.Mutex
-	assistantInstance *assist.Assistant
+	assistantInstances sync.Map // map[*App]*assist.Assistant
 )
-
-func assistantService() *assist.Assistant {
-	assistantMu.Lock()
-	defer assistantMu.Unlock()
-	if assistantInstance == nil {
-		assistantInstance = assist.New()
-	}
-	return assistantInstance
-}
 
 const assistantConfigChangedEvent = "assistant:config-changed"
 
@@ -34,27 +23,28 @@ type assistantConfigChangedPayload struct {
 	Summary            []assist.ChangeSummary `json:"summary"`
 }
 
-var assistantEventOnce sync.Once
-
-// assistant returns the process-wide service and binds its post-commit event
-// outlet to the runtime event bridge exactly once.
+// assistant returns this App's assistant service and binds its post-commit
+// outlet to that App's runtime bridge. Each App owns its own instance so two
+// Apps in one process (tests, embedded hosts) never share a broadcast target.
 func (a *App) assistant() *assist.Assistant {
-	service := assistantService()
-	assistantEventOnce.Do(func() {
-		service.OnApplied = func(event assist.AppliedEvent) {
-			ctx := a.ctx
-			if ctx == nil {
-				ctx = a.reqCtx()
-			}
-			a.runtimeEvents.Emit(ctx, assistantConfigChangedEvent, assistantConfigChangedPayload{
-				Revision:           event.Revision,
-				CredentialRevision: event.CredentialRevision,
-				BackupID:           event.BackupID,
-				Summary:            event.Summary,
-			})
+	if cached, ok := assistantInstances.Load(a); ok {
+		return cached.(*assist.Assistant)
+	}
+	service := assist.New()
+	service.OnApplied = func(event assist.AppliedEvent) {
+		ctx := a.ctx
+		if ctx == nil {
+			ctx = a.reqCtx()
 		}
-	})
-	return service
+		a.runtimeEvents.Emit(ctx, assistantConfigChangedEvent, assistantConfigChangedPayload{
+			Revision:           event.Revision,
+			CredentialRevision: event.CredentialRevision,
+			BackupID:           event.BackupID,
+			Summary:            event.Summary,
+		})
+	}
+	actual, _ := assistantInstances.LoadOrStore(a, service)
+	return actual.(*assist.Assistant)
 }
 
 // AssistantStatusView is the onboarding payload. It never contains a key.

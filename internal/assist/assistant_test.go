@@ -287,3 +287,138 @@ func TestStalePlanPropagatesToFacade(t *testing.T) {
 		t.Fatalf("expected stale plan, got %v", err)
 	}
 }
+
+// TestRollbackBroadcastsOnce proves a successful rollback reaches the settings
+// page through the same outlet as ApplyPlan.
+func TestRollbackBroadcastsOnce(t *testing.T) {
+	_, a := assistSeed(t)
+	var events []AppliedEvent
+	a.OnApplied = func(event AppliedEvent) { events = append(events, event) }
+	a.Client = engine.CompleteFunc(func(ctx context.Context, system, user string) (string, error) {
+		return `{"version":1,"intent":"温度","reply":"改温度","ops":[{"op":"set","path":"agent.temperature","value":0.7}]}`, nil
+	})
+	view, err := a.Chat(context.Background(), "把温度改成 0.7")
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	applied, err := a.ApplyPlan(context.Background(), view.Plan.ID)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	events = nil
+	if _, err := a.Rollback(applied.BackupID); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("rollback must broadcast exactly once, got %d", len(events))
+	}
+	event := events[0]
+	if event.BackupID != applied.BackupID || event.Revision == "" || event.CredentialRevision == "" {
+		t.Fatalf("rollback event = %+v", event)
+	}
+	if len(event.Summary) != 1 || !strings.Contains(event.Summary[0].Label, "rollback:") {
+		t.Fatalf("rollback summary = %+v", event.Summary)
+	}
+}
+
+func chatOne(t *testing.T, a *Assistant, envelope string) ChatView {
+	t.Helper()
+	a.Client = engine.CompleteFunc(func(ctx context.Context, system, user string) (string, error) {
+		return envelope, nil
+	})
+	view, err := a.Chat(context.Background(), "执行这个变更")
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	return view
+}
+
+func TestAddProviderRejectsDuplicateAndReservedNames(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		op     string
+		reason string
+	}{
+		{
+			name:   "duplicate",
+			op:     `{"op":"add_provider","provider":"deepseek-flash","value":{"kind":"openai","base_url":"https://example.com/v1","model":"m"}}`,
+			reason: "provider_exists",
+		},
+		{
+			name:   "reserved",
+			op:     `{"op":"add_provider","provider":"assistant","value":{"kind":"openai","base_url":"https://example.com/v1","model":"m"}}`,
+			reason: "reserved_provider_name",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, a := assistSeed(t)
+			view := chatOne(t, a, `{"version":1,"intent":"新增 provider","reply":"准备新增","ops":[`+tc.op+`]}`)
+			if view.Rejection == nil || view.Rejection.Reason != tc.reason {
+				t.Fatalf("rejection = %+v, want %s", view.Rejection, tc.reason)
+			}
+		})
+	}
+}
+
+func TestRemoveProviderRejectsReferencedProvider(t *testing.T) {
+	_, a := assistSeed(t)
+	view := chatOne(t, a, `{"version":1,"intent":"删除 provider","reply":"准备删除","ops":[{"op":"remove_provider","provider":"deepseek-flash"}]}`)
+	if view.Rejection == nil || view.Rejection.Reason != "provider_referenced" {
+		t.Fatalf("rejection = %+v", view.Rejection)
+	}
+	if !strings.Contains(view.Rejection.Message, "default_model") {
+		t.Fatalf("rejection must name the reference: %s", view.Rejection.Message)
+	}
+}
+
+// TestAddRemoveProviderRoundTripRestoresBytes covers the structural pair:
+// add_provider then remove_provider leaves the rendered config byte-identical
+// to the canonical baseline.
+func TestAddRemoveProviderRoundTripRestoresBytes(t *testing.T) {
+	path, a := assistSeed(t)
+	if err := config.EditConfigFile(path, func(cfg *config.Config) error { return nil }); err != nil {
+		t.Fatalf("normalize baseline: %v", err)
+	}
+	baseline, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read baseline: %v", err)
+	}
+
+	add := `{"version":1,"intent":"新增 provider","reply":"准备新增","ops":[{"op":"add_provider","provider":"local-gw","value":{"kind":"openai","base_url":"https://gateway.example.com/v1","model":"local-model"}}]}`
+	view := chatOne(t, a, add)
+	if view.Plan == nil || view.Rejection != nil {
+		t.Fatalf("add plan = %+v rejection = %+v", view.Plan, view.Rejection)
+	}
+	if _, err := a.ApplyPlan(context.Background(), view.Plan.ID); err != nil {
+		t.Fatalf("apply add: %v", err)
+	}
+	cfg, err := config.LoadForEditWithoutCredentialsReadOnlyStrict(path)
+	if err != nil {
+		t.Fatalf("reload after add: %v", err)
+	}
+	if _, ok := cfg.Provider("local-gw"); !ok {
+		t.Fatalf("added provider missing: %+v", cfg.Providers)
+	}
+
+	remove := `{"version":1,"intent":"删除 provider","reply":"准备删除","ops":[{"op":"remove_provider","provider":"local-gw"}]}`
+	view = chatOne(t, a, remove)
+	if view.Plan == nil || view.Rejection != nil {
+		t.Fatalf("remove plan = %+v rejection = %+v", view.Plan, view.Rejection)
+	}
+	if _, err := a.ApplyPlan(context.Background(), view.Plan.ID); err != nil {
+		t.Fatalf("apply remove: %v", err)
+	}
+	if cfg, err = config.LoadForEditWithoutCredentialsReadOnlyStrict(path); err != nil {
+		t.Fatalf("reload after remove: %v", err)
+	}
+	if _, ok := cfg.Provider("local-gw"); ok {
+		t.Fatalf("provider still present after remove")
+	}
+	final, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read final: %v", err)
+	}
+	if string(final) != string(baseline) {
+		t.Fatalf("config bytes did not return to baseline\nbaseline:\n%s\nfinal:\n%s", baseline, final)
+	}
+}

@@ -65,9 +65,14 @@ func TestIllegalPatchesAreRejected(t *testing.T) {
 			reason: "credential_unreferenced",
 		},
 		{
-			name:   "unknown op add_provider",
-			raw:    envelope(`{"op":"add_provider","provider":"x","value":"y"}`),
+			name:   "unknown op rename_provider",
+			raw:    envelope(`{"op":"rename_provider","provider":"x","value":"y"}`),
 			reason: "unknown_op",
+		},
+		{
+			name:   "add provider scalar value",
+			raw:    envelope(`{"op":"add_provider","provider":"x","value":"y"}`),
+			reason: "invalid_value",
 		},
 		{
 			name:   "extra envelope field",

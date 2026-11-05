@@ -21,6 +21,18 @@ func RenderDiff(ops []ResolvedOp) []DiffEntry {
 	out := make([]DiffEntry, 0, len(ops))
 	for _, op := range ops {
 		entry := DiffEntry{Label: op.Label, Risk: op.Risk, Sensitive: op.Sensitive}
+		if op.Op == ResolvedOpAddProvider && op.NewProvider != nil {
+			entry.Before = "(无)"
+			entry.After = describeProviderSpec(op.NewProvider)
+			out = append(out, entry)
+			continue
+		}
+		if op.Op == ResolvedOpRemoveProvider {
+			entry.Before = displayScalar(op.Before)
+			entry.After = "(删除)"
+			out = append(out, entry)
+			continue
+		}
 		if op.Sensitive {
 			entry.Before = presenceText(op.Before)
 			entry.After = "已设置（脱敏，长度 " + strconv.Itoa(len(fmt.Sprint(op.Value))) + "）"
@@ -54,6 +66,20 @@ func displayScalar(v any) string {
 		return "false"
 	}
 	return fmt.Sprint(v)
+}
+
+func describeProviderSpec(spec *ProviderSpec) string {
+	parts := []string{"kind=" + spec.Kind, "base_url=" + spec.BaseURL}
+	if spec.Model != "" {
+		parts = append(parts, "model="+spec.Model)
+	}
+	if len(spec.Models) > 0 {
+		parts = append(parts, "models="+strings.Join(spec.Models, ","))
+	}
+	if spec.APIKeyEnv != "" {
+		parts = append(parts, "api_key_env="+spec.APIKeyEnv)
+	}
+	return strings.Join(parts, " ")
 }
 
 func presenceText(v any) string {

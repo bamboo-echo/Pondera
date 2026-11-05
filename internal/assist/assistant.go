@@ -382,6 +382,18 @@ func (a *Assistant) Rollback(backupID string) (RollbackView, error) {
 		Intent: "还原备份 " + ref.ID, BackupID: ref.ID, BackupDir: ref.Dir, Status: "ok",
 	}
 	_ = a.appendHistory(record)
+	revision, credentialRevision, hashErr := a.writer().CurrentBaseHash()
+	if hashErr != nil {
+		revision, credentialRevision = "", ""
+	}
+	if a.OnApplied != nil {
+		a.OnApplied(AppliedEvent{
+			Revision:           revision,
+			CredentialRevision: credentialRevision,
+			BackupID:           ref.ID,
+			Summary:            []ChangeSummary{{Label: "rollback:" + ref.ID, Risk: "confirm"}},
+		})
+	}
 	return RollbackView{BackupID: ref.ID, Message: "已还原到备份状态"}, nil
 }
 

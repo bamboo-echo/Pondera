@@ -24,6 +24,9 @@ type ResolvedOp struct {
 	Risk string `json:"risk,omitempty"`
 	// Label is the human-readable target shown in the preview card.
 	Label string `json:"label"`
+	// NewProvider carries the strict spec for add_provider; it is empty for
+	// every other op.
+	NewProvider *ProviderSpec `json:"new_provider,omitempty"`
 }
 
 // Validate resolves and checks every op against cfg. It is called twice: when
@@ -55,6 +58,10 @@ func validateOp(reg *registry.Registry, cfg *config.Config, op *Op) (ResolvedOp,
 		return validateProviderField(reg, cfg, op)
 	case OpSetSecret:
 		return validateSecret(cfg, op)
+	case OpAddProvider:
+		return validateAddProvider(cfg, op)
+	case OpRemoveProvider:
+		return validateRemoveProvider(cfg, op)
 	}
 	return ResolvedOp{}, reject("unknown_op", "不支持的操作 %q", op.Op)
 }
@@ -285,6 +292,24 @@ func Revalidate(ops []ResolvedOp, cfg *config.Config) ([]ResolvedOp, error) {
 				return nil, fmt.Errorf("op %d: %w", i+1, reject("invalid_value", "密钥不能为空"))
 			}
 			refreshed.Before = presence(config.CredentialIsSet(key))
+		case ResolvedOpAddProvider:
+			if err := checkProviderName(cfg, op.Provider); err != nil {
+				return nil, fmt.Errorf("op %d: %w", i+1, err)
+			}
+			if op.NewProvider == nil {
+				return nil, fmt.Errorf("op %d: %w", i+1, reject("invalid_value", "provider %q 缺少描述", op.Provider))
+			}
+			if err := normalizeProviderSpec(op.NewProvider); err != nil {
+				return nil, fmt.Errorf("op %d: %w", i+1, err)
+			}
+		case ResolvedOpRemoveProvider:
+			if registry.ProviderIndex(cfg, op.Provider) < 0 {
+				return nil, fmt.Errorf("op %d: %w", i+1, reject("provider_unregistered", "provider %q 不存在", op.Provider))
+			}
+			if refs := providerReferences(cfg, op.Provider); len(refs) > 0 {
+				return nil, fmt.Errorf("op %d: %w", i+1, reject("provider_referenced", "provider %q 仍被 %s 引用", op.Provider, strings.Join(refs, "、")))
+			}
+			refreshed.Before = fmt.Sprintf("kind=%s base_url=%s", cfg.Providers[registry.ProviderIndex(cfg, op.Provider)].Kind, cfg.Providers[registry.ProviderIndex(cfg, op.Provider)].BaseURL)
 		default:
 			return nil, fmt.Errorf("op %d: %w", i+1, reject("unknown_op", "不支持的操作 %q", op.Op))
 		}
@@ -308,6 +333,22 @@ func Apply(cfg *config.Config, ops []ResolvedOp) error {
 			}
 		case ResolvedOpSecret:
 			// handled by the credential write; never touches config.toml
+		case ResolvedOpAddProvider:
+			if providerIndexFold(cfg, op.Provider) >= 0 {
+				return reject("provider_exists", "provider %q 已存在", op.Provider)
+			}
+			if err := checkProviderName(cfg, op.Provider); err != nil {
+				return err
+			}
+			if op.NewProvider == nil {
+				return reject("invalid_value", "provider %q 缺少描述", op.Provider)
+			}
+			if err := normalizeProviderSpec(op.NewProvider); err != nil {
+				return err
+			}
+			cfg.Providers = append(cfg.Providers, providerEntryOf(op.Provider, op.NewProvider))
+		case ResolvedOpRemoveProvider:
+			removeProvider(cfg, op.Provider)
 		default:
 			return reject("unknown_op", "不支持的操作 %q", op.Op)
 		}
@@ -335,6 +376,18 @@ func AssertApplied(cfg *config.Config, ops []ResolvedOp) error {
 			}
 			if !equalScalar(got, op.Value) {
 				return fmt.Errorf("verify: providers[%s].%s = %v, want %v", op.Provider, op.Field, got, op.Value)
+			}
+		case ResolvedOpAddProvider:
+			index := providerIndexFold(cfg, op.Provider)
+			if index < 0 {
+				return fmt.Errorf("verify: provider %q missing after add", op.Provider)
+			}
+			if op.NewProvider != nil && !strings.EqualFold(cfg.Providers[index].Kind, op.NewProvider.Kind) {
+				return fmt.Errorf("verify: provider %q kind = %s, want %s", op.Provider, cfg.Providers[index].Kind, op.NewProvider.Kind)
+			}
+		case ResolvedOpRemoveProvider:
+			if providerIndexFold(cfg, op.Provider) >= 0 {
+				return fmt.Errorf("verify: provider %q still present after remove", op.Provider)
 			}
 		}
 	}
