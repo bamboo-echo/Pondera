@@ -6555,6 +6555,29 @@ body > .mermaid-diagram--fullscreen {
 .composer-run-strip__toggle[aria-expanded="true"] svg {
   transform: rotate(180deg);
 }
+.composer-run-strip__toggle--wide {
+  flex: 1 1 auto;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  gap: 6px;
+  justify-content: flex-start;
+  margin: -3px -4px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  color: inherit;
+  text-align: start;
+}
+.composer-run-strip__toggle--wide .composer-run-strip__state {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-run-strip__toggle--wide:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .composer-retry-detail {
   position: absolute;
   left: 14px;

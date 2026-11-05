@@ -1199,6 +1199,7 @@ export const zh: Record<DictKey, string> = {
   "status.retrying": "正在重试 ({attempt}/{max})…",
   "status.retryReason": " · {reason}",
   "status.retryBackoff": "{reason}，{seconds} 秒后重试",
+  "status.retryingNow": "正在重试…",
   "status.retryElapsedBackoff": "退避 {seconds}s",
   "status.retryElapsed": "耗时 {seconds}s",
   "status.retryDetails": "重试详情",

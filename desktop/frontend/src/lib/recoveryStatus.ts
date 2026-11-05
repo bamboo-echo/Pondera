@@ -70,11 +70,22 @@ export function recoveryNextAttemptSeconds(recovery: RecoveryStatus, now: number
 export function recoveryStatusText(t: Translator, retry: RecoveryRetry, now: number): string {
   if (!retry.recovery?.waiting) {
     const base = t("status.retrying", { attempt: retry.attempt, max: retry.max });
-    const reason = retryFailureText(t, retry.failure);
+    const reason = retryFailureText(t, retry.failure, now);
     return reason ? `${base.replace(/…$/, "")}${t("status.retryReason", { reason })}` : base;
   }
   const phase = t(retry.recovery.phase === "connect" ? "status.recoveryNetwork" : "status.recoveryProvider");
   return t("status.recoveryWaiting", { seconds: recoveryNextAttemptSeconds(retry.recovery, now), phase });
+}
+
+// retryCountdownSeconds is the live wait before the next attempt. The backend
+// stamps the failure with its local `at` and the planned `backoffMs`, so the
+// next attempt is due at at + backoffMs; deriving the remainder from the
+// caller's `now` keeps the row ticking instead of restating a fixed value.
+// A missing `at` (older session replay) falls back to the full backoff.
+export function retryCountdownSeconds(failure: WireAttemptFailure | undefined, now: number): number {
+  if (!failure?.backoffMs) return 0;
+  const due = (failure.at ?? now) + failure.backoffMs;
+  return Math.max(0, Math.ceil((due - now) / 1000));
 }
 
 function retryKindLabel(t: Translator, failure: WireAttemptFailure): string {
@@ -84,11 +95,14 @@ function retryKindLabel(t: Translator, failure: WireAttemptFailure): string {
 }
 
 // Human-readable reason for one failed attempt, e.g. "限流，4 秒后重试".
-export function retryFailureText(t: Translator, failure?: WireAttemptFailure): string {
+// Once the countdown reaches zero the attempt is already being sent, so the
+// tail becomes "正在重试…" instead of "0 秒后重试".
+export function retryFailureText(t: Translator, failure?: WireAttemptFailure, now = Date.now()): string {
   if (!failure) return "";
   const reason = retryKindLabel(t, failure);
-  const seconds = failure.backoffMs ? Math.ceil(failure.backoffMs / 1000) : 0;
-  return seconds > 0 ? t("status.retryBackoff", { reason, seconds }) : reason;
+  const seconds = retryCountdownSeconds(failure, now);
+  if (seconds > 0) return t("status.retryBackoff", { reason, seconds });
+  return failure.backoffMs ? t("status.retryingNow") : reason;
 }
 
 // Timeline line, e.g. "#3 429 限流 · 退避 4s · 耗时 1.2s".
