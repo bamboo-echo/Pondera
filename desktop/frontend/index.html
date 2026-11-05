@@ -9,7 +9,7 @@
          this tree only after styles.css is ready, so the app never flashes
          unstyled content. Keep these rules in sync with StartupSplash. -->
     <style>
-      html,body,#root{width:100%;height:100%;margin:0}body{overflow:hidden;background:#111214;color:#f4f4f3;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.boot-shell{position:fixed;inset:0;display:grid;place-items:center;background:#111214}.boot-shell__card{display:flex;flex-direction:column;align-items:center;gap:10px}.boot-shell__mark{display:grid;width:64px;height:64px;place-items:center}.boot-shell__mark img{display:block;width:56px;height:56px}.boot-shell__name{font-size:22px;font-weight:650;letter-spacing:0}.boot-shell__dots{display:flex;height:12px;align-items:center;gap:5px}.boot-shell__dots span{width:5px;height:5px;border-radius:50%;background:#e58a3a;animation:boot-pulse 1s ease-in-out infinite}.boot-shell__dots span:nth-child(2){animation-delay:.14s}.boot-shell__dots span:nth-child(3){animation-delay:.28s}@keyframes boot-pulse{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+      html,body,#root{width:100%;height:100%;margin:0}body{overflow:hidden;background:#111214;color:#f4f4f3;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.boot-shell{position:fixed;inset:0;display:grid;place-items:center;background:#111214}.boot-shell__card{display:flex;flex-direction:column;align-items:center;gap:10px}.boot-shell__mark{display:grid;width:64px;height:64px;place-items:center}.boot-shell__mark img{display:block;width:56px;height:56px}.boot-shell__name{font-size:22px;font-weight:650;letter-spacing:0}.boot-shell__dots{display:flex;height:12px;align-items:center;gap:5px}.boot-shell__dots span{width:5px;height:5px;border-radius:50%;background:#e58a3a;animation:boot-pulse 1s ease-in-out infinite}.boot-shell__dots span:nth-child(2){animation-delay:.14s}.boot-shell__dots span:nth-child(3){animation-delay:.28s}@keyframes boot-pulse{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}.boot-shell__error{max-width:360px;text-align:center;font-size:13px;line-height:1.5;color:#ffb27a}.boot-shell__retry{margin-top:4px;padding:6px 16px;border-radius:8px;border:1px solid #e58a3a;background:transparent;color:#e58a3a;font:inherit;font-weight:600;cursor:pointer}
     </style>
   </head>
   <body>
@@ -22,6 +22,37 @@
         </div>
       </div>
     </div>
+    <script>
+      // Boot watchdog. A failed (or never finishing) main bundle would otherwise
+      // strand the splash forever. It runs before any bundle, so it cannot use
+      // the i18n chunk: the copy below is the minimal en/zh fallback.
+      (function () {
+        var failed = false;
+        function fail(reason) {
+          if (failed || window.__ponderaBootMounted) return;
+          failed = true;
+          if (console && console.error) console.error("desktop boot failed:", reason);
+          var shell = document.querySelector(".boot-shell");
+          if (!shell) return;
+          var zh = /^zh/i.test(navigator.language || "");
+          shell.innerHTML =
+            '<div class="boot-shell__card" role="alert">' +
+            '<div class="boot-shell__name">Pondera</div>' +
+            '<div class="boot-shell__error">' +
+            (zh ? "启动失败：主程序没有加载完成。" : "Startup failed: the app bundle did not load.") +
+            "</div>" +
+            '<button class="boot-shell__retry" type="button">' + (zh ? "重试" : "Retry") + "</button>" +
+            "</div>";
+          var retry = shell.querySelector(".boot-shell__retry");
+          if (retry) retry.onclick = function () { window.location.reload(); };
+        }
+        window.addEventListener("error", function (event) {
+          var target = event && event.target;
+          if (target && target.tagName === "SCRIPT") fail("main bundle load error");
+        }, true);
+        setTimeout(function () { fail("boot timeout"); }, 15000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

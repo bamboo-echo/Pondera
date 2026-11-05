@@ -8,7 +8,7 @@ import { installGlobalCrashHandlers } from "./lib/globalCrashHandlers";
 import { desktopHost } from "./lib/desktopHost";
 import { installBreadcrumbConsoleHook } from "./lib/breadcrumbs";
 import { installPerfDebugHook } from "./lib/perfDebug";
-import { LocaleProvider, preloadDetectedLocale } from "./lib/i18n";
+import { LocaleProvider, preloadDetectedLocale, t } from "./lib/i18n";
 import { ToastProvider } from "./lib/toast";
 import { initFontFamily } from "./lib/fontFamily";
 import { initTextSize } from "./lib/textSize";
@@ -88,30 +88,71 @@ const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 const rootElement = root;
 
+// Startup must always end in something the user can act on: the boot shell is
+// replaced by the app (styled or degraded) or by a visible error with a retry
+// action. A dependency that hangs or fails may never strand the splash screen.
+const BOOT_DEPENDENCY_TIMEOUT_MS = 10_000;
+
+function loadAppShellStylesheet(): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = appShellStylesheetURL;
+    link.onload = () => resolve();
+    link.onerror = () => reject(new Error(`failed to load desktop stylesheet: ${appShellStylesheetURL}`));
+    document.head.appendChild(link);
+  });
+}
+
+// Renders a fixed, style-free notice above the app so it stays readable even
+// when the app stylesheet itself is what failed.
+function showBootNotice(message: string) {
+  const notice = document.createElement("div");
+  notice.setAttribute("role", "alert");
+  notice.style.cssText =
+    "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483647;" +
+    "display:flex;align-items:center;gap:12px;max-width:min(560px,90vw);padding:10px 14px;" +
+    "border-radius:10px;background:#2a1d16;color:#f4f4f3;font:13px/1.4 Inter,-apple-system,'Segoe UI',sans-serif;" +
+    "box-shadow:0 6px 24px rgba(0,0,0,.45)";
+  const text = document.createElement("span");
+  text.textContent = message;
+  notice.appendChild(text);
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.textContent = t("common.retry");
+  retry.style.cssText =
+    "flex:none;padding:4px 10px;border-radius:6px;border:1px solid #e58a3a;background:transparent;" +
+    "color:#e58a3a;font:inherit;font-weight:600;cursor:pointer";
+  retry.onclick = () => window.location.reload();
+  notice.appendChild(retry);
+  document.body.appendChild(notice);
+}
+
+// Resolves to "ok" once stylesheet and locale are ready, "failed" when the
+// stylesheet cannot load, and "timeout" when either dependency hangs.
+async function waitForBootDependencies(): Promise<"ok" | "failed" | "timeout"> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), BOOT_DEPENDENCY_TIMEOUT_MS);
+  });
+  const dependencies = Promise.allSettled([loadAppShellStylesheet(), preloadDetectedLocale()]).then(([style, locale]) => {
+    if (locale.status === "rejected") console.error("failed to preload desktop locale", locale.reason);
+    if (style.status === "rejected") {
+      console.error("failed to load desktop stylesheet", style.reason);
+      return "failed" as const;
+    }
+    return "ok" as const;
+  });
+  const outcome = await Promise.race([dependencies, timeout]);
+  if (timer) clearTimeout(timer);
+  return outcome;
+}
+
 async function mountApp() {
   // The HTML boot shell paints immediately with critical inline styles. Load
   // the full stylesheet and detected locale in parallel, then replace that
   // shell in one React commit so users never see an unstyled application.
-  const preloadLocaleForMount = async () => {
-    await preloadDetectedLocale();
-  };
-  const stylesResult = await Promise.allSettled([
-    new Promise<void>((resolve, reject) => {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = appShellStylesheetURL;
-      link.onload = () => resolve();
-      link.onerror = () => reject(new Error(`failed to load desktop stylesheet: ${appShellStylesheetURL}`));
-      document.head.appendChild(link);
-    }),
-    preloadLocaleForMount(),
-  ]);
-  const [styleResult, localeResult] = stylesResult;
-  if (styleResult.status === "rejected") {
-    console.error("failed to load desktop stylesheet", styleResult.reason);
-    return;
-  }
-  if (localeResult.status === "rejected") console.error("failed to preload desktop locale", localeResult.reason);
+  const boot = await waitForBootDependencies();
   const assistantSurface = new URLSearchParams(window.location.search).get("assistant") === "1";
   createRoot(rootElement).render(
     <StrictMode>
@@ -130,6 +171,11 @@ async function mountApp() {
       </ErrorBoundary>
     </StrictMode>,
   );
+  // Tell the HTML boot watchdog (which covers a failed main bundle) that the
+  // app did mount, then surface any degraded startup.
+  (window as Window & { __ponderaBootMounted?: boolean }).__ponderaBootMounted = true;
+  if (boot === "timeout") showBootNotice(t("app.bootTimeout"));
+  else if (boot === "failed") showBootNotice(t("app.bootStylesheetFailed"));
 
   void import("./lib/desktopWebViewHeartbeat").then(({ installDesktopWebViewHeartbeat }) => {
     installDesktopWebViewHeartbeat();

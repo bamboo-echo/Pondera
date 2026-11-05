@@ -228,6 +228,8 @@ export const en = {
   "creation.requestError": "Session status is temporarily unavailable. Your saved input is preserved.",
   "creation.export": "Export creation diagnostics",
   "composer.workspaceStarting": "Workspace is still starting",
+  "app.bootStylesheetFailed": "Styles failed to load, running without them",
+  "app.bootTimeout": "Startup timed out",
   "app.splashSubtitle": "Agent Workspace",
 
   // top bar

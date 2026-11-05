@@ -229,6 +229,8 @@ export const zh: Record<DictKey, string> = {
   "creation.requestError": "暂时无法获取会话状态，已保存的输入不会丢失",
   "creation.export": "导出创建诊断",
   "composer.workspaceStarting": "工作区还在启动",
+  "app.bootStylesheetFailed": "样式加载失败，已降级显示",
+  "app.bootTimeout": "启动超时，请重试",
   "app.splashSubtitle": "Agent 工作区",
 
   // 顶栏

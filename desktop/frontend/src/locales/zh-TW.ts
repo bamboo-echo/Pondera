@@ -229,6 +229,8 @@ export const zhTW: Record<DictKey, string> = {
   "creation.requestError": "暫時無法取得會話狀態，已儲存的輸入不會遺失",
   "creation.export": "匯出建立診斷",
   "composer.workspaceStarting": "工作區還在啟動",
+  "app.bootStylesheetFailed": "樣式載入失敗，已降級顯示",
+  "app.bootTimeout": "啟動逾時，請重試",
   "app.splashSubtitle": "Agent 工作區",
 
   // 頂欄
