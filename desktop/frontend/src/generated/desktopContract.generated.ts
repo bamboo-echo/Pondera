@@ -3,7 +3,7 @@
 
 export const DESKTOP_PROTOCOL_VERSION = 11;
 
-export const DESKTOP_CONTRACT_DIGEST = "sha256:bcc8ed99e82ea5acecc95d4d2c746a4ac975e437534af81cd30bb667e53e39f1";
+export const DESKTOP_CONTRACT_DIGEST = "sha256:e8844fba10a4a68995b1eb13bd6c08ba2b57f48f23ffbf2b8b5152717d74884d";
 
 export const DESKTOP_COMMANDS = [
   "AIRenameSession",
@@ -5890,6 +5890,7 @@ export interface Message {
   readCompletion?: ReadCompletion | null;
   protocolRecovery?: ProtocolRecoveryAction | null;
   diagnostic?: FailureDiagnostic | null;
+  retryTimeline?: AttemptFailure[];
   serverSearch?: ServerSearchCall[];
   attachments?: Attachment[];
 }

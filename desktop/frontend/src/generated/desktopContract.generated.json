@@ -48941,6 +48941,17 @@
           }
         },
         {
+          "name": "retryTimeline",
+          "optional": true,
+          "type": {
+            "elem": {
+              "kind": "object",
+              "ref": "provider.AttemptFailure"
+            },
+            "kind": "array"
+          }
+        },
+        {
           "name": "serverSearch",
           "optional": true,
           "type": {
