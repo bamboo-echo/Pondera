@@ -26,6 +26,11 @@ export function assistantWindowURL(appURL: string): string {
 // shares the host preload bridge but has its own lifecycle and geometry.
 export class AssistantWindowHost {
   private win: BrowserWindow | null = null;
+  // Timestamps of automatic rebuilds, used to bound a recreate loop when the
+  // window keeps failing to load (e.g. the service is down).
+  private recoveries: number[] = [];
+  private static readonly RECOVERY_WINDOW_MS = 10_000;
+  private static readonly RECOVERY_LIMIT = 2;
 
   constructor(private readonly deps: AssistantWindowDeps) {}
 
@@ -81,8 +86,15 @@ export class AssistantWindowHost {
       if (url.startsWith(origin + "/")) return;
       event.preventDefault();
     });
-    win.webContents.on("did-fail-load", (_event: Electron.Event, errorCode: number, description: string) => {
-      deps.log.warn(`assistant window failed to load (${errorCode}): ${description}`);
+    win.webContents.on("did-fail-load", (_event: Electron.Event, errorCode: number, description: string, url: string, isMainFrame: boolean) => {
+      deps.log.warn(`assistant window failed to load (${errorCode}): ${description} url=${url} main=${isMainFrame}`);
+      // -3 is ERR_ABORTED, which happens on an intentional reload/navigation.
+      if (isMainFrame && errorCode !== -3) this.recover(`did-fail-load ${errorCode}`);
+    });
+    // A crashed renderer would otherwise leave an empty, unclosable shell.
+    win.webContents.on("render-process-gone", (_event: Electron.Event, details: Electron.RenderProcessGoneDetails) => {
+      deps.log.error(`assistant window renderer gone reason=${details.reason} exitCode=${details.exitCode}`);
+      this.recover(`render-process-gone ${details.reason}`);
     });
     win.once("ready-to-show", () => win.show());
     win.on("closed", () => {
@@ -91,6 +103,21 @@ export class AssistantWindowHost {
     void win.loadURL(assistantWindowURL(deps.appURL)).catch((error: unknown) => {
       deps.log.warn(`assistant window load failed: ${errorText(error)}`);
     });
+  }
+
+  // Replaces a dead or failed window with a freshly built one. Bounded so a
+  // persistent failure (service unavailable) cannot spin forever.
+  private recover(reason: string): void {
+    const now = Date.now();
+    this.recoveries = this.recoveries.filter((at) => now - at < AssistantWindowHost.RECOVERY_WINDOW_MS);
+    if (this.recoveries.length >= AssistantWindowHost.RECOVERY_LIMIT) {
+      this.deps.log.error(`assistant window recovery abandoned after repeated failures: ${reason}`);
+      return;
+    }
+    this.recoveries.push(now);
+    this.deps.log.warn(`rebuilding assistant window: ${reason}`);
+    this.destroy();
+    this.show();
   }
 
   destroy(): void {

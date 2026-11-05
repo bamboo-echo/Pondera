@@ -166,6 +166,21 @@ export function isOpenableExternalURL(value: unknown): value is string {
 
 const ASSISTANT_COMMAND = /^Assistant[A-Z]/;
 
+// The assistant window runs the same preload as the main window, so the gate has
+// to live at the channel level: every capability it may reach is listed here and
+// everything else answers with an explicit error. IPC.invoke stays on the list
+// but is narrowed further to Assistant* commands below.
+const ASSISTANT_CHANNEL_ALLOWLIST: ReadonlySet<string> = new Set([
+  IPC.invoke,
+  IPC.serviceStateGet, // the preload reads the event generation at startup
+  IPC.windowGetBounds,
+  IPC.windowSetTheme,
+  IPC.windowSetBackground,
+  IPC.appZoomGet,
+  IPC.appZoomSet,
+  IPC.appZoomReset,
+]);
+
 export function registerRendererIpc(deps: RendererIpcDeps): void {
   const senderTrust = (event: IpcMainEvent | IpcMainInvokeEvent): { main: boolean; extra: boolean } => ({
     main: deps.window.isTrustedSender(event.sender, event.senderFrame),
@@ -177,6 +192,16 @@ export function registerRendererIpc(deps: RendererIpcDeps): void {
     if (!ok) deps.log.warn(`rejected IPC from untrusted sender (webContents ${event.sender.id})`);
     return ok;
   };
+  // Channel-level scope for the secondary (assistant) window. The main window and
+  // unknown senders keep their previous outcome: main keeps every channel,
+  // unknown senders fall through to the generic untrusted-sender rejection.
+  const assistantChannelDenial = (channel: string, event: IpcMainInvokeEvent): string | null => {
+    const { main, extra } = senderTrust(event);
+    if (main || !extra) return null;
+    if (ASSISTANT_CHANNEL_ALLOWLIST.has(channel)) return null;
+    deps.log.warn(`untrusted sender: assistant window channel not allowed (${channel}, webContents ${event.sender.id})`);
+    return "untrusted sender: assistant window channel not allowed";
+  };
   const handle = (
     channel: string,
     run: (...args: unknown[]) => Promise<unknown> | unknown,
@@ -185,7 +210,7 @@ export function registerRendererIpc(deps: RendererIpcDeps): void {
     deps.ipcMain.handle(channel, async (event, ...args: unknown[]): Promise<IpcResult> => {
       // authorize runs before the generic trust check so a secondary trusted
       // window can still be held to a narrower command set.
-      const denial = authorize?.(event, args);
+      const denial = authorize?.(event, args) ?? assistantChannelDenial(channel, event);
       if (denial) return { ok: false, message: denial };
       if (!trusted(event)) return { ok: false, message: "untrusted sender" };
       try {
