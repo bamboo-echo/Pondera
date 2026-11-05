@@ -3,7 +3,7 @@
 
 export const DESKTOP_PROTOCOL_VERSION = 11;
 
-export const DESKTOP_CONTRACT_DIGEST = "sha256:e8844fba10a4a68995b1eb13bd6c08ba2b57f48f23ffbf2b8b5152717d74884d";
+export const DESKTOP_CONTRACT_DIGEST = "sha256:094d1af9550b2ccad2eb69f906a1b2108790830ccc1b0355886510ca420d7b0a";
 
 export const DESKTOP_COMMANDS = [
   "AIRenameSession",
@@ -3451,6 +3451,7 @@ export interface PluginMarketplaceEntryView {
   authorUrl?: string;
   version?: string;
   category: string;
+  domain?: string;
   icon?: string;
   source?: string;
   sha?: string;

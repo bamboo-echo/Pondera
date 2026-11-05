@@ -51,6 +51,10 @@ type Entry struct {
 	AuthorURL     string   `json:"authorUrl,omitempty"`
 	Version       string   `json:"version,omitempty"`
 	Category      string   `json:"category"`
+	// Domain is the optional free-form Chinese domain label (CAD, Blender,
+	// 学术写作, …). Older indexes omit it; an empty value keeps every existing
+	// filter unchanged and never produces a warning.
+	Domain        string   `json:"domain,omitempty"`
 	Icon          string   `json:"icon,omitempty"`
 	Source        string   `json:"source,omitempty"`
 	SHA           string   `json:"sha,omitempty"`
@@ -368,6 +372,7 @@ type entryFile struct {
 	Version     string          `json:"version"`
 	Author      json.RawMessage `json:"author"`
 	Category    string          `json:"category"`
+	Domain      string          `json:"domain"`
 	Icon        string          `json:"icon"`
 	Logo        string          `json:"logo"`
 	Featured    bool            `json:"featured"`
@@ -441,6 +446,7 @@ func mapEntry(raw entryFile, pluginRoot string, resolve installSourceFunc) (Entr
 		Description: strings.TrimSpace(raw.Description),
 		Version:     strings.TrimSpace(raw.Version),
 		Category:    NormalizeCategory(raw.Category),
+		Domain:      strings.TrimSpace(raw.Domain),
 		Icon:        strings.TrimSpace(raw.Icon),
 		Featured:    raw.Featured,
 		Permissions: cleanList(raw.Permissions),

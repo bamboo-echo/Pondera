@@ -92,6 +92,46 @@ func TestLocalDirectoryMapsEntries(t *testing.T) {
 	}
 }
 
+func TestDomainIsOptionalAndBackwardCompatible(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, ".claude-plugin", "marketplace.json")
+	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{
+	  "name": "domain-demo",
+	  "metadata": {"pluginRoot": "./plugins"},
+	  "plugins": [
+	    {"name": "cad-tool", "source": "./cad-tool", "category": "开发工具", "domain": "  CAD  "},
+	    {"name": "legacy-tool", "source": "./legacy-tool", "category": "开发工具"}
+	  ]
+	}`
+	if err := os.WriteFile(indexPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := New(root, filepath.Join(t.TempDir(), "cache.json")).Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if view.Warning != "" {
+		t.Fatalf("missing domain produced a warning: %q", view.Warning)
+	}
+	if len(view.Entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(view.Entries))
+	}
+	byName := map[string]Entry{}
+	for _, entry := range view.Entries {
+		byName[entry.Name] = entry
+	}
+	if got := byName["cad-tool"].Domain; got != "CAD" {
+		t.Fatalf("cad domain = %q, want CAD", got)
+	}
+	if got := byName["legacy-tool"].Domain; got != "" {
+		t.Fatalf("legacy domain = %q, want empty", got)
+	}
+}
+
 func TestFileURLSource(t *testing.T) {
 	root := t.TempDir()
 	indexPath := writeIndex(t, root)

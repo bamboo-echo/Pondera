@@ -35879,6 +35879,13 @@
           }
         },
         {
+          "name": "domain",
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
           "name": "icon",
           "optional": true,
           "type": {

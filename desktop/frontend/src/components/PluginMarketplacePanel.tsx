@@ -6,12 +6,18 @@ import { getLocale, useT, type Locale } from "../lib/i18n";
 import { ErrorMessage } from "./ErrorMessage";
 import { ModalCloseButton } from "./ModalCloseButton";
 import type { PluginMarketplaceEntryView, PluginMarketplaceView } from "../generated/desktopContract.generated";
+import {
+  ALL_DOMAINS,
+  filterMarketplaceEntries,
+  marketplaceDomainOptions,
+  type MarketplaceCategory,
+} from "../lib/pluginMarketplaceFilters";
 
 // PluginMarketplacePanel is the lazy marketplace surface inside
 // Settings → Capabilities → Plugins. The index itself is fetched and cached by
 // the desktop host; this component only filters the DTO and calls the existing
 // plugin install endpoint.
-type CategoryKey = "all" | "recommended" | "dev" | "productivity" | "design" | "research" | "content" | "other";
+type CategoryKey = MarketplaceCategory;
 
 type Copy = {
   tabInstalled: string;
@@ -41,6 +47,8 @@ type Copy = {
   installFailed: string;
   installedNotice: string;
   noInstallSource: string;
+  allDomains: string;
+  domainEmpty: string;
   categories: Record<CategoryKey, string>;
 };
 
@@ -73,6 +81,8 @@ const COPY: Record<Locale, Copy> = {
     installFailed: "Install failed",
     installedNotice: "{name} installed.",
     noInstallSource: "This entry has no installable source.",
+    allDomains: "All domains",
+    domainEmpty: "No plugins in this domain yet.",
     categories: {
       all: "All",
       recommended: "Recommended",
@@ -112,6 +122,8 @@ const COPY: Record<Locale, Copy> = {
     installFailed: "安装失败",
     installedNotice: "已安装 {name}。",
     noInstallSource: "该条目没有可安装的来源。",
+    allDomains: "全部领域",
+    domainEmpty: "该领域下暂无插件。",
     categories: {
       all: "全部",
       recommended: "推荐",
@@ -151,6 +163,8 @@ const COPY: Record<Locale, Copy> = {
     installFailed: "安裝失敗",
     installedNotice: "已安裝 {name}。",
     noInstallSource: "此條目沒有可安裝的來源。",
+    allDomains: "所有領域",
+    domainEmpty: "此領域暫無外掛。",
     categories: {
       all: "全部",
       recommended: "推薦",
@@ -175,6 +189,7 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryKey>("all");
+  const [domain, setDomain] = useState<string>(ALL_DOMAINS);
   const [selected, setSelected] = useState<string | null>(null);
   const [sourceDraft, setSourceDraft] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -197,16 +212,14 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
 
   useEffect(() => { void reload(); }, [reload]);
 
-  const entries = useMemo(() => {
-    const list = view?.entries ?? [];
-    const q = query.trim().toLowerCase();
-    return list.filter((entry) => {
-      if (q && ![entry.name, entry.description, entry.author, entry.source].join(" ").toLowerCase().includes(q)) return false;
-      if (category === "recommended") return entry.featured;
-      if (category !== "all") return entry.category === category;
-      return true;
-    });
-  }, [view, query, category]);
+  const entries = useMemo(
+    () => filterMarketplaceEntries(view?.entries ?? [], { query, category, domain }),
+    [view, query, category, domain],
+  );
+
+  // Domains come from the installed index, never from a hard-coded list. Chips
+  // are ordered by entry count and long-tail single-entry domains are hidden.
+  const domainOptions = useMemo(() => marketplaceDomainOptions(view?.entries ?? []), [view]);
 
   const featured = useMemo(() => {
     const list = view?.entries ?? [];
@@ -330,7 +343,33 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
             ))}
           </div>
 
-          {featured.length > 0 && category === "all" && query.trim() === "" && (
+          {domainOptions.length > 0 && (
+            <div className="cap-tabs" role="tablist" aria-label={copy.allDomains} style={{ marginTop: 8 }}>
+              <button
+                className={`cap-tab${domain === ALL_DOMAINS ? " cap-tab--active" : ""}`}
+                role="tab"
+                aria-selected={domain === ALL_DOMAINS}
+                type="button"
+                onClick={() => setDomain(ALL_DOMAINS)}
+              >
+                {copy.allDomains}
+              </button>
+              {domainOptions.map((option) => (
+                <button
+                  key={option.domain}
+                  className={`cap-tab${domain === option.domain ? " cap-tab--active" : ""}`}
+                  role="tab"
+                  aria-selected={domain === option.domain}
+                  type="button"
+                  onClick={() => setDomain(option.domain)}
+                >
+                  {option.domain}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {featured.length > 0 && category === "all" && domain === ALL_DOMAINS && query.trim() === "" && (
             <div style={{ margin: "12px 0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, fontWeight: 600 }}>
                 <Star size={14} aria-hidden /> {copy.featured}
@@ -356,7 +395,7 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
           )}
 
           {entries.length === 0 ? (
-            <div className="mem-empty">{copy.empty}</div>
+            <div className="mem-empty">{domain === ALL_DOMAINS ? copy.empty : copy.domainEmpty}</div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
               {entries.map((entry) => (

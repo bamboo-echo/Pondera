@@ -23,6 +23,7 @@ type PluginMarketplaceEntryView struct {
 	AuthorURL        string   `json:"authorUrl,omitempty"`
 	Version          string   `json:"version,omitempty"`
 	Category         string   `json:"category"`
+	Domain           string   `json:"domain,omitempty"`
 	Icon             string   `json:"icon,omitempty"`
 	Source           string   `json:"source,omitempty"`
 	SHA              string   `json:"sha,omitempty"`
@@ -102,6 +103,7 @@ func (a *App) pluginMarketplaceView(view pluginmarket.View) PluginMarketplaceVie
 			AuthorURL:        entry.AuthorURL,
 			Version:          entry.Version,
 			Category:         entry.Category,
+			Domain:           entry.Domain,
 			Icon:             entry.Icon,
 			Source:           entry.Source,
 			SHA:              entry.SHA,
