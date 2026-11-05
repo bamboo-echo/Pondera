@@ -295,7 +295,11 @@ type Agent struct {
 	svc agentServices
 	// sess is the state one conversation owns; SetSession restarts it. See
 	// sessionstate.go.
-	sess              sessionRuntime
+	sess sessionRuntime
+	// turnAttempts is the bounded retry timeline accumulated for the current
+	// Run. It is persisted onto a failed turn's recovery record so reopened
+	// history can render the same read-only timeline the live stream showed.
+	turnAttempts      []provider.AttemptFailure
 	responseLanguage  atomic.Value // string: auto|zh|en
 	reasoningLanguage atomic.Value // string: auto|zh|en
 
@@ -1138,6 +1142,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		return err
 	}
 	a.restoreProtocolProjection()
+	a.turnAttempts = nil
 	ctx = a.withProviderCacheSession(ctx)
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey

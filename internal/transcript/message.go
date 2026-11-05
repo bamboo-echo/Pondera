@@ -63,7 +63,11 @@ type Message struct {
 	ReadCompletion    *provider.ReadCompletion         `json:"readCompletion,omitempty"`
 	ProtocolRecovery  *provider.ProtocolRecoveryAction `json:"protocolRecovery,omitempty"`
 	Diagnostic        *provider.FailureDiagnostic      `json:"diagnostic,omitempty"`
-	ServerSearch      []provider.ServerSearchCall      `json:"serverSearch,omitempty"`
+	// RetryTimeline is the read-only attempt history restored onto a failed
+	// turn's history notice. It mirrors the live retry card and never retriggers
+	// the running banner.
+	RetryTimeline []provider.AttemptFailure   `json:"retryTimeline,omitempty"`
+	ServerSearch  []provider.ServerSearchCall `json:"serverSearch,omitempty"`
 	// Attachments are display-only facts for admitted session images. They never
 	// participate in provider requests; the frontend loads bytes through a
 	// digest-only session read authorized from this session's content graph.

@@ -67,7 +67,7 @@ func interruptedNotice(recovery *provider.InterruptedTurnRecovery) Message {
 				text = label + ": " + text
 			}
 		}
-		return Message{Role: "notice", Level: "warn", Code: event.NoticeCodeProviderRequestFailed, Content: text, Detail: provider.FailureDiagnosticDetail(diagnostic), Diagnostic: diagnostic}
+		return Message{Role: "notice", Level: "warn", Code: event.NoticeCodeProviderRequestFailed, Content: text, Detail: provider.FailureDiagnosticDetail(diagnostic), Diagnostic: diagnostic, RetryTimeline: recovery.Attempts}
 	}
 	return Message{Role: "notice", Level: "info", Code: event.NoticeCodeCancelledTurn,
 		Content: "This turn was interrupted. Partial output is kept for reference; only completed tool pairs and a bounded recovery summary enter the next model turn. Inspect the workspace before continuing or reverting changes."}

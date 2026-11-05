@@ -857,6 +857,7 @@ export interface HistoryMessage extends TranscriptTurnMetadata {
   readiness?: WireFinalReadiness;
   protocolRecovery?: { id: string };
   diagnostic?: { kind: string; status?: number; traceId?: string; providerId?: string; providerDisplayName?: string; protocol?: string; requestPath?: string; transportCode?: string };
+  retryTimeline?: import("./recoveryStatus").WireAttemptFailure[];
   serverSearch?: HistoryServerSearch[];
   attachments?: Array<{ kind?: string; digest?: string; name?: string; mime?: string; width?: number; height?: number; bytes?: number }>;
 }

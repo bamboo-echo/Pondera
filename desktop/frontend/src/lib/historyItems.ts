@@ -102,7 +102,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
         continue;
       }
       if (m.content.trim() !== "" || m.decisionReceipt) {
-        const next = appendNoticeItem(items, seq, recordItemId, m.level === "warn" ? "warn" : "info", m.content, m.detail, m.code, m.decisionReceipt, m.diagnostic);
+        const next = appendNoticeItem(items, seq, recordItemId, m.level === "warn" ? "warn" : "info", m.content, m.detail, m.code, m.decisionReceipt, m.diagnostic, m.retryTimeline);
         items = next.items;
         seq = next.seq;
       }

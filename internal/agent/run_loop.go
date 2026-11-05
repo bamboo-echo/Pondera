@@ -308,6 +308,7 @@ func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, a
 		StreamAttempt: info,
 	})
 	if action == event.StreamAttemptDiscard {
+		a.recordAttemptFailure(failure)
 		a.logAttemptFailure(id, attempt, reason, failure)
 	}
 }
@@ -349,6 +350,7 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 			// cleanup, which owns any recovery facts replayed to the model.
 			failure := provider.ErrNoDeliverableOutput
 			record := interruptedDisplayRecord("", "", "", nil, true, failure)
+			a.attachAttemptTimeline(&record)
 			if err := a.appendCommittedMessages(ctx, "no-deliverable-output", record); err != nil {
 				return false, err
 			}

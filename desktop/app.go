@@ -4966,7 +4966,7 @@ func interruptedTurnHistoryNotice(recovery *provider.InterruptedTurnRecovery) Hi
 				message = label + ": " + message
 			}
 		}
-		return HistoryMessage{Role: "notice", Level: "warn", Code: event.NoticeCodeProviderRequestFailed, Content: message, Detail: detail, Diagnostic: diagnostic}
+		return HistoryMessage{Role: "notice", Level: "warn", Code: event.NoticeCodeProviderRequestFailed, Content: message, Detail: detail, Diagnostic: diagnostic, RetryTimeline: recovery.Attempts}
 	}
 	return HistoryMessage{
 		Role: "notice", Level: "info", Code: event.NoticeCodeCancelledTurn,

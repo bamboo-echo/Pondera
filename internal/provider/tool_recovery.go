@@ -106,11 +106,15 @@ func RecordToolRecovery(r *InterruptedTurnRecovery, call InterruptedToolSummary,
 // provider-excluded handoff for an unfinished turn. It contains bounded facts;
 // raw partial reasoning remains local for display.
 type InterruptedTurnRecovery struct {
-	TurnID                  string                   `json:"turn_id,omitempty"`
-	AttemptID               string                   `json:"attempt_id,omitempty"`
-	Cause                   string                   `json:"cause,omitempty"`
-	TerminalStatus          string                   `json:"terminalStatus,omitempty"` // failed | interrupted; absent preserves legacy display
-	FailureDiagnostic       *FailureDiagnostic       `json:"failureDiagnostic,omitempty"`
+	TurnID            string             `json:"turn_id,omitempty"`
+	AttemptID         string             `json:"attempt_id,omitempty"`
+	Cause             string             `json:"cause,omitempty"`
+	TerminalStatus    string             `json:"terminalStatus,omitempty"` // failed | interrupted; absent preserves legacy display
+	FailureDiagnostic *FailureDiagnostic `json:"failureDiagnostic,omitempty"`
+	// Attempts is the bounded, redacted retry timeline for this failed turn.
+	// It is written when the turn terminates so a restarted client can render
+	// the same read-only history the live stream showed.
+	Attempts                []AttemptFailure         `json:"attempts,omitempty"`
 	WriteChecks             []WriteRecoveryCheck     `json:"write_checks,omitempty"`
 	SatisfiedWrites         []InterruptedToolSummary `json:"satisfied_writes,omitempty"`
 	Pending                 bool                     `json:"pending,omitempty"`
