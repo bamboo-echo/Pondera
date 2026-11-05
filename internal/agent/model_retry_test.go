@@ -116,6 +116,60 @@ func TestModelRetryDenominatorMatchesRealRequestBound(t *testing.T) {
 	}
 }
 
+func TestModelRetryCountersStayCoherentWithSamplingRepairs(t *testing.T) {
+	// Sampling repairs consume attempts without consuming retries. Two repairs
+	// before the retries would push attempt 4 past a denominator of
+	// 1+retry_count; the counter must grow with the repairs instead.
+	waits := withoutRetryWait(t)
+	output := &provider.OutputLimitError{
+		APIError:        &provider.APIError{Status: 400},
+		MaxOutputTokens: 1024,
+	}
+	overflow := &provider.ContextLimitError{
+		APIError:         &provider.APIError{Status: 400},
+		WindowTokens:     10_000,
+		PromptTokens:     100,
+		CompletionTokens: 512,
+	}
+	p := testutil.NewMock("mixed",
+		testutil.Turn{StreamError: output},
+		testutil.Turn{StreamError: overflow},
+		testutil.Turn{StreamError: &provider.APIError{Status: 503}},
+		testutil.Turn{StreamError: &provider.APIError{Status: 503}},
+		testutil.Turn{StreamError: &provider.APIError{Status: 503}},
+	)
+	sink := &recordSink{}
+	a := New(p, echoRegistry(), NewSession(""), Options{RetryCount: 2, ContextWindow: 1_000_000, MaxOutputTokens: 4096}, sink)
+	_ = a.Run(withNoClosedLoop(context.Background()), "go")
+
+	const repairs = 2
+	wantMax := 1 + 2 + repairs
+	if p.CallCount() != wantMax {
+		t.Fatalf("calls = %d, want %d (initial + %d retries + %d repairs)", p.CallCount(), wantMax, 2, repairs)
+	}
+	if len(*waits) != 2 {
+		t.Fatalf("waits = %d, want 2 retries", len(*waits))
+	}
+	retries := sink.kinds(event.Retrying)
+	if len(retries) != 2 {
+		t.Fatalf("retrying events = %d, want 2: %+v", len(retries), retries)
+	}
+	for i, retry := range retries {
+		if retry.RetryMax != wantMax {
+			t.Fatalf("retry %d denominator = %d, want %d", i+1, retry.RetryMax, wantMax)
+		}
+		if retry.RetryAttempt > retry.RetryMax {
+			t.Fatalf("inverted counter %d/%d", retry.RetryAttempt, retry.RetryMax)
+		}
+		if retry.AttemptFailure == nil || retry.AttemptFailure.Attempt != retry.RetryAttempt || retry.AttemptFailure.Max != retry.RetryMax {
+			t.Fatalf("retry %d failure counters disagree: %+v", i+1, retry.AttemptFailure)
+		}
+	}
+	if retries[0].RetryAttempt != 3 || retries[1].RetryAttempt != 4 {
+		t.Fatalf("retry numerators = %d,%d, want 3,4 after two repairs", retries[0].RetryAttempt, retries[1].RetryAttempt)
+	}
+}
+
 func TestModelRetryStopsAtConfiguredBudget(t *testing.T) {
 	waits := withoutRetryWait(t)
 	statusErr := &provider.APIError{Status: 429}
