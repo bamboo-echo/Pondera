@@ -240,37 +240,47 @@ func ProtectedWriteRoots(stateRoot string) []string {
 	return []string{stateRoot}
 }
 
-// IsProtectedWritePath reports whether abs is a Pondera session store,
-// runtime ledger, or security-boundary file.
+// stateWriteAllowlist names the only Pondera state-root children a model grant
+// may make writable. Everything else under the state root is protected, so a
+// model-approved write into plugins/, assistant/, remote/, repair/, logs/ or a
+// directory added later cannot persist code the host runs with full privileges.
+var stateWriteAllowlist = []string{"skills", "memory"}
+
+// IsProtectedWritePath reports whether abs lies inside the Pondera state root
+// outside the skills/memory allowlist, i.e. whether it must stay read-only.
+// Unknown children are protected (fail-closed).
 func IsProtectedWritePath(abs, stateRoot string) bool {
 	abs = canonicalDir(abs)
 	stateRoot = canonicalDir(stateRoot)
 	if abs == "" || stateRoot == "" {
 		return false
 	}
-	if sameWritePath(abs, stateRoot) {
-		return true
-	}
-	if protectedPathWithin(filepath.Join(stateRoot, "sessions"), abs) {
-		return true
-	}
-	relRoot, relPath := stateRoot, abs
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		relRoot, relPath = strings.ToLower(relRoot), strings.ToLower(relPath)
-	}
-	if rel, err := filepath.Rel(relRoot, relPath); err == nil && rel != "." && !strings.Contains(rel, string(filepath.Separator)) {
-		if isProtectedStateFile(rel) {
-			return true
-		}
-	}
-	return protectedPathWithin(filepath.Join(stateRoot, "projects"), abs)
-}
-
-func protectedPathWithin(root, path string) bool {
+	root, path := stateRoot, abs
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		root, path = strings.ToLower(root), strings.ToLower(path)
 	}
-	return PathWithin(root, path)
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	top := rel
+	if idx := strings.IndexRune(rel, filepath.Separator); idx >= 0 {
+		top = rel[:idx]
+	}
+	// Security-boundary files win over the allowlist, so a later allowlist entry
+	// can never unprotect them.
+	if isProtectedStateFile(top) {
+		return true
+	}
+	for _, allowed := range stateWriteAllowlist {
+		if top == allowed {
+			return false
+		}
+	}
+	return true
 }
 
 func isProtectedStateFile(name string) bool {
@@ -279,7 +289,8 @@ func isProtectedStateFile(name string) bool {
 		return true
 	}
 	switch lower {
-	case "settings.json", "metrics-pending.json", "crash-pending.json":
+	case "settings.json", "metrics-pending.json", "crash-pending.json",
+		"config.toml", ".env", "plugin-packages.json":
 		return true
 	default:
 		return false
@@ -325,7 +336,7 @@ func ValidateWriteDir(abs, stateRoot string) error {
 		return fmt.Errorf("write directory %q is a filesystem root and cannot be granted", abs)
 	}
 	if IsProtectedWritePath(abs, stateRoot) {
-		return fmt.Errorf("write directory %q is a Pondera session or runtime-state path and cannot be granted", abs)
+		return fmt.Errorf("write directory %q is inside the Pondera state directory and cannot be granted", abs)
 	}
 	return nil
 }

@@ -136,6 +136,33 @@ func TestProtectedWritePath(t *testing.T) {
 	if IsProtectedWritePath(filepath.Join(state, "skills", "x.md"), state) {
 		t.Fatal("ordinary state files are not protected")
 	}
+	for _, allowed := range []string{filepath.Join(state, "skills"), filepath.Join(state, "memory", "notes.md")} {
+		if IsProtectedWritePath(allowed, state) {
+			t.Fatalf("allowlisted state path %q must not be protected", allowed)
+		}
+	}
+	for _, denied := range []string{
+		filepath.Join(state, "plugins"),
+		filepath.Join(state, "plugins", "hooked", "runtime.js"),
+		filepath.Join(state, "assistant"),
+		filepath.Join(state, "remote"),
+		filepath.Join(state, "repair"),
+		filepath.Join(state, "logs"),
+		filepath.Join(state, "cache"),
+		filepath.Join(state, "sessions"),
+		filepath.Join(state, "projects", "slug"),
+		filepath.Join(state, "launch-hooks"),
+		filepath.Join(state, "config.toml"),
+		filepath.Join(state, ".env"),
+		filepath.Join(state, "plugin-packages.json"),
+	} {
+		if !IsProtectedWritePath(denied, state) {
+			t.Fatalf("state path %q must be protected", denied)
+		}
+	}
+	if err := ValidateWriteDir(filepath.Join(state, "plugins"), state); err == nil {
+		t.Fatal("requesting plugins should be rejected")
+	}
 	if err := ValidateWriteDir(filepath.Join(state, "sessions"), state); err == nil {
 		t.Fatal("requesting sessions should be rejected")
 	}

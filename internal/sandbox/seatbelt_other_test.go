@@ -78,28 +78,37 @@ func TestBwrapProtectedWriteArgsRemountsReadonly(t *testing.T) {
 	}
 }
 
-func TestBwrapProtectedWriteArgsReallowsOnlySafeStateChild(t *testing.T) {
+func TestBwrapProtectedWriteArgsReallowsOnlyAllowlistedStateChild(t *testing.T) {
 	state := t.TempDir()
 	skills := filepath.Join(state, "skills")
-	projects := filepath.Join(state, "projects", "slug")
-	if err := os.MkdirAll(skills, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(projects, 0o755); err != nil {
-		t.Fatal(err)
+	memory := filepath.Join(state, "memory")
+	plugins := filepath.Join(state, "plugins", "hooked")
+	sessions := filepath.Join(state, "sessions")
+	unknown := filepath.Join(state, "some-future-dir")
+	for _, dir := range []string{skills, memory, plugins, sessions, unknown} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	argv := bwrapBaseArgs(Spec{
 		Mode:                "enforce",
-		WriteRoots:          []string{skills, projects},
+		WriteRoots:          []string{skills, memory, plugins, sessions, unknown},
 		ProtectedWriteRoots: ProtectedWriteRoots(state),
 		MinimalWrites:       true,
 	})
 	protect := indexArgs(argv, "--ro-bind", state, state)
-	if protect < 0 || indexArgs(argv[protect+1:], "--bind", skills, skills) < 0 {
-		t.Fatalf("safe state child must be reopened after parent protection: %v", argv)
+	if protect < 0 {
+		t.Fatalf("state root must be remounted read-only: %v", argv)
 	}
-	if got := indexArgs(argv[protect+1:], "--bind", projects, projects); got >= 0 {
-		t.Fatalf("project runtime state must not be reopened: %v", argv)
+	for _, allowed := range []string{skills, memory} {
+		if indexArgs(argv[protect+1:], "--bind", allowed, allowed) < 0 {
+			t.Fatalf("allowlisted state child %q must be reopened after parent protection: %v", allowed, argv)
+		}
+	}
+	for _, denied := range []string{plugins, sessions, unknown} {
+		if indexArgs(argv[protect+1:], "--bind", denied, denied) >= 0 {
+			t.Fatalf("protected state child %q must not be reopened: %v", denied, argv)
+		}
 	}
 }
 
