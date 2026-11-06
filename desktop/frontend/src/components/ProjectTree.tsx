@@ -366,7 +366,7 @@ export function ProjectTree({
         pending?.();
       }
     }
-  }, [applyRuntimeProjection, creationTopics, currentArchiveTombstones, query, showToast, updateTopicPageState]);
+  }, [applyRuntimeProjection, creationTopics, currentArchiveTombstones, query, showToast, topicCompletePageRef, topicLoadErrorRef, topicLoadPendingRef, topicLoadSeqRef, topicPageStateRef, topicRequestLimiterRef, topicRevisionRef, topicWindowLimitsRef, updateTopicPageState]);
   loadProjectTopicsRef.current = loadProjectTopics;
   useLayoutEffect(() => { restoreListReadAnchor(projectTreeRef.current, readAnchorRef.current); readAnchorRef.current = undefined; }, [tree]);
 
@@ -380,7 +380,7 @@ export function ProjectTree({
     const state = topicPageStateRef.current[projectTreeListKey(project.key, groupID, query)];
     if (!projectTreeListNeedsInitialization(state)) return Promise.resolve();
     return loadProjectTopics(project, false, groupID);
-  }, [loadProjectTopics, query]);
+  }, [loadProjectTopics, query, topicPageStateRef]);
   const ensureTopicListRef = useRef(ensureTopicList);
   ensureTopicListRef.current = ensureTopicList;
   const expandTopicList = useCallback((project: ProjectNode, groupID = "", loadedCount = 0) => {
@@ -397,12 +397,12 @@ export function ProjectTree({
     if (!project.remote && loadedCount < nextLimit && topicPageStateRef.current[requestKey]?.nextCursor) {
       void loadProjectTopics(project, true, groupID);
     }
-  }, [loadProjectTopics, query]);
+  }, [loadProjectTopics, query, setTopicWindowLimits, topicLoadPendingRef, topicPageStateRef, topicWindowLimitsRef]);
 
   const retryTopicList = useCallback((project: ProjectNode, groupID = "") => {
     const state = topicPageStateRef.current[projectTreeListKey(project.key, groupID, query)];
     void loadProjectTopics(project, Boolean(state?.nextCursor), groupID);
-  }, [loadProjectTopics, query]);
+  }, [loadProjectTopics, query, topicPageStateRef]);
   const forgetTopicList = useCallback((project: ProjectNode, groupID: string) => {
     const listKey = projectTreeListKey(project.key, groupID);
     topicLoadSeqRef.current[listKey] = (topicLoadSeqRef.current[listKey] ?? 0) + 1;
@@ -420,12 +420,12 @@ export function ProjectTree({
     topicWindowLimitsRef.current = nextLimits;
     setTopicWindowLimits(nextLimits);
     rememberProjectTreeWindowLimit(listKey, PROJECT_TREE_WINDOW_INITIAL);
-  }, []);
+  }, [setTopicPageState, setTopicWindowLimits, topicCompletePageRef, topicLoadErrorRef, topicLoadPendingRef, topicLoadSeqRef, topicPageStateRef, topicRevisionRef, topicWindowLimitsRef]);
   const reloadProjectTopicLists = useCallback((project: ProjectNode) => {
     return reloadProjectTreeTopicLists(project,
       topicRequestContextRef.current.query, topicPageStateRef.current,
       (target, groupID) => loadProjectTopicsRef.current(target, false, groupID, true));
-  }, []);
+  }, [topicPageStateRef]);
 
   const changeQuery = useCallback((value: string) => {
     if (value.trim() !== topicRequestContextRef.current.query) {
@@ -560,7 +560,8 @@ export function ProjectTree({
 
   useEffect(() => {
     void refresh();
-    return () => { shellRequestRef.current++; };
+    const shellRequestRefLocal = shellRequestRef;
+    return () => { shellRequestRefLocal.current++; };
   }, [refresh, refreshSignal]);
 
   useEffect(() => {
@@ -625,7 +626,7 @@ export function ProjectTree({
     for (const records of [topicLoadPendingRef.current, topicRevisionRef.current, topicCompletePageRef.current, topicLoadErrorRef.current]) {
       for (const key of Object.keys(records)) if (!keep(key)) delete records[key];
     }
-  }, [projectShellSignature, tree]);
+  }, [projectShellSignature, setTopicPageState, topicCompletePageRef, topicLoadErrorRef, topicLoadPendingRef, topicLoadSeqRef, topicPageStateRef, topicRevisionRef, tree]);
   // Only search is debounced. All first-page consumers share ensureTopicList;
   // a delayed search must not reload a page already fetched by an event.
   useEffect(() => {
@@ -648,7 +649,7 @@ export function ProjectTree({
       (project) => projectNodeKey(project, 0),
     );
     for (const project of projects) void ensureTopicListRef.current(project);
-  }, [expanded, projectShellSignature, query]);
+  }, [expanded, projectShellSignature, query, topicPageStateRef]);
 
   // Following the active topic is a view concern over the tree already held.
   useEffect(() => {
