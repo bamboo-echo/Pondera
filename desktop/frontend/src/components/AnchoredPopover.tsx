@@ -173,7 +173,7 @@ export function AnchoredPopover({
       window.removeEventListener("keydown", closeOnEscape);
       document.removeEventListener("click", closeOnOutsideClick);
     };
-  }, [anchorRef, onClose, open]);
+  }, [anchorRef, closing, onClose, open]);
 
   if (!rendered) return null;
 

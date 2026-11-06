@@ -26,7 +26,10 @@ export default function ChatToolBody({ item, loader }: { item: Extract<ChatNode,
   const busy = pendingItem === item;
   const error = errorItem === item;
   const epoch = useRef(0);
-  useEffect(() => { return () => { epoch.current++; }; }, [item]);
+  useEffect(() => {
+    const counter = epoch;
+    return () => { counter.current++; };
+  }, [item]);
   const full = loaded && loaded.item.id === item.id && loaded.item.args === item.args &&
     loaded.item.output === item.output && loaded.item.error === item.error && loaded.item.dataArchived === item.dataArchived
     ? loaded.text : undefined;

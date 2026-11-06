@@ -77,8 +77,9 @@ export function CopyButton({
   const stateLabel = pending ? t("chat.loading") : failed ? t("richLink.copyFailed") : copied ? t("msg.copied") : actionLabel;
 
   useEffect(() => {
+    const epoch = epochRef;
     return () => {
-      epochRef.current++;
+      epoch.current++;
       if (timerRef.current != null) window.clearTimeout(timerRef.current);
     };
   }, []);

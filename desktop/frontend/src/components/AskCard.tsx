@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useCallback, useId, useMemo, useRef, useState } from "react";
 import { useT } from "../lib/i18n";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, X } from "lucide-react";
 import type { QuestionAnswer, WireAsk, WireAskQuestion } from "../lib/types";
@@ -132,10 +132,10 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
         : (nextSel[question.id] ?? []),
     }));
 
-  const answerLabel = (question: WireAskQuestion) => {
+  const answerLabel = useCallback((question: WireAskQuestion) => {
     if (answerMode[question.id] === "custom") return custom[question.id]?.trim() ?? "";
     return (sel[question.id] ?? []).join(", ");
-  };
+  }, [answerMode, custom, sel]);
 
   const answered = (question: WireAskQuestion) => answerMode[question.id] === "custom"
     ? (custom[question.id]?.trim() ?? "") !== ""
@@ -314,7 +314,7 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
         .slice(0, active)
         .map((question) => answerLabel(question))
         .filter(Boolean),
-    [active, custom, questions, sel],
+    [active, answerLabel, questions],
   );
 
   if (!q) return null;
