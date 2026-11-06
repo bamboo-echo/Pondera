@@ -93,6 +93,10 @@ func (a *Agent) checkpointSession(ctx context.Context, boundary SessionCheckpoin
 // confirmPendingModelContext completes an accepted context-maintenance commit
 // before another model request can be prepared or dispatched. It deliberately
 // reuses the frozen operation ID and payload retained by the original attempt.
+// The recorder and sidecar writes run without compactionMu: on a large session
+// they can take seconds, and the read paths (modelVisibleMessages, status
+// snapshots) as well as a cancelled turn must not block behind them. Only the
+// in-memory bookkeeping stays under the lock.
 func (a *Agent) confirmPendingModelContext(ctx context.Context) error {
 	if a == nil {
 		return ctx.Err()
@@ -108,22 +112,32 @@ func (a *Agent) confirmPendingModelContext(ctx context.Context) error {
 		a.sess.compactionMu.Unlock()
 		return errors.New("confirm pending model context: recorder unavailable")
 	}
+	operationID := pending.OperationID
 	commit := cloneSessionModelContextCommit(*pending)
+	a.sess.compactionMu.Unlock()
+
 	result, err := recorder.RecordSessionModelContext(ctx, commit)
 	if err != nil {
-		a.sess.compactionMu.Unlock()
 		return sessionSaveFailure(fmt.Errorf("confirm pending model context: %w", err))
 	}
 	if !result.Accepted || !result.Durable {
-		a.sess.compactionMu.Unlock()
 		return sessionSaveFailure(errors.New("confirm pending model context: commit is not durable"))
 	}
-	if err := a.persistCompactionStateLocked(); err != nil {
-		a.sess.compactionMu.Unlock()
+
+	a.sess.compactionMu.Lock()
+	path, state := a.sess.path, a.sess.compactionState
+	a.sess.compactionMu.Unlock()
+	if err := persistCompactionStateSnapshot(path, state); err != nil {
 		return sessionSaveFailure(fmt.Errorf("confirm pending model context sidecar: %w", err))
 	}
-	a.sess.pendingModelContextCommit = nil
-	a.sess.checkpointState = "applied"
+
+	a.sess.compactionMu.Lock()
+	// A newer install may have superseded the pending commit while the I/O ran;
+	// only the operation we confirmed may be cleared.
+	if a.sess.pendingModelContextCommit != nil && a.sess.pendingModelContextCommit.OperationID == operationID {
+		a.sess.pendingModelContextCommit = nil
+		a.sess.checkpointState = "applied"
+	}
 	var receipt *ContextMaintenanceReceipt
 	if a.sess.compactionState.LastReceipt != nil {
 		copy := *a.sess.compactionState.LastReceipt

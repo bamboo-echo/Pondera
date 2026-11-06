@@ -45,3 +45,42 @@ func TestDispatchGenerationGateBlocksStaleClassification(t *testing.T) {
 		t.Fatalf("stale generation outcome = %+v", out)
 	}
 }
+
+// argGenTool classifies a call by a generation embedded in its arguments so two
+// calls of the same tool can carry different scheduled classes.
+type argGenTool struct{}
+
+func (t *argGenTool) Name() string            { return "argshift" }
+func (t *argGenTool) Description() string     { return "" }
+func (t *argGenTool) Schema() json.RawMessage { return json.RawMessage(`{"type":"object"}`) }
+func (t *argGenTool) ReadOnly() bool          { return true }
+func (t *argGenTool) Execute(context.Context, json.RawMessage) (string, error) {
+	return "", nil
+}
+func (t *argGenTool) ClassifyCall(raw json.RawMessage) tool.CallClass {
+	var v struct {
+		Gen string `json:"gen"`
+	}
+	_ = json.Unmarshal(raw, &v)
+	return tool.CallClass{Known: true, ReadOnly: true, ParallelSafe: true, Generation: v.Gen}
+}
+
+func TestDispatchGenerationGateKeysIdLessCallsBySlot(t *testing.T) {
+	reg := tool.NewRegistry()
+	target := &argGenTool{}
+	reg.Add(target)
+	a := &Agent{svc: agentServices{tools: reg}}
+	a.turn = a.allocateTurn()
+	calls := []provider.ToolCall{
+		{Name: "argshift", Arguments: `{"gen":"v1"}`},
+		{Name: "argshift", Arguments: `{"gen":"v2"}`},
+	}
+	assignMissingCallIDs(calls)
+	a.snapshotDispatchClasses(calls)
+	for i := range calls {
+		out, blocked := a.applyDispatchGenerationGate(&toolCallPlan{call: calls[i], tool: target})
+		if blocked {
+			t.Fatalf("call %d with its own scheduled class was blocked as stale: %+v", i, out)
+		}
+	}
+}

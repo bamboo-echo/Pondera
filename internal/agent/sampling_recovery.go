@@ -21,6 +21,19 @@ type samplingRecoveryState struct {
 	attemptStartedAt time.Time
 }
 
+// maxRequestsThisRound is the single denominator shared by every attempt
+// failure this sampling round reports: attempts already sent (sampling
+// repairs included), the replay being scheduled now, and every configured
+// retry still unspent. Repairs consume attempts but not retries, so the value
+// grows with them and the numerator (attempt) can never outrun it.
+func (a *Agent) maxRequestsThisRound(attempt, retries int) int {
+	remaining := a.retryCount - retries
+	if remaining < 0 {
+		remaining = 0
+	}
+	return attempt + remaining + 1
+}
+
 func (a *Agent) samplingDeadline(ctx context.Context) (context.Context, context.CancelFunc, TaskBudget) {
 	limit := a.taskBudgetLimit(ctx)
 	if a.turn.graceRound {
@@ -185,13 +198,13 @@ func (a *Agent) trySamplingRepair(ctx context.Context, s *samplingRecoveryState,
 		s.frozen.req.MaxTokens = limit.MaxOutputTokens
 		sink.Discard()
 		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "output_limit", result.err,
-			a.buildAttemptFailure(result.err, attempt, maxSamplingAttempts, 0, s.attemptStartedAt))
+			a.buildAttemptFailure(result.err, attempt, a.maxRequestsThisRound(attempt, s.retries), 0, s.attemptStartedAt))
 		return true
 	}
 	if next, ok, _ := a.recoverContextLimit(ctx, s.frozen, result.err, &s.context); ok {
 		sink.Discard()
 		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "context_limit", result.err,
-			a.buildAttemptFailure(result.err, attempt, maxSamplingAttempts, 0, s.attemptStartedAt))
+			a.buildAttemptFailure(result.err, attempt, a.maxRequestsThisRound(attempt, s.retries), 0, s.attemptStartedAt))
 		s.frozen = next
 		return true
 	}

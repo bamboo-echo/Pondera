@@ -549,6 +549,13 @@ func (c *client) streamWithPrefixContinuation(ctx context.Context, req provider.
 	var fullText, fullReasoning strings.Builder
 	var totalUsage *provider.Usage
 	continuations := 0
+	// The attempt counter is shared by every request of this sampling round, so
+	// each stream reports the cumulative request total. Summing two snapshots
+	// double counts (1+2 = 3, 3+3 = 6); fold each stream as a delta instead.
+	// Without a shared counter every stream reports its own count and the
+	// existing additive merge stays correct.
+	sharedAttempts := provider.RequestAttemptCount(ctx) > 0
+	previousRequests := 0
 
 	for {
 		var currentUsage *provider.Usage
@@ -596,6 +603,12 @@ func (c *client) streamWithPrefixContinuation(ctx context.Context, req provider.
 			}
 		}
 
+		if sharedAttempts && currentUsage != nil {
+			if count := provider.RequestAttemptCount(ctx); count > previousRequests {
+				currentUsage.RequestCount = count - previousRequests
+				previousRequests = count
+			}
+		}
 		totalUsage = mergeUsage(totalUsage, currentUsage, true)
 		if continuations >= maxPrefixContinuations ||
 			currentUsage == nil || currentUsage.FinishReason != "length" ||
@@ -960,6 +973,13 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			// (possibly large) arguments finish streaming.
 			if !started[tc.Index] && cur.Name != "" {
 				started[tc.Index] = true
+				if cur.ID == "" {
+					// Some OpenAI-compatible gateways stream tool calls by index
+					// and never send an id. Synthesize a stable one before the
+					// partial card is emitted so the Start, ArgsDelta and complete
+					// chunks all key the same call.
+					cur.ID = fmt.Sprintf("call_%d", tc.Index)
+				}
 				emitted = true
 				if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: cur.ID, Name: cur.Name}}) {
 					return emitted, ctx.Err()

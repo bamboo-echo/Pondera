@@ -24,6 +24,12 @@ import (
 // (#6607). A var, not a const, so tests can shrink it.
 var errorBodyReadTimeout = 10 * time.Second
 
+// maxErrorBodyDrain caps the advisory drain after the first 4 KiB of an error
+// body. A gateway can answer with megabytes of HTML or a never-ending stream;
+// the body is discarded either way, so stop once it is clearly not a short
+// error payload and let Close tear the connection down.
+const maxErrorBodyDrain = 64 << 10
+
 // SendOptions carries the per-request identity used to label failures.
 type SendOptions struct {
 	Provider            string // stable provider instance id
@@ -314,10 +320,11 @@ func parseRetryAfter(resp *http.Response) time.Duration {
 func readErrorBody(resp *http.Response) []byte {
 	timer := time.AfterFunc(errorBodyReadTimeout, func() { resp.Body.Close() })
 	msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	// Drain the rest so a healthy connection can be reused; the timer still
-	// arms this read, so a body that stalls after the first 4 KiB cannot
+	// Drain a bounded remainder so a healthy connection can be reused; an
+	// oversized body is closed instead of streamed to completion. The timer
+	// still arms this read, so a body that stalls after the first 4 KiB cannot
 	// wedge the retry loop either.
-	_, _ = io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxErrorBodyDrain))
 	timer.Stop()
 	resp.Body.Close()
 	return msg

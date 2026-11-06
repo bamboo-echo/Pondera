@@ -17,6 +17,69 @@ import (
 	"pondera/internal/tool"
 )
 
+type probeModelContextRecorder struct {
+	record func(context.Context, SessionModelContextCommit)
+}
+
+func (*probeModelContextRecorder) CheckpointSession(context.Context, SessionCheckpointBoundary) error {
+	return nil
+}
+
+func (r *probeModelContextRecorder) RecordSessionModelContext(ctx context.Context, commit SessionModelContextCommit) (SessionModelContextCommitResult, error) {
+	if r.record != nil {
+		r.record(ctx, commit)
+	}
+	return SessionModelContextCommitResult{Accepted: true, Durable: true}, nil
+}
+
+// The durable commit and sidecar write can take seconds on a large session;
+// they must not hold compactionMu, or every read path and a cancelled turn
+// waits behind the disk.
+func TestConfirmPendingModelContextRunsIOOutsideLock(t *testing.T) {
+	var a *Agent
+	rec := &probeModelContextRecorder{record: func(context.Context, SessionModelContextCommit) {
+		_ = a.ModelHistorySnapshot()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			a.sess.compactionMu.Lock()
+			a.sess.compactionMu.Unlock()
+		}()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("compactionMu stayed held across the recorder I/O")
+		}
+	}}
+	a = New(&fakeProvider{}, tool.NewRegistry(), &Session{}, Options{SessionCheckpointer: rec}, event.Discard)
+	a.sess.pendingModelContextCommit = &SessionModelContextCommit{OperationID: "op-1", Reason: "summary"}
+
+	if err := a.confirmPendingModelContext(t.Context()); err != nil {
+		t.Fatalf("confirmPendingModelContext: %v", err)
+	}
+	if a.sess.pendingModelContextCommit != nil || a.sess.checkpointState != "applied" {
+		t.Fatalf("pending checkpoint not cleared: pending=%+v state=%q", a.sess.pendingModelContextCommit, a.sess.checkpointState)
+	}
+}
+
+// A commit installed while the confirmed I/O runs supersedes the old pending
+// operation and must not be cleared by the confirmation that started earlier.
+func TestConfirmPendingModelContextKeepsSupersededCommit(t *testing.T) {
+	var a *Agent
+	rec := &probeModelContextRecorder{record: func(context.Context, SessionModelContextCommit) {
+		a.sess.pendingModelContextCommit = &SessionModelContextCommit{OperationID: "op-2", Reason: "summary"}
+	}}
+	a = New(&fakeProvider{}, tool.NewRegistry(), &Session{}, Options{SessionCheckpointer: rec}, event.Discard)
+	a.sess.pendingModelContextCommit = &SessionModelContextCommit{OperationID: "op-1", Reason: "summary"}
+
+	if err := a.confirmPendingModelContext(t.Context()); err != nil {
+		t.Fatalf("confirmPendingModelContext: %v", err)
+	}
+	if pending := a.sess.pendingModelContextCommit; pending == nil || pending.OperationID != "op-2" {
+		t.Fatalf("newer pending commit was dropped: %+v", pending)
+	}
+}
+
 // reentrantSnapshotSink re-enters ContextMaintenanceSnapshot on every emit,
 // which takes compactionMu. commitSummaryProjection must unlock before Emit.
 type reentrantSnapshotSink struct {

@@ -289,6 +289,30 @@ func TestStreamContinuesDeepSeekLengthWithAssistantPrefix(t *testing.T) {
 		usage.CacheHitTokens != 26 || usage.CacheMissTokens != 4 || usage.ReasoningTokens != 2 || usage.FinishReason != "stop" {
 		t.Fatalf("merged usage = %+v", usage)
 	}
+
+	// The agent wraps the whole sampling round in a request-attempt counter, so
+	// both HTTP requests report cumulative counts (1, then 2). Merging those
+	// snapshots must yield 2 requests, not 1+2=3.
+	sharedCtx := provider.WithRequestAttemptCounter(t.Context())
+	sharedStream, err := c.Stream(sharedCtx, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "write"}}})
+	if err != nil {
+		t.Fatalf("Stream with shared counter: %v", err)
+	}
+	var sharedUsage *provider.Usage
+	for chunk := range sharedStream {
+		switch chunk.Type {
+		case provider.ChunkUsage:
+			sharedUsage = chunk.Usage
+		case provider.ChunkError:
+			t.Fatalf("shared-counter continuation errored: %v", chunk.Err)
+		}
+	}
+	if sharedUsage == nil || sharedUsage.RequestCount != 2 {
+		t.Fatalf("shared-counter usage = %+v, want RequestCount 2", sharedUsage)
+	}
+	if got := provider.RequestAttemptCount(sharedCtx); got != 2 {
+		t.Fatalf("attempt counter = %d, want 2", got)
+	}
 }
 
 func TestStreamContinuesReasoningOnlyDeepSeekLength(t *testing.T) {
@@ -2366,5 +2390,56 @@ func TestNormaliseUsageAnthropicStyleFallback(t *testing.T) {
 				t.Fatalf("normaliseUsage() = %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestStreamSynthesizesIDsForIndexOnlyToolCalls covers gateways that stream a
+// tool call by index without ever sending an id: Start, progress and completion
+// chunks must all key the same synthesized call.
+func TestStreamSynthesizesIDsForIndexOnlyToolCalls(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, strings.Join([]string{
+			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"type":"function","function":{"name":"write_file","arguments":""}}]}}]}`,
+			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\":"}}]}}]}`,
+			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"a.txt\"}"}}]},"finish_reason":"tool_calls"}]}`,
+			`data: [DONE]`,
+		}, "\n\n")+"\n\n")
+	}))
+	defer srv.Close()
+
+	p, err := New(provider.Config{Name: "gateway", BaseURL: srv.URL, Model: "gpt-4o", APIKey: "k", HTTPClient: srv.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, err := p.Stream(t.Context(), provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var starts, completes int
+	var ids []string
+	for chunk := range ch {
+		if chunk.ToolCall != nil {
+			ids = append(ids, chunk.ToolCall.ID)
+		}
+		switch chunk.Type {
+		case provider.ChunkToolCallStart:
+			starts++
+		case provider.ChunkToolCall:
+			completes++
+		case provider.ChunkError:
+			t.Fatal(chunk.Err)
+		}
+	}
+	if starts != 1 || completes != 1 {
+		t.Fatalf("start chunks=%d complete chunks=%d, want 1/1", starts, completes)
+	}
+	if len(ids) == 0 {
+		t.Fatal("no tool-call chunks carried an id")
+	}
+	for _, id := range ids {
+		if id != "call_0" {
+			t.Fatalf("tool-call chunk id = %q, want the synthesized call_0", id)
+		}
 	}
 }

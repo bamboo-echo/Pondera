@@ -169,6 +169,34 @@ func TestModelRetryCountersStayCoherentWithSamplingRepairs(t *testing.T) {
 	if retries[0].RetryAttempt != 3 || retries[1].RetryAttempt != 4 {
 		t.Fatalf("retry numerators = %d,%d, want 3,4 after two repairs", retries[0].RetryAttempt, retries[1].RetryAttempt)
 	}
+
+	// The repair-chain discards must report the same denominator base as the
+	// retry chain: attempts sent so far + retries still unspent + the replay
+	// being scheduled. A fixed maxSamplingAttempts here would disagree with the
+	// retry events in the same turn.
+	repairMax := map[string]int{}
+	for _, attempt := range sink.kinds(event.StreamAttempt) {
+		info := attempt.StreamAttempt
+		if info.Action != event.StreamAttemptDiscard {
+			continue
+		}
+		if info.Reason != "output_limit" && info.Reason != "context_limit" {
+			continue
+		}
+		repairMax[info.Reason] = info.Max
+		if info.Attempt > info.Max {
+			t.Fatalf("%s counter %d/%d exceeds its denominator", info.Reason, info.Attempt, info.Max)
+		}
+		if info.Failure == nil || info.Failure.Attempt != info.Attempt || info.Failure.Max != info.Max {
+			t.Fatalf("%s repair counters disagree: %+v", info.Reason, info.Failure)
+		}
+	}
+	wantRepairMax := map[string]int{"output_limit": 1 + 2 + 1, "context_limit": 2 + 2 + 1}
+	for reason, want := range wantRepairMax {
+		if repairMax[reason] != want {
+			t.Fatalf("%s max = %d, want %d (same base as the retry chain)", reason, repairMax[reason], want)
+		}
+	}
 }
 
 func TestModelRetryStopsAtConfiguredBudget(t *testing.T) {
