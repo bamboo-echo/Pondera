@@ -66,7 +66,7 @@ export default function ChatToolBody({ item, loader }: { item: Extract<ChatNode,
       output={value.output} running={presentation.state === "running"} exitCode={presentation.exitCode}
       presentation={{ state: presentation.dot, label: t(presentation.label) }}
       maxLines={200} className={toolCss.terminalBody}
-      labels={{ ...labels, signal: signal => signal, exitCode: code => `${code}`, running: t("chat.running"), failed: t("chat.failed"), done: t("chat.done"), noOutput: t("chat.noOutput") }} />
+      labels={{ ...labels, copyFailed: t("richLink.copyFailed"), signal: signal => signal, exitCode: code => `${code}`, running: t("chat.running"), failed: t("chat.failed"), done: t("chat.done"), noOutput: t("chat.noOutput") }} />
       : search && item.status === "done" ? <WebBlock kind="search" answer={searchMeta.summary ?? item.searchSummary}
         sources={search.visible.map(source => ({ url: source.href, title: source.title }))} truncated={search.hiddenCount > 0}
         labels={{ noResults: t("sources.notProvided"), sourcesTruncated: t("sources.hidden", { n: search.hiddenCount }), http: "HTTP", contentTruncated: t("chat.loadFull") }} className={toolCss.webBody} />
