@@ -6,9 +6,13 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"pondera/internal/cloudsync"
@@ -176,6 +180,67 @@ func TestCostEndpointsAndGate(t *testing.T) {
 	s.costActive(rr, jsonRequest(http.MethodPost, "/cost/active", map[string]int{"active": 99}))
 	if rr.Code != http.StatusGone {
 		t.Fatalf("cost/active must be retired, got %d", rr.Code)
+	}
+}
+
+func TestCloudStoreIsCachedPerHome(t *testing.T) {
+	t.Setenv("PONDERA_HOME", t.TempDir())
+	s := &Server{}
+	first, err := s.cloudStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.cloudStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("cloudStore must return the cached store for the same home")
+	}
+}
+
+// Concurrent pin/unpin used to open a fresh Store per request, so two requests
+// could both bootstrap the host id and persist two different identities.
+func TestCloudPinUnpinConcurrent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("PONDERA_HOME", home)
+	s := &Server{}
+	const n = 16
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sessionID := fmt.Sprintf("s%d", i)
+			rr := httptest.NewRecorder()
+			s.cloudPin(rr, jsonRequest(http.MethodPost, "/cloud/pin", map[string]any{
+				"sessionId": sessionID, "title": "t" + sessionID,
+			}))
+			if rr.Code != http.StatusOK {
+				t.Errorf("pin %s: %d %s", sessionID, rr.Code, rr.Body.String())
+			}
+			rr = httptest.NewRecorder()
+			s.cloudUnpin(rr, jsonRequest(http.MethodPost, "/cloud/unpin", map[string]string{"sessionId": sessionID}))
+			if rr.Code != http.StatusOK {
+				t.Errorf("unpin %s: %d %s", sessionID, rr.Code, rr.Body.String())
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	st, err := s.cloudStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(st.List()); got != n {
+		t.Fatalf("selections = %d, want %d", got, n)
+	}
+	raw, err := os.ReadFile(filepath.Join(home, "cloud", "host-id"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(raw)) != st.LocalHostID() {
+		t.Fatalf("host id file %q does not match store %q", strings.TrimSpace(string(raw)), st.LocalHostID())
 	}
 }
 

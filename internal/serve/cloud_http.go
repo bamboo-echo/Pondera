@@ -5,12 +5,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 
 	"pondera/internal/agent"
 	"pondera/internal/cloudsync"
 	"pondera/internal/config"
 	"pondera/internal/control"
 )
+
+// cloudStoreCache keeps one Store per Pondera home. Opening a Store on every
+// request made concurrent pin/unpin race on the host-id bootstrap and paid an
+// extra file read; the Store is internally locked, so sharing it is safe.
+var cloudStoreCache = struct {
+	mu     sync.Mutex
+	byPath map[string]*cloudsync.Store
+}{byPath: map[string]*cloudsync.Store{}}
 
 //go:embed mobile.html
 var mobileHTML []byte
@@ -60,13 +69,21 @@ func urlEscape(s string) string {
 
 func (s *Server) cloudStore() (*cloudsync.Store, error) {
 	home := config.PonderaHomeDir()
+	cloudStoreCache.mu.Lock()
+	defer cloudStoreCache.mu.Unlock()
+	if st, ok := cloudStoreCache.byPath[home]; ok {
+		return st, nil
+	}
 	st, err := cloudsync.OpenStore(home)
 	if err != nil {
 		return nil, err
 	}
+	// Bootstrap under the same lock: two requests racing to create the
+	// host-id would otherwise persist two different identities.
 	if err := cloudsync.EnsureLocalHostID(st, home); err != nil {
 		return nil, err
 	}
+	cloudStoreCache.byPath[home] = st
 	return st, nil
 }
 
