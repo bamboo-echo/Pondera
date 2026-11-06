@@ -697,7 +697,7 @@ export function WorkspacePanel({
       fileNavigation.clearEntries(fileScope);
       resetPreview();
     }
-  }, [fileNavigation, fileScope, open, resetWorkspaceChanges, viewMode, workspaceScopeKey]);
+  }, [fileNavigation, fileScope, open, resetPreview, resetWorkspaceChanges, viewMode, workspaceScopeKey]);
 
   useEffect(() => () => {
     workingTreeRefreshSchedulerRef.current?.cancel();
@@ -770,7 +770,7 @@ export function WorkspacePanel({
     const dirs = Array.from(new Set(paths.flatMap(parentDirs)));
     updateOpenDirs((prev) => new Set([...Array.from(prev), ...dirs]));
     dirs.forEach((dir) => void loadDir(dir));
-  }, [fileListRequest, loadDir, open, scopedFilePaths, updateOpenDirs, viewMode]);
+  }, [fileListRequest, fileNavigation, fileScope, loadDir, open, resetPreview, scopedFilePaths, updateOpenDirs, viewMode]);
 
   useEffect(() => {
     if (!open || changeListRequest) return;
@@ -808,7 +808,7 @@ export function WorkspacePanel({
     setCommitDetail(null);
     setSelectionMenu(null);
     setTreeMenu(null);
-  }, [changeListRequest, open, scopedChangeRows, viewMode]);
+  }, [changeListRequest, fileNavigation, fileScope, open, resetPreview, scopedChangeRows, viewMode]);
 
   useEffect(() => {
     if (!open || changeRevealRequest) return;
@@ -840,7 +840,7 @@ export function WorkspacePanel({
     setCommitDetail(null);
     setSelectionMenu(null);
     setTreeMenu(null);
-  }, [changeRevealRequest, fileNavigation, fileScope, open, selectedPath, viewMode]);
+  }, [changeRevealRequest, fileNavigation, fileScope, open, resetPreview, selectedPath, viewMode]);
 
   useEffect(() => {
     if (!open || !activeVerificationRevealRequest) return;
@@ -862,7 +862,7 @@ export function WorkspacePanel({
     if (viewMode !== "changed" || selectedChangePath) return;
     const node = verificationSummaryRef.current ?? document.getElementById(WORKSPACE_TURN_VERIFICATION_ID);
     node?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeVerificationRevealRequest, fileNavigation, fileScope, open, selectedChangePath, viewMode]);
+  }, [activeVerificationRevealRequest, fileNavigation, fileScope, open, resetPreview, selectedChangePath, viewMode]);
 
   useEffect(() => {
     if (!open) return;
@@ -1251,6 +1251,8 @@ export function WorkspacePanel({
     previousViewModeRef.current = viewMode;
     pendingScrollRestoreRef.current = null;
   }
+  const virtualTotalSize = virtualizer.getTotalSize();
+  const virtualViewportHeight = virtualizer.scrollRect?.height;
   useEffect(() => {
     if (!open || treeRows.length === 0) return;
     if (pendingScrollRestoreRef.current == null) {
@@ -1267,11 +1269,11 @@ export function WorkspacePanel({
     // and the deep-scroll restore is silently lost. Use the virtualizer's own
     // viewport rect (reliable after remount) rather than reading clientHeight
     // at restore time, which can be 0 while the tree is still settling.
-    const viewportHeight = virtualizer.scrollRect?.height ?? treeRef.current?.clientHeight ?? 0;
-    if (virtualizer.getTotalSize() - viewportHeight < target) return; // not enough scrollable space yet
+    const viewportHeight = virtualViewportHeight ?? treeRef.current?.clientHeight ?? 0;
+    if (virtualTotalSize - viewportHeight < target) return; // not enough scrollable space yet
     virtualizer.scrollToOffset(target, { align: "start" });
     pendingScrollRestoreRef.current = null;
-  }, [open, treeRows.length, virtualizer.getTotalSize(), virtualizer.scrollRect?.height, workspaceMemoryKey, virtualizer]);
+  }, [open, treeRows.length, virtualTotalSize, virtualViewportHeight, workspaceMemoryKey, virtualizer]);
 
   const virtualTreeItems = virtualizer.getVirtualItems();
   const compactProbePaths = virtualTreeItems
@@ -1279,10 +1281,14 @@ export function WorkspacePanel({
     .filter((row): row is WorkspaceTreeRowData => Boolean(row?.entry.isDir && entriesByDir[row.path] === undefined))
     .map((row) => row.path);
   const compactProbeKey = compactProbePaths.join("\u0000");
+  // The key already encodes the exact probe list; reading the list through a
+  // ref keeps the effect from re-running on every render's new array.
+  const compactProbePathsRef = useRef(compactProbePaths);
+  compactProbePathsRef.current = compactProbePaths;
 
   useEffect(() => {
     if (!open || !compactProbeKey) return;
-    compactProbePaths.forEach((path) => {
+    compactProbePathsRef.current.forEach((path) => {
       if (compactProbeInFlightRef.current.has(path)) return;
       compactProbeInFlightRef.current.add(path);
       void loadDir(path).finally(() => compactProbeInFlightRef.current.delete(path));
@@ -1402,7 +1408,7 @@ export function WorkspacePanel({
     setTreeMenu(null);
     setRecentOpen(false);
     setTreeVisible(true);
-  }, [changeRevealRequest, fileNavigation, fileScope, selectedFilePath, viewMode]);
+  }, [changeRevealRequest, fileNavigation, fileScope, resetPreview, selectedFilePath, viewMode]);
 
   const closePreviewTab = useCallback((path: string) => {
     fileNavigation.closeEntry(fileScope, path);
@@ -1410,7 +1416,7 @@ export function WorkspacePanel({
       resetPreview();
       setPresentedFileStale(false);
     }
-  }, [fileNavigation, fileScope, selectedFilePath]);
+  }, [fileNavigation, fileScope, resetPreview, selectedFilePath, setPresentedFileStale]);
 
   const setSavedTreeWidth = useCallback(
     (width: number) => {
