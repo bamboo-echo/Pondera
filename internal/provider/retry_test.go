@@ -223,6 +223,33 @@ func TestSendWithRetryUnblocksStalledErrorBody(t *testing.T) {
 	}
 }
 
+// endlessBody yields data forever without blocking, like a gateway serving a
+// huge HTML error page or an endless byte stream.
+type endlessBody struct{ read int }
+
+func (b *endlessBody) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	b.read += len(p)
+	return len(p), nil
+}
+
+func (b *endlessBody) Close() error { return nil }
+
+// The advisory drain after the first 4 KiB must be bounded: reading an
+// oversized error body to completion is wasted work and can wedge reporting.
+func TestReadErrorBodyCapsDrain(t *testing.T) {
+	body := &endlessBody{}
+	msg := readErrorBody(&http.Response{StatusCode: http.StatusBadGateway, Body: body, Header: http.Header{}})
+	if len(msg) != 4096 {
+		t.Fatalf("error message bytes = %d, want 4096", len(msg))
+	}
+	if want := 4096 + maxErrorBodyDrain; body.read != want {
+		t.Fatalf("drained %d bytes, want the bounded %d", body.read, want)
+	}
+}
+
 func TestSendWithRetryReturnsUpstreamFailureWithoutNotification(t *testing.T) {
 	for _, status := range []int{408, 409, 429, 500, 503, 529} {
 		calls, notifications := 0, 0
