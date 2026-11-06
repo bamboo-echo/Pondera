@@ -60,6 +60,11 @@ func (t *installSourceTool) apply(ctx context.Context, req request, act *action)
 // applySkillRoot appends the path to the active config's [skills].paths and
 // re-builds the Store to confirm the listed skills are discoverable.
 func (t *installSourceTool) applySkillRoot(req request, act *action) error {
+	if !isSkillRootSafe(act.Source, t.home, t.root) {
+		act.RiskLevel = RiskHigh
+		act.RiskReasons = append(act.RiskReasons, "skill root is an absolute local path outside the project or home root")
+		return newErr(ErrUnsafeSkillRoot, "skill root %s is outside %s and %s", act.Source, t.root, t.home)
+	}
 	var cfg *config.Config
 	if err := config.EditConfigFile(act.ConfigPath, func(fresh *config.Config) error {
 		if err := fresh.AddSkillPath(act.Source); err != nil {
@@ -165,6 +170,34 @@ func (t *installSourceTool) applyLinkSkill(req request, act *action) error {
 	act.Target = target
 	act.CanonicalPath = canonical
 	return t.verifySkill(act.Scope, act.skill.Name, act)
+}
+
+// isSkillRootSafe reports whether a register-mode skill root may be persisted
+// into [skills].paths. Registration makes the skill store scan and load
+// SKILL.md from the root, so it must be an absolute local path inside the
+// user's home or the project root. A relative path, a URL, or an arbitrary
+// directory such as / or C:\ would let the model read unrelated host files.
+func isSkillRootSafe(source, home, projectRoot string) bool {
+	if source == "" || strings.Contains(source, "://") || !filepath.IsAbs(source) {
+		return false
+	}
+	clean := filepath.Clean(source)
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		clean = filepath.Clean(resolved)
+	}
+	for _, root := range []string{home, projectRoot} {
+		if root == "" {
+			continue
+		}
+		base := filepath.Clean(root)
+		if resolved, err := filepath.EvalSymlinks(base); err == nil {
+			base = filepath.Clean(resolved)
+		}
+		if clean == base || strings.HasPrefix(clean, base+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // isLinkTargetSafe reports whether a symlink source is allowed. The link

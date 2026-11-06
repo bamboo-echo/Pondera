@@ -40,6 +40,10 @@ var (
 	// that escapes the expected skill roots — typically an attempt to
 	// read arbitrary host files.
 	ErrUnsafeLinkTarget = errors.New("install_source: link target escapes skill roots")
+	// ErrUnsafeSkillRoot: a register-mode skill root is not an absolute local
+	// path inside the project or home root, so persisting it would let the
+	// skill store load SKILL.md from an arbitrary host directory.
+	ErrUnsafeSkillRoot = errors.New("install_source: skill root escapes skill roots")
 	// ErrSourceUnreadable: a URL did not respond, returned non-2xx, or a
 	// local path was not readable.
 	ErrSourceUnreadable = errors.New("install_source: source is not readable")

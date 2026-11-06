@@ -108,7 +108,7 @@ func (s *stubConnector) connector() MCPConnector {
 func TestApplyLocalSkillRootRegistersPath(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()
-	root := filepath.Join(t.TempDir(), "shared-skills")
+	root := filepath.Join(project, "shared-skills")
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +138,94 @@ func TestApplyLocalSkillRootRegistersPath(t *testing.T) {
 	st := skill.New(skill.Options{HomeDir: home, ProjectRoot: project, CustomPaths: cfg.SkillCustomPaths(), DisableBuiltins: true})
 	if _, ok := st.Read("alpha"); !ok {
 		t.Fatal("alpha should be discoverable after registering the skill root")
+	}
+}
+
+// TestIsSkillRootSafe pins the register-mode boundary: only absolute local
+// paths contained in the home or project root may become [skills].paths
+// entries, because the skill store will scan and load SKILL.md from them.
+func TestIsSkillRootSafe(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	outside := t.TempDir()
+	cases := []struct {
+		name   string
+		source string
+		want   bool
+	}{
+		{"project root", project, true},
+		{"home root", home, true},
+		{"project subdir", filepath.Join(project, "skills"), true},
+		{"home subdir", filepath.Join(home, "skills"), true},
+		{"cleaned project subdir", filepath.Join(project, "a", "..", "skills"), true},
+		{"outside temp dir", outside, false},
+		{"parent escape", filepath.Join(home, "..", "escape"), false},
+		{"filesystem root", string(filepath.Separator), false},
+		{"system directory", filepath.Join(filepath.VolumeName(project)+string(filepath.Separator), "Windows"), false},
+		{"relative path", "skills", false},
+		{"empty", "", false},
+		{"https url", "https://example.com/skills", false},
+		{"file url", "file:///etc", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isSkillRootSafe(tc.source, home, project); got != tc.want {
+				t.Fatalf("isSkillRootSafe(%q) = %v, want %v", tc.source, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestApplySkillRootRejectsPathsOutsideHomeAndProject(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "shared-skills")
+	writeFile(t, filepath.Join(outside, "alpha.md"), "---\nname: alpha\ndescription: Alpha helper\n---\nbody")
+
+	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	resp := execInstall(t, tl, map[string]any{
+		"source": outside,
+		"kind":   "skill",
+		"apply":  true,
+		"scope":  "project",
+	})
+	if resp.OK {
+		t.Fatalf("outside skill root should fail, got %+v", resp)
+	}
+	if len(resp.Actions) != 1 || resp.Actions[0].Status != "failed" {
+		t.Fatalf("actions = %+v, want one failed action", resp.Actions)
+	}
+	if !strings.Contains(resp.Actions[0].Error, ErrUnsafeSkillRoot.Error()) {
+		t.Errorf("error = %q, want ErrUnsafeSkillRoot", resp.Actions[0].Error)
+	}
+	if resp.Actions[0].RiskLevel != RiskHigh {
+		t.Errorf("risk = %q, want %q", resp.Actions[0].RiskLevel, RiskHigh)
+	}
+	cfg := config.LoadForEdit(filepath.Join(project, "pondera.toml"))
+	if len(cfg.Skills.Paths) != 0 {
+		t.Fatalf("skills.paths must stay empty after a rejected root, got %v", cfg.Skills.Paths)
+	}
+}
+
+func TestApplySkillRootAllowsHomeRoot(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	root := filepath.Join(home, "skills")
+	writeFile(t, filepath.Join(root, "beta.md"), "---\nname: beta\ndescription: Beta helper\n---\nbody")
+
+	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	resp := execInstall(t, tl, map[string]any{
+		"source": root,
+		"kind":   "skill",
+		"apply":  true,
+		"scope":  "project",
+	})
+	if !resp.OK || resp.Status != "done" {
+		t.Fatalf("home skill root should be accepted, got %+v", resp)
+	}
+	cfg := config.LoadForEdit(filepath.Join(project, "pondera.toml"))
+	if len(cfg.Skills.Paths) != 1 || cfg.Skills.Paths[0] != root {
+		t.Fatalf("skills.paths = %v, want %q", cfg.Skills.Paths, root)
 	}
 }
 
@@ -436,7 +524,7 @@ func TestApplyLocalSkillLinkMode(t *testing.T) {
 func TestPlanNestedSkillRootRegistersContainingRoots(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()
-	root := filepath.Join(t.TempDir(), "skill-pack")
+	root := filepath.Join(project, "skill-pack")
 	writeFile(t, filepath.Join(root, "top.md"), "---\nname: top\ndescription: Top helper\n---\nbody")
 	writeFile(t, filepath.Join(root, "superpower", "tool-a", "SKILL.md"), "---\nname: tool-a\ndescription: Tool A\n---\nbody")
 	writeFile(t, filepath.Join(root, "superpower", "tool-b", "SKILL.md"), "---\nname: tool-b\ndescription: Tool B\n---\nbody")
@@ -1415,7 +1503,7 @@ func TestUninstallRemovesSkillByName(t *testing.T) {
 func TestUninstallRemovesRegisteredSkillRootByContainedSkillName(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()
-	root := filepath.Join(t.TempDir(), "shared-skills")
+	root := filepath.Join(project, "shared-skills")
 	writeFile(t, filepath.Join(root, "alpha.md"), "---\nname: alpha\ndescription: Alpha helper\n---\nbody")
 	writeFile(t, filepath.Join(root, "beta.md"), "---\nname: beta\ndescription: Beta helper\n---\nbody")
 
