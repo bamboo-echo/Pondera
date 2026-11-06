@@ -2854,7 +2854,7 @@ export function useController() {
         sessionLoadInFlight.current.delete(tabId);
       }
     }
-  }, [bumpSessionLoadSeq, cancelHydrateCurrent, dispatchTo, invalidateCheckpoints, loadMetaForTab, refreshBalanceForTab, refreshTurnBoundaries, sessionLoadCurrent, startTranscriptFollow]);
+  }, [bumpSessionLoadSeq, cancelHydrateCurrent, dispatchTo, ensureTranscriptSubscription, invalidateCheckpoints, loadMetaForTab, refreshBalanceForTab, sessionLoadCurrent, settleCheckpoints, startTranscriptFollow]);
 
   /**
    * Publish the bounded durable history window before a local controller has
@@ -3136,7 +3136,7 @@ export function useController() {
     if (effort) dispatchTo(tabId, { type: "effort", effort });
     await refreshBalanceForTab(tabId);
     return tabs;
-  }, [dispatchRuntimeStatusForTab, loadSessionDataForTab, refreshBalanceForTab]);
+  }, [dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, refreshBalanceForTab]);
 
   const reconcileRuntimeAfterRejectedMutation = useCallback(async (tabId: string): Promise<void> => {
     const result = await findTabAfterSubmitFailure(app, tabId, CANCEL_RECONCILE_DELAYS_MS, promptEventClock);
@@ -3352,6 +3352,11 @@ export function useController() {
   }, [dispatchTo, ensureTranscriptSubscription, isNavigationIntentCurrent, loadSessionDataForTab, reconcileTabRuntime, restoreNavigationSource]);
 
   useEffect(() => {
+    // The three maps below are created once and only mutated, so the cleanup
+    // can hold the same objects the effect registered its followers into.
+    const followersMap = followers.current;
+    const cancelReconcileTimersMap = cancelReconcileTimers.current;
+    const stalePromptReconcileTimersMap = stalePromptReconcileTimers.current;
     const textBatch = createRafBatch<StreamDeltaEntry>((batch) => {
       uiPerfTracker.onStreamDispatch();
       for (const b of coalesceStreamDeltas(batch)) dispatchTo(b.tabId, { type: "stream_batch", segments: b.segments });
@@ -3483,16 +3488,16 @@ export function useController() {
     void app.ReplayPendingPrompts().catch(() => {});
     return () => {
       textBatch.drain();
-      for (const follower of followers.current.values()) follower.stop();
-      followers.current.clear();
-      for (const timer of cancelReconcileTimers.current.values()) {
+      for (const follower of followersMap.values()) follower.stop();
+      followersMap.clear();
+      for (const timer of cancelReconcileTimersMap.values()) {
         window.clearTimeout(timer);
       }
-      cancelReconcileTimers.current.clear();
-      for (const timer of stalePromptReconcileTimers.current.values()) {
+      cancelReconcileTimersMap.clear();
+      for (const timer of stalePromptReconcileTimersMap.values()) {
         window.clearTimeout(timer);
       }
-      stalePromptReconcileTimers.current.clear();
+      stalePromptReconcileTimersMap.clear();
       off();
       offReady();
       offRebuilt();
@@ -3500,7 +3505,7 @@ export function useController() {
       offTabMeta();
       offRecovery();
     };
-  }, [dispatchRuntimeStatusForTab, dispatchTo, handleTopicActivationEvent, loadSessionDataForTab, primeReadableHistoryForTab, refreshBalanceForTab, refreshCheckpoints, refreshMetaForTab, syncActiveTabFromBackend, startTranscriptFollow]);
+  }, [dispatchRuntimeStatusForTab, dispatchTo, handleTopicActivationEvent, loadSessionDataForTab, primeReadableHistoryForTab, refreshBalanceForTab, refreshCheckpoints, refreshMetaForTab, refreshTurnBoundaries, syncActiveTabFromBackend, startTranscriptFollow]);
 
   // Track the visible tab in the transcript store: the active tab is pinned
   // out of LRU eviction. (In-flight loads of background tabs still complete
@@ -3549,7 +3554,9 @@ export function useController() {
   // would just burn every attempt on a surface that never uses it.
   useEffect(() => {
     const tabId = activeTabId;
-    const meta = activeState.meta;
+    // Read the latest meta through the state ref: the effect is keyed on the
+    // fields that decide the branch, not on the meta object's identity.
+    const meta = stateRef.current.meta;
     if (!tabId || !meta || meta.remote || meta.ready || meta.startupErr || activeState.backendActivationPending) {
       readyMetaReconcileSeq.current += 1;
       readyMetaReconcileActive.current = undefined;
@@ -3589,7 +3596,6 @@ export function useController() {
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [activeTabId, activeState.meta?.ready, activeState.meta?.startupErr, activeState.backendActivationPending, refreshMetaOnlyForTab]);
-
 
   const rejectTurnSubmission = useCallback((tabId: string, submissionId: string, error: unknown) => {
     if (!statesRef.current.get(tabId)?.localSubmissions[submissionId]) return;
@@ -4166,7 +4172,7 @@ export function useController() {
       return terminal("ready");
     })().catch(() => failSessionNavigation(navigationSeq, targetTabId));
     return { value: undefined, surfaceReady };
-  }, [activeTabId, beginActiveNavigation, bumpSessionLoadSeq, dispatchTo, ensureTranscriptSubscription, failSessionNavigation, invalidateCheckpoints, navigationCompletionCurrent, reconcileSessionNavigationForTab, refreshTurnBoundaries, requireRegisteredNavigationIntent, sessionLoadCurrent, startTranscriptFollow, snapshotNavigationSourceTab, waitForBackendActiveTab, waitForTabReady]);
+  }, [activeTabId, beginActiveNavigation, bumpSessionLoadSeq, dispatchTo, failSessionNavigation, invalidateCheckpoints, isNavigationIntentCurrent, navigationCompletionCurrent, reconcileSessionNavigationForTab, refreshTurnBoundaries, requireRegisteredNavigationIntent, sessionLoadCurrent, startTranscriptFollow, snapshotNavigationSourceTab, waitForBackendActiveTab, waitForTabReady]);
 
   const openChannelSession = useCallback((path: string, tabId: string, navigationIntentSeq?: number): NavigationResult<void> | undefined => {
     if (!tabId) return;
