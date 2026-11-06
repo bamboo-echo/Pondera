@@ -128,7 +128,8 @@ function ChatSession(props: TranscriptProps & { sessionKey: string }) {
   useEffect(() => {
     loader.activate();
     acquireMarkdownWorkerClient();
-    return () => { lifetime.current++; source.dispose(); mounts.dispose(); loader.dispose(); releaseMarkdownWorkerClient(); };
+    const lifetimeRef = lifetime;
+    return () => { lifetimeRef.current++; source.dispose(); mounts.dispose(); loader.dispose(); releaseMarkdownWorkerClient(); };
   }, [source, mounts, loader]);
   useLayoutEffect(() => {
     if (!hydrating) scroll.ready();

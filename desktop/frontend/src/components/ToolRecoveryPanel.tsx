@@ -21,7 +21,8 @@ export function ToolRecoveryPanel({ tabId, sessionKey, running, refreshKey, bind
         if (generation.current === own) setSnapshot(next);
       }).catch(err => { if (generation.current === own) setError(String(err)); });
     }
-    return () => { generation.current++; };
+    const generationRef = generation;
+    return () => { generationRef.current++; };
   }, [bindings, tabId, sessionKey, running, refreshKey]);
 
   if (!snapshot?.calls.length && !error) return null;

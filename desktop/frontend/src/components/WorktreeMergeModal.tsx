@@ -109,8 +109,9 @@ export function WorktreeMergeModal({ tabId, isOpen, onClose, onMerged }: Worktre
     };
     window.addEventListener("keydown", onKeyDown);
     requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("button, input")?.focus());
+    const requestGenerationRef = requestGeneration;
     return () => {
-      requestGeneration.current++;
+      requestGenerationRef.current++;
       window.removeEventListener("keydown", onKeyDown);
       previousFocus?.focus();
     };

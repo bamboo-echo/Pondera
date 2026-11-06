@@ -130,7 +130,7 @@ export function ThemeLibrarySection() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     void reload();
