@@ -2462,7 +2462,7 @@ export const en = {
   "settings.addWriteDirectory": "Enter a directory to allow writing",
   "settings.copyDirectory": "Copy directory path",
   "settings.sandboxBoundaryHint": "Permission presets enforce filesystem boundaries. Configure network access and additional trusted write roots here; macOS uses Seatbelt and Linux uses bubblewrap.",
-  "settings.sandboxBoundaryHintWindows": "Windows shells run as the current OS user, unrestricted by the directory or network settings here.",
+  "settings.sandboxBoundaryHintWindows": "Windows shells run as the current OS user and can write anywhere that account can; these settings are policy checks, not a kernel-enforced sandbox.",
   "settings.allowNetworkWindowsHint": "Not available on Windows: without an OS-level shell sandbox, shell network access cannot be restricted.",
   "settings.reloadSessionConfig": "Reload configuration",
   "settings.shellInstallManualNotice": "Git Bash was not detected. Install Git for Windows manually, then re-detect to use it as your Shell interpreter.",

@@ -1,3 +1,4 @@
+import { detectBrowserPlatform } from "../lib/desktopPlatform";
 import type { Translator } from "../lib/i18n";
 import type { WireApproval } from "../lib/types";
 
@@ -56,6 +57,7 @@ export function WriteAccessApprovalDetails({
   reasonOpen: boolean;
   t: Translator;
 }) {
+  const windows = detectBrowserPlatform() === "windows";
   const writeAccess = approval.write_access;
   const directories = writeAccess?.display_directories?.length
     ? writeAccess.display_directories
@@ -83,6 +85,7 @@ export function WriteAccessApprovalDetails({
       {writeAccess?.ordinary_permission_needed && (
         <div className="approval-reason">{t("approval.writeAccessMergedHint")}</div>
       )}
+      {windows && <div className="approval-reason">{t("settings.sandboxBoundaryHintWindows")}</div>}
       {reasonOpen && reason && <div className="approval-reason">{reason}</div>}
     </div>
   );

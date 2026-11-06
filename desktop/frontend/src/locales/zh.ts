@@ -2464,7 +2464,7 @@ export const zh: Record<DictKey, string> = {
   "settings.addWriteDirectory": "输入允许写入的目录",
   "settings.copyDirectory": "复制目录路径",
   "settings.sandboxBoundaryHint": "权限模式统一执行文件系统边界。这里配置网络访问和额外可信写入目录；macOS 使用 Seatbelt，Linux 使用 bubblewrap。",
-  "settings.sandboxBoundaryHintWindows": "Windows 的 Shell 以当前系统账户运行，不受此处文件目录或网络设置限制。",
+  "settings.sandboxBoundaryHintWindows": "Windows 的 Shell 以当前系统账户运行，可写入该账户能访问的位置；此处设置仅为策略检查，非内核强制边界。",
   "settings.allowNetworkWindowsHint": "Windows 不可用：没有 OS 级 Shell 沙箱，无法限制 Shell 的网络访问。",
   "settings.reloadSessionConfig": "重新加载配置",
   "settings.shellInstallManualNotice": "未检测到 Git Bash。手动安装 Git for Windows 后重新检测，即可选择它作为 Shell 解释器。",
