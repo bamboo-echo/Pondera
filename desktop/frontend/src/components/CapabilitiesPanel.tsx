@@ -76,11 +76,18 @@ export function CapabilitiesPanel({
   useEffect(() => {
     void reload();
   }, [reload]);
+  // Poll while any server is still converging. Track the predicate as a boolean
+  // so a fresh snapshot array (every reload) does not tear down and recreate the
+  // timer while the answer is unchanged.
+  const hasStartingServers = useMemo(
+    () => (view?.servers ?? []).some((s) => s.status === "initializing" || s.status === "deferred"),
+    [view],
+  );
   useEffect(() => {
-    if (tab !== "servers" || !view?.servers.some((s) => s.status === "initializing" || s.status === "deferred")) return;
+    if (tab !== "servers" || !hasStartingServers) return;
     const id = window.setInterval(() => void reload(), 2500);
     return () => window.clearInterval(id);
-  }, [reload, tab, view?.servers]);
+  }, [reload, tab, hasStartingServers]);
 
   // mutate runs an MCP edit, re-reads the snapshot, and surfaces any failure as an
   // inline banner (a connect error, a missing binary, a bad URL).
