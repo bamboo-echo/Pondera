@@ -125,8 +125,8 @@ func (a *Agent) retryModelRequest(ctx context.Context, state *samplingRecoverySt
 	// already made (sampling repairs included), the remaining retries, and the
 	// final attempt that ends the chain. Repairs do not consume the retry
 	// budget but do consume attempts, so the nominal 1+retry_count grows with
-	// them and the counter can never invert (attempt <= retryMax always holds).
-	retryMax := attempt + (a.retryCount - state.retries) + 1
+	// them and the counter can never invert (attempt <= max always holds).
+	retryMax := a.maxRequestsThisRound(attempt, state.retries)
 	failure := a.buildAttemptFailure(result.err, attempt, retryMax, delay, state.attemptStartedAt)
 	a.svc.sink.Emit(event.Event{
 		Kind:           event.Retrying,
