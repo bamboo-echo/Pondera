@@ -262,17 +262,22 @@ export function SettingsPanel({
     content.scrollTop = 0;
     content.scrollLeft = 0;
   }, [tab]);
+  const themePref = s?.desktopTheme;
+  const themeStylePref = s?.desktopThemeStyle;
+  const terminalThemePref = s?.desktopTerminalTheme;
+  const conversationWidthPref = s?.conversationWidth;
+  const settingsLoaded = Boolean(s);
   useEffect(() => {
-    if (!s) return;
-    const nextTheme = normalizeThemePreference(s.desktopTheme);
-    const nextStyle = normalizeThemeStyleForTheme(s.desktopThemeStyle, nextTheme);
+    if (!settingsLoaded) return;
+    const nextTheme = normalizeThemePreference(themePref);
+    const nextStyle = normalizeThemeStyleForTheme(themeStylePref, nextTheme);
     setThemeState(nextTheme);
     setThemeStyleState(nextStyle);
     if (!terminalThemeSavePending.current) {
-      setTerminalThemeState(applyTerminalThemePreference(s.desktopTerminalTheme));
+      setTerminalThemeState(applyTerminalThemePreference(terminalThemePref));
     }
-    setConversationWidth(applyConversationWidth(s.conversationWidth));
-  }, [s?.conversationWidth, s?.desktopTheme, s?.desktopThemeStyle, s?.desktopTerminalTheme]);
+    setConversationWidth(applyConversationWidth(conversationWidthPref));
+  }, [conversationWidthPref, settingsLoaded, terminalThemePref, themePref, themeStylePref]);
   useEffect(() => {
     const host = desktopHost();
     if (host.kind === "none" && desktopPlatform !== "windows") return;
@@ -2184,12 +2189,14 @@ function BotsSection({ s, busy, apply, initialFocus }: BotsSectionProps) {
     }
     window.setTimeout(() => stepConnectRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
   };
+  const focusAccessStepRef = useRef(focusAccessStep);
+  focusAccessStepRef.current = focusAccessStep;
   useEffect(() => {
     if (initialFocus?.target !== "bot-allowlist") return;
     const focusKey = `${initialFocus.target}:${initialFocus.connectionId ?? ""}`;
     if (initialFocusHandledRef.current === focusKey) return;
     initialFocusHandledRef.current = focusKey;
-    focusAccessStep();
+    focusAccessStepRef.current();
   }, [initialFocus]);
   useEffect(() => {
     installRef.current = install;
@@ -2435,7 +2442,7 @@ function BotsSection({ s, busy, apply, initialFocus }: BotsSectionProps) {
     installAttemptRef.current += 1;
     clearInstallTimers();
     setInstall((prev) => prev.status === "showing" ? { ...prev, status: "error", message: t("settings.botInstallExpired") } : prev);
-  }, [install.status, install.timeLeft]);
+  }, [install.status, install.timeLeft, t]);
   const diagnoseConnection = async (id: string) => {
     const diag = await app.DiagnoseBotConnection(id);
     setDiagnostics((prev) => ({ ...prev, [id]: diag }));
@@ -4159,7 +4166,11 @@ export function ModelsSection({ s, busy, apply, backgroundApply, subtab, onboard
   const t = useT();
   const autoRefreshKeyRef = useRef("");
   const autoRefreshGenerationRef = useRef(0);
-  const refs = useMemo(() => allRefs(s), [s.providers]);
+  // The background discovery effect triggers on s.providers/subtab only; the
+  // save call still needs the current settings object.
+  const settingsRef = useRef(s);
+  settingsRef.current = s;
+  const refs = useMemo(() => allRefs(s), [s]);
   const defaultRef = toRef(s.defaultModel, s);
   const plannerRef = toRef(s.plannerModel, s);
   const subagentRef = toRef(s.subagentModel, s);
@@ -4326,7 +4337,7 @@ export function ModelsSection({ s, busy, apply, backgroundApply, subtab, onboard
         try {
           if (stale()) return;
           // Compare and apply narrow catalog updates in one transaction.
-          await saveModelSettings(s, {kind: "catalogs", catalogs: updates});
+          await saveModelSettings(settingsRef.current, {kind: "catalogs", catalogs: updates});
         } catch {
           // Background discovery is opportunistic; explicit edits show errors.
         }
@@ -6145,7 +6156,12 @@ export function ProviderEditor({
   const visionModelsConfigured = Boolean(initial?.visionModelsConfigured ?? legacyVisionModels.length > 0);
   const [modelsUrl, setModelsUrl] = useState(initial?.modelsUrl ?? "");
   const [apiKeyEnv, setApiKeyEnv] = useState(initial?.apiKeyEnv ?? "");
-  useEffect(() => { if (initial) setApiKeyEnv(initial.apiKeyEnv); }, [initial?.apiKeyEnv]);
+  const initialSettingsRef = useRef(initial);
+  initialSettingsRef.current = initial;
+  useEffect(() => {
+    const snapshot = initialSettingsRef.current;
+    if (snapshot) setApiKeyEnv(snapshot.apiKeyEnv);
+  }, [initial?.apiKeyEnv]);
   const [headersDraft, setHeadersDraft] = useState(formatProviderHeaders(initial?.headers));
   const [extraBodyDraft, setExtraBodyDraft] = useState(formatProviderExtraBody(initial?.extraBody));
   const [authHeader, setAuthHeader] = useState(Boolean(initial?.authHeader));
