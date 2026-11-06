@@ -23,16 +23,11 @@ upload prompts, secrets, tool arguments, or workspace paths.
 2. Pick a representative task set that needs MCP discovery followed by a call.
 3. Run proxy and baseline for each task with the same model, effort, workspace,
    skills, agents, and MCP configuration.
-4. Record content-free pairs matching
-   `internal/eval/replay/testdata/paired_runs.json`.
-5. Exercise the median helper:
+4. Record the content-free pairs and aggregate them with the spreadsheet or
+   notebook you already use.
 
-```bash
-go test ./internal/eval/replay/ -run TestMedianReportFivePairedRuns
-```
-
-The repository fixture is synthetic and proves only the median helper. Teams
-may replace its numbers with live observations for performance analysis, but no
-paired-run dataset or threshold result is required for Stable publication.
+The repository ships no paired-run fixture or median helper. Teams record live
+observations for performance analysis, but no paired-run dataset or threshold
+result is required for Stable publication.
 
 Native first-party Tool Search stays default-off and is not part of this eval.
