@@ -290,8 +290,8 @@ export function MemoryPanel({
   // (no kernel round-trip) so it's instant and reversible.
   const [filter, setFilter] = useState("");
 
-  const facts = view?.facts ?? [];
-  const archives = view?.archives ?? [];
+  const facts = useMemo(() => view?.facts ?? [], [view?.facts]);
+  const archives = useMemo(() => view?.archives ?? [], [view?.archives]);
   const factNames = useMemo(() => new Set(facts.map((f) => f.name)), [facts]);
   const factTypes = useMemo(
     () => Array.from(new Set([...facts, ...archives].map((f) => f.type).filter(Boolean))).sort(),
@@ -804,10 +804,12 @@ export function MemorySettingsPage() {
 	const [revisionBusy, setRevisionBusy] = useState<string | null>(null);
 	const factRefs = useRef<Record<string, HTMLElement | null>>({});
 
+	const selectedTabIdRef = useRef(selectedTabId);
+	selectedTabIdRef.current = selectedTabId;
 	useEffect(() => {
 		app.ListTabs().then((tabList) => {
 			setTabs(tabList);
-			if (!selectedTabId) {
+			if (!selectedTabIdRef.current) {
 				const active = tabList.find((tb) => tb.active);
 				if (active) setSelectedTabId(active.id);
 			}
@@ -837,7 +839,7 @@ export function MemorySettingsPage() {
 		if (effectiveTabId && effectiveTabId !== selectedTabId) {
 			setSelectedTabId(effectiveTabId);
 		}
-	}, [effectiveTabId]);
+	}, [effectiveTabId, selectedTabId]);
 
 	const reload = useCallback(async () => {
 		const tabId = effectiveTabId;
@@ -939,8 +941,8 @@ export function MemorySettingsPage() {
 		void refreshSuggestions();
 	}, [refreshSuggestions, suggestionBusy, suggestions, tab]);
 
-	const facts = view?.facts ?? [];
-	const archives = view?.archives ?? [];
+	const facts = useMemo(() => view?.facts ?? [], [view?.facts]);
+	const archives = useMemo(() => view?.archives ?? [], [view?.archives]);
 	const factNames = useMemo(() => new Set(facts.map((f) => f.name)), [facts]);
 	const factTypes = useMemo(
 		() => Array.from(new Set([...facts, ...archives].map((f) => f.type).filter(Boolean))).sort(),
