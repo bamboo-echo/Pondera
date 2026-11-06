@@ -14,7 +14,9 @@ export type MarketplaceCategory =
   | "content"
   | "other";
 
-export const ALL_DOMAINS = "all";
+// An empty sentinel keeps "all domains" disjoint from every real domain name:
+// an index is free to declare a domain literally called "all".
+export const ALL_DOMAINS = "";
 
 export interface MarketplaceFilter {
   query: string;

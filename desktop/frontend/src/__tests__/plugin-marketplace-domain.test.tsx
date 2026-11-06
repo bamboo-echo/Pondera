@@ -51,6 +51,7 @@ const ENTRIES: PluginMarketplaceEntryView[] = [
   entry({ name: "blender-sim", description: "simulation", category: "design", domain: "Blender" }),
   entry({ name: "legacy-tool", description: "untagged legacy entry", category: "dev" }),
   entry({ name: "single-domain", description: "lonely domain", category: "content", domain: "Single" }),
+  entry({ name: "literal-all", description: "domain literally named all", category: "dev", domain: "all" }),
 ];
 
 const VIEW: PluginMarketplaceView = {
@@ -82,6 +83,8 @@ const untagged = filterMarketplaceEntries(ENTRIES, { query: "", category: "all",
 ok(untagged.some((item) => item.name === "legacy-tool"), "entries without a domain still render in the unfiltered list");
 const searchDomain = filterMarketplaceEntries(ENTRIES, { query: "blender", category: "all", domain: ALL_DOMAINS });
 eq(searchDomain.length, 3, "search also matches the domain label");
+const literalAll = filterMarketplaceEntries(ENTRIES, { query: "", category: "all", domain: "all" });
+eq(literalAll.map((item) => item.name).join(","), "literal-all", "a real domain named all is still selectable");
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   pretendToBeVisual: true,
