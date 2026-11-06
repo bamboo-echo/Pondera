@@ -28,6 +28,28 @@ All notable changes to the Go line (Pondera 1.0+) are recorded here. The legacy
   new input files and requires review when session history has advanced. See
   [compatibility and recovery](docs/manual-session-rollback.md).
 
+### Configuration assistant
+
+- A built-in assistant window turns plain-language requests into a reviewable
+  config plan. Model output must be a strict JSON envelope; writes go through
+  `LockConfigFilesEdits` with backup, revision comparison (`stale_plan`) and
+  automatic rollback, and secrets are stored with `SetCredential` so they never
+  appear in the UI, logs or model requests. It can set the default model,
+  provider/agent scalars and model references, and add or remove providers;
+  serve/bot/network/sandbox/permissions/secrets/plugins/statusline groups are
+  rejected. A successful apply, including `AssistantRollback`, broadcasts
+  `assistant:config-changed`; the settings page reloads and only receives
+  revision/hash and a change summary.
+
+### Plugin marketplace
+
+- A built-in marketplace panel lists curated plugins with category, `domain`
+  and free-text filters combined with AND semantics. Domain chips appear only
+  for domains with at least two entries and sort by entry count. Install and
+  uninstall reuse the existing Plugins API to refresh state. The index is
+  validated against the strict manifest schema and capped at 64 entries and
+  8 MiB per file; the bundled source keeps working offline.
+
 ### Added
 
 - **Editable message queue (Desktop):** full-text editing in the original queue row,
