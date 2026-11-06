@@ -20,8 +20,8 @@ import (
 
 const (
 	ponderaStatusSchemaVersion = 1
-	sessionStatusMethod         = "_pondera.io/session/status"
-	sessionStatusUpdateMethod   = "_pondera.io/session/status_update"
+	sessionStatusMethod        = "_pondera.io/session/status"
+	sessionStatusUpdateMethod  = "_pondera.io/session/status_update"
 )
 
 // PonderaSchemaCapability advertises one versioned vendor extension in
@@ -118,17 +118,17 @@ type PonderaSessionStatus struct {
 	PlannerMode      string                           `json:"plannerMode"`
 	Goal             PonderaStatusGoal                `json:"goal"`
 	Phase            string                           `json:"phase"`
-	TurnOutcome      PonderaTurnOutcome              `json:"turnOutcome"`
-	FinalReadiness   PonderaFinalReadiness           `json:"finalReadiness"`
+	TurnOutcome      PonderaTurnOutcome               `json:"turnOutcome"`
+	FinalReadiness   PonderaFinalReadiness            `json:"finalReadiness"`
 	Sandbox          SessionSandboxState              `json:"sandbox"`
 	Usage            PonderaStatusUsage               `json:"usage"`
 }
 
 type PonderaStatusUpdate struct {
-	SchemaVersion int                   `json:"schemaVersion"`
-	Sequence      uint64                `json:"sequence"`
-	SessionID     string                `json:"sessionId"`
-	Event         string                `json:"event"`
+	SchemaVersion int                  `json:"schemaVersion"`
+	Sequence      uint64               `json:"sequence"`
+	SessionID     string               `json:"sessionId"`
+	Event         string               `json:"event"`
 	Status        PonderaSessionStatus `json:"status"`
 }
 
@@ -425,8 +425,8 @@ type persistedStatusTelemetry struct {
 	Sequence       uint64                    `json:"sequence"`
 	State          string                    `json:"state"`
 	Phase          string                    `json:"phase"`
-	TurnOutcome    PonderaTurnOutcome       `json:"turnOutcome"`
-	FinalReadiness PonderaFinalReadiness    `json:"finalReadiness"`
+	TurnOutcome    PonderaTurnOutcome        `json:"turnOutcome"`
+	FinalReadiness PonderaFinalReadiness     `json:"finalReadiness"`
 	TurnUsage      persistedUsageAccumulator `json:"turnUsage"`
 	Cumulative     persistedUsageAccumulator `json:"cumulative"`
 	GoalOverride   string                    `json:"goalOverride,omitempty"`

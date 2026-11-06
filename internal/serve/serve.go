@@ -528,6 +528,32 @@ func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.index)
 	mux.HandleFunc("GET /sessions/{id}", s.index)
+	mux.HandleFunc("GET /mobile", s.mobileIndex)
+	mux.HandleFunc("GET /mobile/manifest.webmanifest", s.mobileManifest)
+	mux.HandleFunc("GET /sw.js", s.serviceWorker)
+	mux.HandleFunc("GET /mobile/sw.js", s.mobileServiceWorker)
+	mux.HandleFunc("GET /settings", s.settingsIndex)
+	// Cross-machine mirror (cloud writer -> local spectator).
+	mux.HandleFunc("GET /mirror/stream", s.mirrorStream)
+	mux.HandleFunc("POST /mirror/publish", s.mirrorPublish)
+	mux.HandleFunc("GET /mirror/replay", s.mirrorReplay)
+	mux.HandleFunc("GET /mirror/status", s.mirrorStatus)
+	// Cost gate.
+	mux.HandleFunc("GET /cost/status", s.costStatus)
+	mux.HandleFunc("GET /cost/check", s.costCheck)
+	mux.HandleFunc("POST /cost/record", s.costRecord)
+	mux.HandleFunc("POST /cost/limits", s.costLimits)
+	mux.HandleFunc("POST /cost/active", s.costActive)
+	mux.HandleFunc("POST /cost/reset", s.costReset)
+	// Web Push.
+	mux.HandleFunc("GET /push/vapid", s.pushVAPID)
+	mux.HandleFunc("POST /push/subscribe", s.pushSubscribe)
+	mux.HandleFunc("POST /push/unsubscribe", s.pushUnsubscribe)
+	mux.HandleFunc("GET /push/subscriptions", s.pushSubscriptions)
+	mux.HandleFunc("POST /push/notify", s.pushNotify)
+	mux.HandleFunc("GET /cloud/selections", s.cloudSelections)
+	mux.HandleFunc("POST /cloud/pin", s.cloudPin)
+	mux.HandleFunc("POST /cloud/unpin", s.cloudUnpin)
 	mux.HandleFunc("GET /assets/logo-wordmark.svg", s.logoWordmark)
 	mux.HandleFunc("GET /provider-setup", s.providerSetupStatus)
 	mux.HandleFunc("POST /provider-setup", s.providerSetupSave)
@@ -536,7 +562,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /history", s.history)
 	s.registerTranscriptRoutes(mux)
 	mux.HandleFunc("GET /context", s.context)
-	mux.HandleFunc("POST /submit", s.submit)
+	mux.HandleFunc("POST /submit", s.costGatedSubmit(s.submit))
 	s.registerInboxRoutes(mux)
 	mux.HandleFunc("POST /cancel", s.foregroundMutation(s.cancel))
 	mux.HandleFunc("POST /cancel-session", s.foregroundMutation(s.cancelSession))
@@ -549,6 +575,9 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("POST /clear", s.clearSession)
 	mux.HandleFunc("POST /rewind", s.rewind)
 	mux.HandleFunc("POST /fork", s.fork)
+	mux.HandleFunc("POST /messages/retract", s.retractMessage)
+	mux.HandleFunc("POST /messages/edit", s.editMessage)
+	mux.HandleFunc("GET /message-targets", s.messageTargets)
 	s.registerForkRoutes(mux)
 	mux.HandleFunc("POST /summarize", s.foregroundMutation(s.summarize))
 	mux.HandleFunc("POST /tool-approval-mode", s.foregroundMutation(s.toolApprovalMode))
@@ -926,19 +955,40 @@ func (s *Server) fork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if ctrl, ok := s.ctl().(*control.Controller); ok {
-		s.setControllerPath(ctrl, ctrl.SessionPath())
-	}
-	s.bc.ResetSessionPath(s.ctl().SessionPath())
-	s.cacheForkTitle(sourcePath, s.ctl().SessionPath())
-	// The controller switched to the fork (a fresh path); the lease follows it.
-	if err := s.rebindSessionLease(s.ctl().SessionPath()); err != nil {
+	if err := s.adoptControllerFork(sourcePath); err != nil {
 		http.Error(w, sessionInUseError(err), http.StatusConflict)
 		return
 	}
 	// path is the session the controller is on now; branch is what the fork
 	// created: the same path for a file fork, a head id inside a schema-2 log.
 	writeJSON(w, map[string]string{"path": s.ctl().SessionPath(), "branch": path})
+}
+
+// adoptControllerFork performs the server-side handoff every endpoint that
+// makes the controller adopt a freshly forked session must run: the tag
+// identity, the broadcaster's current-session route and ledger, the fork title
+// cache and the session lease all have to follow the child path.
+//
+// The controller switches itself inside ForkNamed/Rewind. Hosts that installed
+// a session-transition handler already prime the tag route and acquire the
+// target lease there, but this method stays the endpoint's own contract: it is
+// nil-safe for embedded servers without a keeper, and it is the only place that
+// resets the child ledger and seeds the fork title. Repeating the lease rebind
+// is idempotent (SessionLeaseKeeper.rebindWith returns early when the held path
+// already matches), so it neither double-acquires nor releases the parent.
+func (s *Server) adoptControllerFork(sourcePath string) error {
+	if ctrl, ok := s.ctl().(*control.Controller); ok {
+		// Re-binds the tag to the child path/session id and publishes the new
+		// current route; a stale tag would stamp child frames with the parent.
+		s.setControllerPath(ctrl, ctrl.SessionPath())
+	}
+	target := s.ctl().SessionPath()
+	// ResetSession alone would clear the ledger of the path the broadcaster
+	// still believes is current (the parent). Reset the child instead.
+	s.bc.ResetSessionPath(target)
+	s.cacheForkTitle(sourcePath, target)
+	// The controller now writes the child; the lease must guard the same file.
+	return s.rebindSessionLease(target)
 }
 
 // cacheForkTitle gives a file-backed fork the same visible numbering as the

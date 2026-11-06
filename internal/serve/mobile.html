@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/mobile/manifest.webmanifest">
+<title>Pondera · 手机端</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#f5f6f8; --surface:#fff; --surface-2:#eef1f5; --line:#e2e6ec;
+  --fg:#1a1f27; --muted:#6d7684; --accent:#3b6ef5; --accent-2:#8b5cf6;
+  --accent-soft:#e8efff; --ok:#0f9d58; --warn:#e8912d; --danger:#e0453b;
+  --user:#3b6ef5; --assistant:#fff; --tool:#f2f4f8;
+  --radius:16px; --shadow:0 1px 2px rgba(16,24,40,.05),0 10px 30px rgba(16,24,40,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#0e1014;--surface:#181c23;--surface-2:#20252e;--line:#2b313b;
+    --fg:#e9ecf1;--muted:#98a2b1;--accent:#6b9bff;--accent-soft:#1c2b48;
+    --user:#3b6ef5;--assistant:#1c212a;--tool:#232936;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 30px rgba(0,0,0,.3);}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  display:flex;flex-direction:column;overflow:hidden}
+button,textarea,input{font:inherit}
+button{cursor:pointer}
+.top{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;
+  background:var(--surface);border-bottom:1px solid var(--line);z-index:5}
+.mark{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  display:grid;place-items:center;color:#fff;font-weight:800;font-size:16px;box-shadow:var(--shadow);flex:0 0 auto}
+.title{font-weight:700;font-size:16px;letter-spacing:-.2px;line-height:1.15}
+.title small{display:block;font-weight:400;color:var(--muted);font-size:11px;letter-spacing:0}
+.spacer{flex:1}
+.status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--warn);transition:.2s}
+.dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(15,157,88,.14)}
+.dot.off{background:var(--danger)}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;
+  background:var(--accent-soft);color:var(--accent);font-size:11.5px;font-weight:600;white-space:nowrap}
+.badge.local{background:var(--surface-2);color:var(--muted)}
+.icon{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+  color:var(--muted);display:grid;place-items:center;font-size:16px;flex:0 0 auto}
+.icon:active{transform:scale(.94)}
+.stream{flex:1;overflow-y:auto;padding:16px 14px 8px;scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
+.empty{text-align:center;color:var(--muted);padding:56px 24px;font-size:13.5px}
+.empty .orb{width:64px;height:64px;margin:0 auto 16px;border-radius:22px;
+  background:linear-gradient(135deg,var(--accent-soft),var(--surface-2));display:grid;place-items:center;
+  font-size:28px;color:var(--accent)}
+.msg{margin:0 0 14px;display:flex;flex-direction:column;animation:rise .22s ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.user{align-items:flex-end}
+.bubble{max-width:88%;padding:11px 14px;border-radius:var(--radius);background:var(--assistant);
+  border:1px solid var(--line);box-shadow:var(--shadow);white-space:pre-wrap;word-break:break-word;font-size:14.2px}
+.msg.user .bubble{background:linear-gradient(135deg,var(--user),#5b7ff8);border-color:transparent;color:#fff;
+  border-bottom-right-radius:5px}
+.msg.assistant .bubble{border-bottom-left-radius:5px}
+.msg.tool .bubble{background:var(--tool);font:12.5px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted)}
+.meta{display:flex;align-items:center;gap:8px;margin:5px 2px 0;font-size:11px;color:var(--muted)}
+.meta button{border:0;background:transparent;color:var(--muted);padding:2px 4px;font-size:11px}
+.meta button:hover{color:var(--accent)}
+.notice{margin:10px auto;padding:9px 13px;border-radius:10px;background:var(--surface-2);
+  color:var(--muted);font-size:12.5px;text-align:center;max-width:92%}
+.notice.warn{background:rgba(232,145,45,.13);color:var(--warn)}
+.approval{margin:12px 0;padding:14px;border-radius:var(--radius);background:var(--surface);
+  border:1px solid var(--accent);box-shadow:var(--shadow)}
+.approval .h{font-weight:700;font-size:13.5px;margin-bottom:6px;color:var(--accent)}
+.approval .b{font-size:13px;white-space:pre-wrap;word-break:break-word}
+.approval .row{display:flex;gap:9px;margin-top:12px}
+.btn{padding:9px 16px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--danger)}
+.composer{flex:0 0 auto;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);
+  background:var(--surface);border-top:1px solid var(--line);display:flex;align-items:flex-end;gap:9px}
+.composer textarea{flex:1;resize:none;max-height:130px;min-height:44px;padding:11px 13px;border-radius:13px;
+  border:1px solid var(--line);background:var(--surface-2);color:var(--fg);outline:none;line-height:1.5}
+.composer textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.send{width:46px;height:44px;border-radius:13px;border:0;background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  color:#fff;font-size:19px;display:grid;place-items:center;box-shadow:var(--shadow);flex:0 0 auto}
+.queue{position:fixed;right:14px;bottom:calc(env(safe-area-inset-bottom) + 66px);
+  background:var(--warn);color:#fff;font-size:11px;padding:3px 9px;border-radius:20px;display:none}
+dialog{border:1px solid var(--line);border-radius:18px;background:var(--surface);color:var(--fg);
+  width:min(94vw,460px);max-height:82vh;box-shadow:0 24px 70px rgba(0,0,0,.3);padding:0}
+dialog::backdrop{background:rgba(10,14,20,.55)}
+.dlg-h{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--line);font-weight:700}
+.dlg-b{padding:16px 18px;overflow-y:auto;max-height:64vh}
+.dlg-b label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px}
+.dlg-b input,.dlg-b textarea{width:100%;padding:10px 12px;border-radius:10px;
+  border:1px solid var(--line);background:var(--surface-2);color:var(--fg);outline:none}
+.dlg-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.dlg-row:last-child{border-bottom:0}
+.dlg-row .l{font-weight:600;font-size:13.5px}
+.dlg-row .d{color:var(--muted);font-size:12px;margin-top:2px}
+.switch{position:relative;width:42px;height:24px;flex:0 0 auto}
+.switch input{opacity:0;width:0;height:0}
+.switch span{position:absolute;inset:0;background:var(--line);border-radius:24px;transition:.2s}
+.switch span::before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.2s}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span::before{transform:translateX(18px)}
+.sel{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:12px;
+  background:var(--surface-2);margin-bottom:9px}
+.sel .t{font-weight:600;font-size:13.5px}
+.sel .s{font-size:11.5px;color:var(--muted)}
+.pill{padding:3px 9px;border-radius:20px;font-size:11px;background:var(--accent-soft);color:var(--accent)}
+.pill.off{background:var(--surface-2);color:var(--muted)}
+.cost{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.cost div{background:var(--surface-2);border-radius:10px;padding:10px;text-align:center}
+.cost .k{font-size:10.5px;color:var(--muted)}
+.cost .v{font-size:16px;font-weight:700;margin-top:2px}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 84px);transform:translate(-50%,10px);
+  background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:11px;font-size:12.5px;
+  box-shadow:var(--shadow);opacity:0;transition:.2s;pointer-events:none;z-index:50;max-width:88vw;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.lock{position:fixed;inset:0;z-index:60;background:var(--bg);display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;padding:30px;text-align:center}
+.lock.show{display:flex}
+.lock .big{width:76px;height:76px;border-radius:26px;background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  display:grid;place-items:center;font-size:34px;color:#fff;box-shadow:var(--shadow)}
+a.link{color:var(--accent)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="mark">P</div>
+  <div class="title">Pondera<small id="subtitle">手机端 · 云端任务</small></div>
+  <div class="spacer"></div>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">连接中</span></div>
+  <span class="badge local" id="syncBadge">本地</span>
+  <button class="icon" id="btnSessions" title="会话">☰</button>
+  <button class="icon" id="btnSettings" title="设置">⚙</button>
+</header>
+
+<div class="stream" id="stream">
+  <div class="empty" id="emptyState"><div class="orb">⌘</div>连接中，正在拉取会话历史…<br><span style="font-size:12px">发一条指令即可在云端继续任务，电脑无需开机。</span></div>
+</div>
+<div id="approvals"></div>
+
+<div class="queue" id="queueBadge">0 条待发送</div>
+<div class="composer">
+  <textarea id="input" rows="1" placeholder="给 Pondera 发指令…"></textarea>
+  <button class="send" id="send" title="发送">➤</button>
+  <button class="icon" id="stop" title="停止当前回合" style="height:44px;width:44px">■</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="lock" id="lock">
+  <div class="big">🔒</div>
+  <div style="font-size:18px;font-weight:700">需要解锁</div>
+  <div style="color:var(--muted);font-size:13px;max-width:300px">已启用设备生物识别。验证通过后才能向云端发送指令。</div>
+  <button class="btn primary" id="unlock" style="margin-top:8px">使用指纹 / 面容解锁</button>
+  <button class="btn" id="disableBio">关闭生物识别</button>
+</div>
+
+<dialog id="dlgSessions">
+  <div class="dlg-h"><span>会话与云同步</span><button class="icon" data-close="dlgSessions">✕</button></div>
+  <div class="dlg-b">
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">默认全部会话留在本机。打开开关只是标记，需在本机执行 <b>cloud push</b> 才会上传。</div>
+    <div id="sessionList"></div>
+    <div style="margin-top:14px"><a class="link" href="/settings">打开完整设置 →</a></div>
+  </div>
+</dialog>
+
+<dialog id="dlgSettings">
+  <div class="dlg-h"><span>设置</span><button class="icon" data-close="dlgSettings">✕</button></div>
+  <div class="dlg-b">
+    <label>访问 Token（从 #token=… 自动读取）</label>
+    <input type="password" id="tokenInput" placeholder="serve token">
+    <div class="dlg-row"><div><div class="l">设备生物识别解锁</div><div class="d">用平台认证器（指纹/面容）保护发送操作</div></div>
+      <label class="switch"><input type="checkbox" id="bioToggle"><span></span></label></div>
+    <div class="dlg-row"><div><div class="l">任务完成推送</div><div class="d">向本设备发送 Web Push 通知</div></div>
+      <label class="switch"><input type="checkbox" id="pushToggle"><span></span></label></div>
+    <div class="dlg-row"><div><div class="l">离线指令队列</div><div class="d">断网时先排队，恢复后自动补发（幂等）</div></div>
+      <span class="pill" id="queueState">已启用</span></div>
+    <div class="dlg-row"><div><div class="l">成本闸门</div><div class="d">今日 / 近 7 天花费与剩余额度</div></div>
+      <span class="pill" id="gateState">—</span></div>
+    <div class="cost">
+      <div><div class="k">今日</div><div class="v" id="cToday">—</div></div>
+      <div><div class="k">近 7 天</div><div class="v" id="cWeek">—</div></div>
+      <div><div class="k">累计</div><div class="v" id="cTotal">—</div></div>
+    </div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      <button class="btn primary" id="saveSettings" style="flex:1">保存并重连</button>
+      <a class="btn" href="/settings" style="text-align:center;flex:1;line-height:1.5">完整设置</a>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlgEdit">
+  <div class="dlg-h"><span>编辑并重新发送</span><button class="icon" data-close="dlgEdit">✕</button></div>
+  <div class="dlg-b">
+    <div style="font-size:12.5px;color:var(--muted)">会在该消息处创建分支并用新文本重跑，原分支完整保留。</div>
+    <textarea id="editInput" rows="5" style="margin-top:10px"></textarea>
+    <div style="display:flex;gap:9px;margin-top:12px">
+      <button class="btn primary" id="doEdit" style="flex:1">重新发送</button>
+      <button class="btn" data-close="dlgEdit">取消</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  let TOKEN = '', ES = null, retry = 0, messages = [], targets = [], approvals = [], editTarget = null;
+  let unlocked = true, bioRequired = false;
+
+  function readToken() {
+    try {
+      const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+      TOKEN = hash.get('token') || new URLSearchParams(location.search).get('token') ||
+        sessionStorage.getItem('pondera-token') || '';
+    } catch (e) {}
+    $('#tokenInput').value = TOKEN;
+  }
+  function api(path, opts = {}) {
+    const u = new URL(path, location.href);
+    if (TOKEN) u.searchParams.set('token', TOKEN);
+    return fetch(u.toString(), Object.assign({}, opts, {
+      headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+      credentials: 'same-origin'
+    }));
+  }
+  let toastTimer;
+  function toast(msg) {
+    const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function setStatus(text, state) {
+    $('#statusText').textContent = text;
+    $('#dot').className = 'dot ' + (state || '');
+  }
+  function uid() { return 'm-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+
+  function roleOf(r) {
+    if (r === 'user') return 'user';
+    if (r === 'tool' || r === 'system') return 'tool';
+    return 'assistant';
+  }
+  function formatText(t) {
+    return esc(String(t == null ? '' : t)).replace(/```([\s\S]*?)```/g,
+      (_, c) => '<pre style="white-space:pre-wrap;margin:8px 0">' + c + '</pre>');
+  }
+  function render() {
+    const box = $('#stream');
+    const html = messages.map((m) => {
+      const t = targets.find((x) => x.messageId === m.messageId);
+      const canRetract = t ? t.retractable : (m.role === 'user');
+      const canEdit = t ? t.editable : (m.role === 'user');
+      return '<div class="msg ' + roleOf(m.role) + '">' +
+        '<div class="bubble">' + formatText(m.content) + '</div>' +
+        '<div class="meta"><span>' + esc(m.label || m.role) + '</span>' +
+        (canRetract ? '<button data-act="retract" data-id="' + esc(m.messageId) + '">撤回</button>' : '') +
+        (canEdit ? '<button data-act="edit" data-id="' + esc(m.messageId) + '">编辑并重发</button>' : '') +
+        '</div></div>';
+    }).join('');
+    box.innerHTML = '<div class="empty" id="emptyState" style="display:' + (messages.length ? 'none' : '') + '">' +
+      '<div class="orb">⌘</div>连接中，正在拉取会话历史…<br><span style="font-size:12px">发一条指令即可在云端继续任务，电脑无需开机。</span></div>' + html;
+    box.scrollTop = box.scrollHeight;
+  }
+  function renderApprovals() {
+    $('#approvals').innerHTML = approvals.map((a) =>
+      '<div class="approval"><div class="h">需要审批</div><div class="b">' + esc(a.text) + '</div>' +
+      '<div class="row"><button class="btn primary" data-allow="1" data-id="' + esc(a.id) + '">允许</button>' +
+      '<button class="btn danger" data-allow="0" data-id="' + esc(a.id) + '">拒绝</button></div></div>').join('');
+  }
+  function notice(text, level) {
+    const box = $('#stream'), el = document.createElement('div');
+    el.className = 'notice' + (level === 'warn' ? ' warn' : '');
+    el.textContent = text;
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+  }
+  function pushMessage(messageId, role, content, label) {
+    const existing = messages.find((m) => m.messageId === messageId);
+    if (existing) { existing.content = content; existing.label = label || existing.label; render(); return; }
+    messages.push({ messageId, role, content, label });
+    render();
+  }
+
+  async function loadHistory() {
+    const r = await api('/history');
+    if (!r.ok) return;
+    const data = await r.json();
+    const list = Array.isArray(data) ? data : (data.messages || data.history || []);
+    messages = list.map((m, i) => ({
+      messageId: m.messageId || m.id || ('h' + i),
+      role: m.role || 'assistant',
+      content: m.content || m.text || '',
+      label: m.label || m.role || '消息'
+    }));
+    render();
+  }
+  async function loadTargets() {
+    const r = await api('/message-targets');
+    if (!r.ok) return;
+    const data = await r.json();
+    targets = data.messages || [];
+    render();
+  }
+  async function loadCloud() {
+    const r = await api('/cloud/selections');
+    if (!r.ok) return;
+    const data = await r.json();
+    const current = data.currentSessionId;
+    const sels = data.selections || [];
+    const pinned = sels.some((s) => s.sessionId === current && s.scope === 'cloud-pinned');
+    $('#syncBadge').textContent = pinned ? '已上云' : '本地';
+    $('#syncBadge').className = 'badge' + (pinned ? '' : ' local');
+    renderSessionList(sels, current);
+  }
+  function renderSessionList(sels, current) {
+    const host = $('#sessionList');
+    if (!sels.length) { host.innerHTML = '<div style="color:var(--muted);font-size:13px">暂无会话记录。</div>'; return; }
+    host.innerHTML = sels.map((s) => {
+      const on = s.scope === 'cloud-pinned';
+      return '<div class="sel"><div><div class="t">' + esc(s.title || s.sessionId) +
+        (s.sessionId === current ? ' · 当前' : '') + '</div><div class="s">' + esc(s.sessionId) +
+        ' · 写者 ' + esc(s.owner || 'local') + ' · 任务 ' + ((s.tasks || []).length) + '</div></div>' +
+        '<label class="switch"><input type="checkbox" data-pin="' + esc(s.sessionId) + '" ' +
+        (on ? 'checked' : '') + '><span></span></label></div>';
+    }).join('');
+    $$('[data-pin]').forEach((el) => el.addEventListener('change', () => togglePin(el.dataset.pin, !el.checked)));
+  }
+  async function loadCost() {
+    const r = await api('/cost/status');
+    if (!r.ok) return;
+    const c = await r.json();
+    $('#cToday').textContent = '$' + (c.todayUsd || 0).toFixed(3);
+    $('#cWeek').textContent = '$' + (c.weekUsd || 0).toFixed(2);
+    $('#cTotal').textContent = '$' + (c.totalUsd || 0).toFixed(2);
+    $('#gateState').textContent = c.limits && c.limits.enabled ? '已启用（仅统计已上报用量）' : '已关闭';
+  }
+  async function recordUsage(payload) {
+    try {
+      const u = payload.usage || payload;
+      const tin = Number(u.inputTokens ?? u.promptTokens ?? u.tokensIn ?? 0);
+      const tout = Number(u.outputTokens ?? u.completionTokens ?? u.tokensOut ?? 0);
+      if (!tin && !tout) return;
+      await api('/cost/record', { method: 'POST', body: JSON.stringify({
+        sessionId: payload.sessionId || 'current', model: payload.model || u.model || '',
+        tokensIn: tin, tokensOut: tout, label: 'mobile-sse'
+      }) });
+      loadCost();
+    } catch (e) {}
+  }
+
+  function connect() {
+    if (ES) { try { ES.close(); } catch (e) {} }
+    const u = new URL('/events', location.href);
+    if (TOKEN) u.searchParams.set('token', TOKEN);
+    ES = new EventSource(u.toString(), { withCredentials: true });
+    ES.onopen = () => { retry = 0; setStatus('实时连接', 'on'); loadHistory(); loadTargets(); loadCloud(); };
+    ES.onerror = () => {
+      setStatus('重连中', 'off');
+      try { ES.close(); } catch (e) {}
+      retry = Math.min(retry + 1, 6);
+      setTimeout(connect, Math.min(1000 * (1 << retry), 20000));
+    };
+    ES.onmessage = (e) => { try { handleEvent(JSON.parse(e.data)); } catch (err) {} };
+  }
+  function handleEvent(ev) {
+    const kind = ev.kind || ev.type || '';
+    if (kind.includes('usage') || kind.includes('cost')) { recordUsage(ev); return; }
+    if (kind === 'approval_request' || kind === 'permission_request') {
+      const a = ev.approval || ev, id = a.id || uid();
+      if (!approvals.some((x) => x.id === id)) approvals.push({ id, text: a.text || a.prompt || '需要确认操作' });
+      renderApprovals(); return;
+    }
+    if (kind === 'approval_resolved' || kind === 'notice') {
+      if (kind === 'approval_resolved') { approvals = []; renderApprovals(); }
+      else notice(ev.text || ev.message || '', ev.level);
+      return;
+    }
+    const id = ev.messageId || ev.id || uid();
+    const role = ev.role || (kind.includes('user') ? 'user' : (kind.includes('tool') ? 'tool' : 'assistant'));
+    const text = ev.text ?? ev.content ?? ev.delta ?? (kind === 'message/upsert' ? (ev.payload && ev.payload.text) : '');
+    if (text) pushMessage(id, role, text, ev.label || kind);
+    if (kind === 'turn_complete' || kind === 'done') { loadTargets(); loadCost(); }
+  }
+
+  async function submit(text, submissionId) {
+    const body = { input: text, submissionId };
+    try {
+      const r = await api('/submit', { method: 'POST', body: JSON.stringify(body) });
+      if (r.status === 429) {
+        const d = await r.json().catch(() => ({}));
+        toast('成本闸门拦截：' + (d.reason || '已达限额'));
+        return false;
+      }
+      if (!r.ok) { toast('发送失败：HTTP ' + r.status); return false; }
+      return true;
+    } catch (e) {
+      await enqueue(body);
+      toast('已离线排队，联网后自动补发');
+      updateQueueBadge();
+      return false;
+    }
+  }
+  async function retract(id) {
+    const r = await api('/messages/retract', { method: 'POST', body: JSON.stringify({
+      messageId: id, rollbackCode: false, reason: 'mobile'
+    }) });
+    if (r.ok) { toast('已撤回，父分支保留'); loadHistory(); loadTargets(); }
+    else toast('撤回失败：' + (await r.text()).slice(0, 120));
+  }
+  async function doEdit() {
+    if (!editTarget) return;
+    const text = $('#editInput').value.trim();
+    if (!text) return;
+    const r = await api('/messages/edit', { method: 'POST', body: JSON.stringify({
+      messageId: editTarget, text, reason: 'mobile'
+    }) });
+    if (r.ok) { toast('已创建分支并重跑'); $('#dlgEdit').close(); loadHistory(); }
+    else toast('编辑失败：' + (await r.text()).slice(0, 120));
+  }
+  async function approve(id, allow) {
+    await api('/approve', { method: 'POST', body: JSON.stringify({ id, allow, session: false }) });
+    approvals = approvals.filter((a) => a.id !== id);
+    renderApprovals();
+  }
+  async function togglePin(sessionId, on) {
+    const r = await api(on ? '/cloud/unpin' : '/cloud/pin', { method: 'POST', body: JSON.stringify({ sessionId }) });
+    if (r.ok) { toast(on ? '已取消选中（仅本机）' : '已标记选中（尚未上传）'); loadCloud(); }
+    else toast('操作失败：' + (await r.text()).slice(0, 120));
+  }
+
+  // ---- offline outbox (IndexedDB, shared with the service worker) -------
+  function openOutbox() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('pondera', 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox', { keyPath: 'id' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function enqueue(body) {
+    const db = await openOutbox();
+    const item = { id: body.submissionId, url: '/submit' + (TOKEN ? '?token=' + encodeURIComponent(TOKEN) : ''), body, at: Date.now() };
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('outbox', 'readwrite');
+      tx.objectStore('outbox').put(item);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.ready.then((reg) => {
+        if (reg.sync) reg.sync.register('pondera-outbox').catch(() => {});
+      }).catch(() => {});
+    }
+  }
+  async function outboxCount() {
+    try {
+      const db = await openOutbox();
+      return await new Promise((resolve) => {
+        const tx = db.transaction('outbox', 'readonly');
+        const req = tx.objectStore('outbox').count();
+        req.onsuccess = () => resolve(req.result || 0);
+        req.onerror = () => resolve(0);
+      });
+    } catch (e) { return 0; }
+  }
+  async function updateQueueBadge() {
+    const n = await outboxCount();
+    $('#queueBadge').textContent = n + ' 条待发送';
+    $('#queueBadge').style.display = n ? 'block' : 'none';
+    $('#queueState').textContent = n ? ('排队 ' + n + ' 条') : '已启用';
+  }
+  async function flushNow() {
+    let db;
+    try { db = await openOutbox(); } catch (e) { return; }
+    const items = await new Promise((resolve) => {
+      const tx = db.transaction('outbox', 'readonly');
+      const req = tx.objectStore('outbox').getAll();
+      req.onsuccess = () => resolve(req.result || []); req.onerror = () => resolve([]);
+    });
+    for (const item of items) {
+      try {
+        const r = await fetch(item.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item.body) });
+        if (!r.ok && r.status !== 409) continue;
+        await new Promise((resolve) => {
+          const tx = db.transaction('outbox', 'readwrite');
+          tx.objectStore('outbox').delete(item.id);
+          tx.oncomplete = resolve; tx.onerror = resolve;
+        });
+      } catch (e) { break; }
+    }
+    updateQueueBadge();
+  }
+
+  // ---- WebAuthn device unlock -----------------------------------------
+  function b64(buf) {
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function unb64(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    const raw = atob(s), out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  async function webauthnUnlock() {
+    if (!window.PublicKeyCredential) { toast('此浏览器不支持生物识别'); return false; }
+    const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false);
+    if (!ok) { toast('设备没有可用的平台认证器'); return false; }
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    let id = localStorage.getItem('pondera-webauthn-id');
+    try {
+      if (!id) {
+        const cred = await navigator.credentials.create({ publicKey: {
+          challenge, rp: { name: 'Pondera' },
+          user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'pondera-user', displayName: 'Pondera 用户' },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+          timeout: 60000, attestation: 'none'
+        } });
+        if (!cred) return false;
+        id = b64(cred.rawId);
+        localStorage.setItem('pondera-webauthn-id', id);
+      }
+      const assertion = await navigator.credentials.get({ publicKey: {
+        challenge, allowCredentials: [{ type: 'public-key', id: unb64(id) }],
+        userVerification: 'required', timeout: 60000
+      } });
+      return !!assertion;
+    } catch (e) { toast('验证失败：' + (e.message || e)); return false; }
+  }
+  function applyLock() {
+    bioRequired = localStorage.getItem('pondera-bio') === '1';
+    $('#bioToggle').checked = bioRequired;
+    unlocked = !bioRequired;
+    $('#lock').classList.toggle('show', !unlocked);
+  }
+
+  // ---- Web Push --------------------------------------------------------
+  async function enablePush() {
+    if (!('PushManager' in window) || !navigator.serviceWorker) { toast('此浏览器不支持推送'); return; }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('通知权限被拒绝'); $('#pushToggle').checked = false; return; }
+    const reg = await navigator.serviceWorker.ready;
+    const keyRes = await api('/push/vapid');
+    if (!keyRes.ok) { toast('无法获取推送公钥'); return; }
+    const key = await keyRes.json();
+    let raw = key.publicKey.replace(/-/g, '+').replace(/_/g, '/');
+    while (raw.length % 4) raw += '=';
+    const appKey = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
+    const j = sub.toJSON();
+    const r = await api('/push/subscribe', { method: 'POST', body: JSON.stringify({
+      endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, label: navigator.userAgent.slice(0, 80)
+    }) });
+    if (r.ok) toast('推送已启用'); else toast('订阅失败');
+  }
+  async function disablePush() {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await api('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint }) });
+      await sub.unsubscribe();
+    }
+    toast('推送已关闭');
+  }
+
+  // ---- wiring ----------------------------------------------------------
+  $('#input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#send').click(); }
+  });
+  $('#input').addEventListener('input', (e) => {
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 130) + 'px';
+  });
+  $('#send').onclick = async () => {
+    if (!unlocked) { $('#lock').classList.add('show'); return; }
+    const text = $('#input').value.trim();
+    if (!text) return;
+    const id = uid();
+    $('#input').value = ''; $('#input').style.height = 'auto';
+    pushMessage(id, 'user', text, '你');
+    await submit(text, id);
+  };
+  $('#stop').onclick = async () => { await api('/cancel', { method: 'POST', body: '{}' }); toast('已请求停止'); };
+  $('#stream').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    if (b.dataset.act === 'retract') retract(b.dataset.id);
+    if (b.dataset.act === 'edit') {
+      editTarget = b.dataset.id;
+      const m = messages.find((x) => x.messageId === editTarget);
+      $('#editInput').value = m ? m.content : '';
+      $('#dlgEdit').showModal();
+    }
+  });
+  $('#approvals').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-allow]');
+    if (b) approve(b.dataset.id, b.dataset.allow === '1');
+  });
+  $('#doEdit').onclick = doEdit;
+  $$('[data-close]').forEach((b) => b.addEventListener('click', () => $('#' + b.dataset.close).close()));
+  $('#btnSessions').onclick = () => { loadCloud(); $('#dlgSessions').showModal(); };
+  $('#btnSettings').onclick = () => { $('#tokenInput').value = TOKEN; loadCost(); $('#dlgSettings').showModal(); };
+  $('#saveSettings').onclick = () => {
+    TOKEN = $('#tokenInput').value.trim();
+    sessionStorage.setItem('pondera-token', TOKEN);
+    $('#dlgSettings').close();
+    connect(); loadHistory(); loadTargets(); loadCloud(); loadCost();
+    toast('已保存并重连');
+  };
+  $('#bioToggle').addEventListener('change', (e) => {
+    localStorage.setItem('pondera-bio', e.target.checked ? '1' : '0');
+    applyLock();
+    if (e.target.checked) toast('下次刷新后需要生物识别解锁');
+  });
+  $('#pushToggle').addEventListener('change', (e) => { if (e.target.checked) enablePush(); else disablePush(); });
+  $('#unlock').onclick = async () => {
+    if (await webauthnUnlock()) { unlocked = true; $('#lock').classList.remove('show'); toast('已解锁'); }
+  };
+  $('#disableBio').onclick = () => { localStorage.setItem('pondera-bio', '0'); applyLock(); toast('已关闭生物识别'); };
+  window.addEventListener('online', () => { flushNow(); connect(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { flushNow(); loadHistory(); loadTargets(); loadCloud(); loadCost(); }
+  });
+
+  readToken();
+  applyLock();
+  if ('serviceWorker' in navigator) {
+    // Older builds registered /sw.js with scope "/", which let the mobile
+    // worker intercept desktop web pages. Drop that registration, then install
+    // the same worker scoped to the mobile page only.
+    if (navigator.serviceWorker.getRegistrations) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) {
+          if (new URL(reg.scope).pathname === '/') reg.unregister();
+        }
+      }).catch(() => {});
+    }
+    navigator.serviceWorker.register('/mobile/sw.js', { scope: '/mobile' }).then(() => {
+      updateQueueBadge(); flushNow();
+      navigator.serviceWorker.ready.then((reg) => {
+        if (reg.pushManager) reg.pushManager.getSubscription().then((s) => { $('#pushToggle').checked = !!s; });
+      });
+    }).catch(() => {});
+  }
+  connect();
+  loadHistory(); loadTargets(); loadCloud(); loadCost();
+  updateQueueBadge();
+  setInterval(updateQueueBadge, 15000);
+})();
+</script>
+</body>
+</html>

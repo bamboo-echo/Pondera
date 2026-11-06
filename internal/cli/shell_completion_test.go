@@ -73,6 +73,11 @@ func TestCLICompletionListsRootAndNestedCommands(t *testing.T) {
 		t.Fatalf("root completion = %v, want %v", got, want)
 	}
 
+	got = cliCompletionCandidatesWithValues(root, 1, []string{"pondera", "cl"}, values)
+	if want := []string{"cloud"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("cloud completion = %v, want %v", got, want)
+	}
+
 	got = cliCompletionCandidatesWithValues(root, 2, []string{"pondera", "mcp", "b"}, values)
 	if want := []string{"browse"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("mcp subcommand completion = %v, want %v", got, want)

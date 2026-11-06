@@ -154,6 +154,9 @@ func RunWithBuildInfo(args []string, info BuildInfo) int {
 	case "remote":
 		configureCLIThemeFromConfig()
 		return remoteCommand(rest, version)
+	case "cloud":
+		configureCLIThemeFromConfig()
+		return cloudCommand(rest)
 	case "plugin":
 		configureCLIThemeFromConfig()
 		return pluginCommand(rest)

@@ -119,6 +119,44 @@ func cliCompletionRootSpec() cliCompletionSpec {
 		completionSpec("serve", serveFlags),
 		completionSpec("web", serveFlags),
 		completionSpec("setup", []cliCompletionFlag{completionFlag("--local -l", cliCompletionNoValue), help}),
+		completionSpec("cloud", []cliCompletionFlag{help},
+			completionSpecWithAliases("list", []string{"ls"}, []cliCompletionFlag{help}),
+			completionSpec("status", []cliCompletionFlag{help}),
+			completionSpec("pin", []cliCompletionFlag{
+				completionFlag("--title --workspace --task", cliCompletionStaticValue), help,
+			}),
+			completionSpec("unpin", []cliCompletionFlag{help}),
+			completionSpec("pack", []cliCompletionFlag{
+				completionFlag("--workspace-dir --session-dir --out --cloud-host-id --cloud-session-id --boundary-sequence --serve-url --token --session-root --checkpoint", cliCompletionStaticValue),
+				completionFlag("--quiesce", cliCompletionStaticValue, "check", "drain", "force"),
+				completionFlag("--no-slice --confirm-quiesced", cliCompletionNoValue), help,
+			}),
+			completionSpec("apply", []cliCompletionFlag{
+				completionFlag("--dest --workspace-dest --owner --have-seq --session-root", cliCompletionStaticValue),
+				completionFlag("--pin --force-session", cliCompletionNoValue), help,
+			}),
+			completionSpec("confirm", []cliCompletionFlag{
+				completionFlag("--bundle --cloud-host-id --cloud-session-id", cliCompletionStaticValue),
+				completionFlag("--failed", cliCompletionNoValue), help,
+			}),
+			completionSpec("mappings", []cliCompletionFlag{help}),
+			completionSpec("push", []cliCompletionFlag{
+				completionFlag("--to --local-transport --remote-dir --remote-home --cloud-bin --session-root --workspace-dir --session-dir --out --serve-url --token --cloud-host-id --cloud-session-id --boundary-sequence", cliCompletionStaticValue),
+				completionFlag("--quiesce", cliCompletionStaticValue, "check", "drain", "force"),
+				completionFlag("--force-session --no-slice --skip-remote-apply", cliCompletionNoValue), help,
+			}),
+			completionSpec("pull", []cliCompletionFlag{
+				completionFlag("--from --local-transport --remote-dir --remote-bundle --local-dir --session-root --have-seq", cliCompletionStaticValue),
+				completionFlag("--force-session", cliCompletionNoValue), help,
+			}),
+			completionSpec("watch", []cliCompletionFlag{
+				completionFlag("--url --token --session --relay --relay-token --from --max-frames --heartbeat", cliCompletionStaticValue), help,
+			}),
+			completionSpec("cost", []cliCompletionFlag{
+				completionFlag("--jobs --turn-seconds --session --task --model --active", cliCompletionStaticValue),
+				completionFlag("--enabled --json", cliCompletionNoValue), help,
+			}),
+		),
 		completionSpec("config", []cliCompletionFlag{help},
 			completionSpec("auto-plan", []cliCompletionFlag{completionFlag("--local", cliCompletionNoValue), help}),
 			completionSpec("reasoning-language", []cliCompletionFlag{completionFlag("--local", cliCompletionNoValue), help}),

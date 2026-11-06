@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>设置 · Pondera</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f0f2f5; --line:#e3e6eb;
+  --fg:#1b1f26; --muted:#6b7280; --accent:#3b6ef5; --accent-soft:#e8efff;
+  --ok:#0f9d58; --warn:#e8912d; --danger:#e0453b; --radius:14px;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#0f1115;--surface:#181b21;--surface-2:#20242c;--line:#2b3039;
+    --fg:#e8eaee;--muted:#98a0ae;--accent:#6b9bff;--accent-soft:#1e2b47;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+a{color:var(--accent);text-decoration:none}
+button,input,select{font:inherit}
+.app{max-width:1180px;margin:0 auto;padding:24px 20px 72px;display:grid;grid-template-columns:236px minmax(0,1fr);gap:28px}
+.sidebar{position:sticky;top:24px;align-self:start}
+.brand{display:flex;align-items:center;gap:10px;margin:0 0 22px;padding:0 8px;font-weight:700;font-size:17px;letter-spacing:.2px}
+.brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#8b5cf6);
+  display:grid;place-items:center;color:#fff;font-size:16px;box-shadow:var(--shadow)}
+.search{width:100%;padding:10px 12px 10px 34px;border:1px solid var(--line);border-radius:10px;
+  background:var(--surface);color:var(--fg);outline:none;position:relative}
+.search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search-wrap{position:relative;margin-bottom:18px}
+.search-wrap::before{content:"⌕";position:absolute;left:11px;top:7px;color:var(--muted);font-size:18px}
+.nav{display:flex;flex-direction:column;gap:3px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 11px;border:0;
+  border-radius:9px;background:transparent;color:var(--muted);cursor:pointer;transition:.15s}
+.nav button:hover{background:var(--surface-2);color:var(--fg)}
+.nav button.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav .ico{width:18px;text-align:center;font-size:15px}
+.side-foot{margin-top:22px;padding:12px 10px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+main{min-width:0}
+header.page{margin-bottom:22px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.3px}
+.sub{color:var(--muted);font-size:13.5px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:18px 20px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+.card .hint{color:var(--muted);font-size:12.5px;margin:0 0 16px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .label{font-weight:600;font-size:14px}
+.row .desc{color:var(--muted);font-size:12.5px;margin-top:2px;max-width:560px}
+.row .ctrl{flex:0 0 auto;display:flex;align-items:center;gap:8px}
+input[type=number],input[type=text],select{padding:8px 10px;border:1px solid var(--line);border-radius:9px;
+  background:var(--surface-2);color:var(--fg);min-width:96px;outline:none}
+input[type=number]:focus,input[type=text]:focus,select:focus{border-color:var(--accent)}
+.btn{padding:8px 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);
+  color:var(--fg);cursor:pointer;transition:.15s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08);color:#fff}
+.btn.danger{color:var(--danger)}
+.switch{position:relative;width:42px;height:24px;display:inline-block}
+.switch input{opacity:0;width:0;height:0}
+.switch span{position:absolute;inset:0;background:var(--line);border-radius:24px;transition:.2s;cursor:pointer}
+.switch span::before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:50%;
+  background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span::before{transform:translateX(18px)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;
+  background:var(--surface-2);color:var(--muted);font-size:12px}
+.pill.ok{background:rgba(15,157,88,.12);color:var(--ok)}
+.pill.warn{background:rgba(232,145,45,.14);color:var(--warn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:4px}
+.stat{background:var(--surface-2);border-radius:11px;padding:14px 16px}
+.stat .k{color:var(--muted);font-size:12px}
+.stat .v{font-size:22px;font-weight:700;margin-top:3px;letter-spacing:-.4px}
+.section{display:none}
+.section.active{display:block}
+.section.hidden-by-search{display:none!important}
+.toast{position:fixed;right:20px;bottom:20px;background:var(--fg);color:var(--bg);
+  padding:11px 16px;border-radius:10px;box-shadow:var(--shadow);font-size:13px;opacity:0;
+  transform:translateY(8px);transition:.2s;pointer-events:none;z-index:50}
+.toast.show{opacity:1;transform:translateY(0)}
+.empty{color:var(--muted);font-size:13px;padding:8px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{padding:6px 11px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);font-size:12.5px}
+.chip b{color:var(--accent)}
+.kbd{font:12px ui-monospace,Consolas,monospace;background:var(--surface-2);border:1px solid var(--line);
+  padding:1px 6px;border-radius:5px}
+@media(max-width:860px){
+  .app{grid-template-columns:1fr;padding:16px 14px 60px;gap:16px}
+  .sidebar{position:static}
+  .nav{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:6px}
+  .nav button{width:auto;white-space:nowrap}
+  .side-foot{display:none}
+  .row{flex-direction:column;align-items:flex-start}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">P</span> Pondera 设置</div>
+    <div class="search-wrap"><input id="search" class="search" placeholder="搜索设置…" autocomplete="off"></div>
+    <nav class="nav" id="nav">
+      <button data-sec="overview" class="active"><span class="ico">◈</span> 概览</button>
+      <button data-sec="cloud"><span class="ico">☁</span> 云同步与移动端</button>
+      <button data-sec="cost"><span class="ico">◷</span> 成本与并发</button>
+      <button data-sec="notify"><span class="ico">◔</span> 通知与推送</button>
+      <button data-sec="security"><span class="ico">⛨</span> 权限与安全</button>
+      <button data-sec="advanced"><span class="ico">⚙</span> 高级</button>
+    </nav>
+    <div class="side-foot">设置会立即写入本机 <span class="kbd">~/.pondera</span>。<br>不选中上云的会话永远留在本机。</div>
+  </aside>
+
+  <main>
+    <header class="page">
+      <h1>设置</h1>
+      <div class="sub">按分组整理，搜索可跨组定位。改动只影响当前这台设备。</div>
+    </header>
+
+    <!-- 概览：常用置顶 -->
+    <section class="section active" data-sec="overview">
+      <div class="card">
+        <h2>◈ 运行状态</h2>
+        <p class="hint">实时读取本地 serve 的状态、花费与同步选择。</p>
+        <div class="grid">
+          <div class="stat"><div class="k">今日云端花费</div><div class="v" id="st-today">—</div></div>
+          <div class="stat"><div class="k">近 7 天</div><div class="v" id="st-week">—</div></div>
+          <div class="stat"><div class="k">已选中上云</div><div class="v" id="st-pinned">—</div></div>
+          <div class="stat"><div class="k">推送设备</div><div class="v" id="st-push">—</div></div>
+        </div>
+        <div class="chips" id="st-chips"></div>
+      </div>
+      <div class="card" data-search="快速操作 成本闸门 推送测试 同步">
+        <h2>⚡ 常用操作</h2>
+        <p class="hint">最常用的三个开关放在最前面，不用再翻分组。</p>
+        <div class="row">
+          <div><div class="label">成本闸门</div><div class="desc">超过会话 / 每日 / 单任务上限时，直接拒绝新的提交请求。</div></div>
+          <div class="ctrl"><label class="switch"><input type="checkbox" id="gate-enabled"><span></span></label>
+            <button class="btn" data-goto="cost">设置限额</button></div>
+        </div>
+        <div class="row">
+          <div><div class="label">任务完成推送</div><div class="desc">向已配对的手机发送 Web Push 通知；点击即可回到会话。</div></div>
+          <div class="ctrl"><button class="btn" id="push-test">发一条测试通知</button></div>
+        </div>
+        <div class="row">
+          <div><div class="label">云同步</div><div class="desc">默认全部纯本地。只有被选中的会话 + 任务才会被打包上云。</div></div>
+          <div class="ctrl"><button class="btn" data-goto="cloud">查看选择</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>↗ 快捷入口</h2>
+        <div class="chips">
+          <a class="chip" href="/mobile">手机端 <b>→</b></a>
+          <a class="chip" href="/mirror/status">镜像旁观状态</a>
+          <a class="chip" href="/cost/status">成本明细</a>
+          <a class="chip" href="/cloud/selections">同步选择</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- 云同步 -->
+    <section class="section" data-sec="cloud">
+      <div class="card">
+        <h2>☁ 已选中上云的会话</h2>
+        <p class="hint">未列出的会话永远留在本机。选中只是打标记，不会自动上传任何数据。</p>
+        <div id="cloud-list" class="empty">加载中…</div>
+      </div>
+      <div class="card" data-search="打包 上传 一键 push pull 命令">
+        <h2>↥ 一键搬运</h2>
+        <p class="hint">在本机终端执行，使用现有 SSH 配置与 SFTP 通道。</p>
+        <div class="row"><div><div class="label">推送到云端</div>
+          <div class="desc"><span class="kbd">pondera cloud push &lt;session&gt; --to &lt;host&gt; --remote-dir /srv/pondera/incoming</span></div></div></div>
+        <div class="row"><div><div class="label">拉回本地继续</div>
+          <div class="desc"><span class="kbd">pondera cloud pull --from &lt;host&gt; --remote-dir /srv/pondera/out</span></div></div></div>
+        <div class="row"><div><div class="label">实时旁观云端</div>
+          <div class="desc"><span class="kbd">pondera cloud watch &lt;session&gt; --url https://cloud:port --token &lt;t&gt;</span></div></div></div>
+      </div>
+    </section>
+
+    <!-- 成本 -->
+    <section class="section" data-sec="cost">
+      <div class="card">
+        <h2>◷ 成本闸门</h2>
+        <p class="hint">0 表示不限。超限时 <span class="kbd">/submit</span> 返回 HTTP 429，不会再发起新的模型调用。
+          注意：账本只包含调用 <span class="kbd">/cost/record</span> 上报的用量（目前只有手机页上报）；桌面端本地回合不上报，
+          因此金额类限额在桌面侧仅供参考，不是硬限制。</p>
+        <div class="row"><div><div class="label">启用闸门</div><div class="desc">关闭后所有限额检查跳过，仅保留记账。</div></div>
+          <div class="ctrl"><label class="switch"><input type="checkbox" id="lim-enabled"><span></span></label></div></div>
+        <div class="row"><div><div class="label">单会话上限 (USD)</div><div class="desc">一个会话累计花费达到该值后停止接受新提交。</div></div>
+          <div class="ctrl"><input type="number" id="lim-session" step="0.5" min="0"></div></div>
+        <div class="row"><div><div class="label">每日上限 (USD)</div><div class="desc">按 UTC 日期重置。</div></div>
+          <div class="ctrl"><input type="number" id="lim-day" step="1" min="0"></div></div>
+        <div class="row"><div><div class="label">单任务上限 (USD)</div><div class="desc">按 taskId 单独累计。</div></div>
+          <div class="ctrl"><input type="number" id="lim-task" step="0.5" min="0"></div></div>
+        <div class="row"><div><div class="label">并发任务数</div><div class="desc">服务端按已接管的运行中回合与后台作业自行统计，客户端不能上报覆盖。</div></div>
+          <div class="ctrl"><input type="number" id="lim-jobs" step="1" min="0"></div></div>
+        <div class="row"><div><div class="label">单回合超时 (秒)</div><div class="desc">仅当调用方在提交时上报 <span class="kbd">elapsed</span> 才生效；桌面端未上报，这条在桌面侧仅供参考。</div></div>
+          <div class="ctrl"><input type="number" id="lim-turn" step="60" min="0"></div></div>
+        <div class="row"><div><div class="label">保存 / 重置</div><div class="desc">重置只清空花费记录，保留限额配置。</div></div>
+          <div class="ctrl"><button class="btn primary" id="save-limits">保存限额</button>
+            <button class="btn danger" id="reset-cost">清空记录</button></div></div>
+      </div>
+      <div class="card"><h2>账本</h2><p class="hint">来自 <span class="kbd">/cost/status</span>。</p>
+        <div id="cost-detail" class="empty">加载中…</div></div>
+    </section>
+
+    <!-- 通知 -->
+    <section class="section" data-sec="notify">
+      <div class="card">
+        <h2>◔ 手机推送</h2>
+        <p class="hint">VAPID 密钥首次访问时自动生成并持久化；订阅保存在本机，不外传。</p>
+        <div class="row"><div><div class="label">VAPID 公钥</div><div class="desc" id="vapid">加载中…</div></div>
+          <div class="ctrl"><button class="btn" id="copy-vapid">复制</button></div></div>
+        <div class="row"><div><div class="label">已配对设备</div><div class="desc" id="push-subs">加载中…</div></div></div>
+        <div class="row"><div><div class="label">测试通知</div><div class="desc">向全部已订阅设备发送一条通知。</div></div>
+          <div class="ctrl"><input type="text" id="push-title" value="Pondera 测试">
+            <button class="btn primary" id="push-send">发送</button></div></div>
+      </div>
+    </section>
+
+    <!-- 安全 -->
+    <section class="section" data-sec="security">
+      <div class="card">
+        <h2>⛨ 权限边界</h2>
+        <p class="hint">这些项目前由配置文件与启动参数决定，页面只做展示，避免误改导致安全边界松动。</p>
+        <div class="row"><div><div class="label">认证模式</div><div class="desc" id="sec-auth">—</div></div>
+          <div class="ctrl"><span class="pill" id="sec-auth-pill">token</span></div></div>
+        <div class="row"><div><div class="label">工作区沙箱</div><div class="desc">Windows 上没有 OS 级沙箱，shell 以当前用户身份直接运行；请只在工作区目录内操作。</div></div>
+          <div class="ctrl"><span class="pill warn">按平台</span></div></div>
+        <div class="row"><div><div class="label">密钥隔离</div><div class="desc">TaskBundle 默认排除 .env / *.key / *.pem 等文件；云端必须配置 credential_mode = remote。</div></div>
+          <div class="ctrl"><span class="pill ok">已排除</span></div></div>
+        <div class="row"><div><div class="label">单写者</div><div class="desc">同一会话同一时刻只有一端是写者，另一端只能旁观。</div></div>
+          <div class="ctrl"><span class="pill ok">强制</span></div></div>
+      </div>
+    </section>
+
+    <!-- 高级 -->
+    <section class="section" data-sec="advanced">
+      <div class="card">
+        <h2>⚙ 诊断</h2>
+        <p class="hint">只读端点，便于排查云同步与镜像帧问题。</p>
+        <div class="chips">
+          <a class="chip" href="/mirror/status">镜像状态</a>
+          <a class="chip" href="/cost/status">成本账本</a>
+          <a class="chip" href="/cloud/selections">同步选择</a>
+          <a class="chip" href="/push/subscriptions">推送订阅</a>
+          <a class="chip" href="/status">运行状态</a>
+        </div>
+      </div>
+      <div class="card"><h2>关于</h2>
+        <p class="hint">Pondera 是 Reasonix 的 Windows 桌面分支。本设置页是新增的轻量 Web 界面，不改动桌面端 26 万行前端代码。</p>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  let TOKEN = '';
+  try {
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    TOKEN = hash.get('token') || new URLSearchParams(location.search).get('token') || '';
+  } catch (e) {}
+  const withToken = (u) => {
+    if (!TOKEN) return u;
+    const url = new URL(u, location.href);
+    url.searchParams.set('token', TOKEN);
+    return url.pathname + url.search;
+  };
+  async function api(path, opts = {}) {
+    const res = await fetch(withToken(path), {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+    });
+    if (!res.ok) throw new Error((await res.text()).slice(0, 200) || ('HTTP ' + res.status));
+    return res.json();
+  }
+  let toastTimer;
+  function toast(msg) {
+    const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+  // Navigation
+  $$('#nav button').forEach((b) => b.addEventListener('click', () => {
+    $$('#nav button').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    const sec = b.dataset.sec;
+    $$('.section').forEach((s) => s.classList.toggle('active', s.dataset.sec === sec));
+    $('#search').value = ''; applySearch('');
+  }));
+  $$('[data-goto]').forEach((b) => b.addEventListener('click', () => {
+    const target = $$('#nav button').find((x) => x.dataset.sec === b.dataset.goto);
+    if (target) target.click();
+  }));
+  function applySearch(q) {
+    q = q.trim().toLowerCase();
+    $$('.card').forEach((c) => {
+      const text = (c.textContent + ' ' + (c.dataset.search || '')).toLowerCase();
+      c.classList.toggle('hidden-by-search', !!q && !text.includes(q));
+    });
+    if (q) $$('.section').forEach((s) => s.classList.add('active'));
+  }
+  $('#search').addEventListener('input', (e) => applySearch(e.target.value));
+
+  async function load() {
+    try {
+      const cost = await api('/cost/status');
+      $('#st-today').textContent = '$' + (cost.todayUsd || 0).toFixed(3);
+      $('#st-week').textContent = '$' + (cost.weekUsd || 0).toFixed(2);
+      $('#lim-enabled').checked = !!cost.limits.enabled;
+      $('#gate-enabled').checked = !!cost.limits.enabled;
+      $('#lim-session').value = cost.limits.maxUsdPerSession;
+      $('#lim-day').value = cost.limits.maxUsdPerDay;
+      $('#lim-task').value = cost.limits.maxUsdPerTask;
+      $('#lim-jobs').value = cost.limits.maxConcurrentJobs;
+      $('#lim-turn').value = cost.limits.maxTurnSeconds;
+      $('#cost-detail').innerHTML = '<div class="grid">' +
+        '<div class="stat"><div class="k">累计</div><div class="v">$' + (cost.totalUsd||0).toFixed(2) + '</div></div>' +
+        '<div class="stat"><div class="k">记录数</div><div class="v">' + (cost.entries||0) + '</div></div>' +
+        '<div class="stat"><div class="k">活跃任务</div><div class="v">' + (cost.activeJobs||0) + '</div></div></div>';
+      $('#st-chips').innerHTML = '<span class="pill ' + (cost.limits.enabled ? 'ok' : 'warn') + '">成本闸门 ' +
+        (cost.limits.enabled ? '已启用' : '已关闭') + '</span>' +
+        '<span class="pill">单会话 $' + cost.limits.maxUsdPerSession + '</span>' +
+        '<span class="pill">每日 $' + cost.limits.maxUsdPerDay + '</span>';
+      window.__limits = cost.limits;
+    } catch (e) { $('#cost-detail').textContent = '读取失败: ' + e.message; }
+    try {
+      const sel = await api('/cloud/selections');
+      const pinned = (sel.selections || []).filter((s) => s.scope === 'cloud-pinned');
+      $('#st-pinned').textContent = pinned.length;
+      $('#cloud-list').innerHTML = pinned.length ? pinned.map((s) =>
+        '<div class="row"><div><div class="label">' + esc(s.title || s.sessionId) + '</div>' +
+        '<div class="desc">' + esc(s.sessionId) + ' · 写者 ' + (s.owner || 'local') +
+        ' · 任务 ' + ((s.tasks || []).length) + '</div></div>' +
+        '<div class="ctrl"><button class="btn danger" data-unpin="' + esc(s.sessionId) + '">取消选中</button></div></div>'
+      ).join('') : '<div class="empty">当前没有选中上云的会话，全部数据都在本机。</div>';
+      $$('[data-unpin]').forEach((b) => b.addEventListener('click', async () => {
+        try { await api('/cloud/unpin', { method: 'POST', body: JSON.stringify({ sessionId: b.dataset.unpin }) }); toast('已取消选中'); load(); }
+        catch (e) { toast('失败: ' + e.message); }
+      }));
+    } catch (e) { $('#cloud-list').textContent = '读取失败: ' + e.message; }
+    try {
+      const v = await api('/push/vapid');
+      $('#vapid').textContent = v.publicKey;
+      window.__vapid = v.publicKey;
+    } catch (e) { $('#vapid').textContent = '读取失败: ' + e.message; }
+    try {
+      const p = await api('/push/subscriptions');
+      $('#st-push').textContent = p.count || 0;
+      $('#push-subs').textContent = (p.count || 0) + ' 台设备' + (p.count ? '（' + p.subscriptions.map((x) => x.endpointHost).join('、') + '）' : '，在手机端打开「允许通知」即可配对');
+    } catch (e) { $('#push-subs').textContent = '读取失败: ' + e.message; }
+    try {
+      const st = await api('/status');
+      $('#sec-auth').textContent = '当前运行在 ' + (st.runtimeState || 'unknown') + ' 状态；写操作需要 URL 中的 token。';
+      $('#sec-auth-pill').textContent = TOKEN ? 'token 已提供' : '未提供 token';
+    } catch (e) { $('#sec-auth').textContent = '状态不可读：' + e.message; }
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  async function saveLimits(enabledOverride) {
+    const lim = Object.assign({}, window.__limits || {}, {
+      enabled: enabledOverride !== undefined ? enabledOverride : $('#lim-enabled').checked,
+      maxUsdPerSession: Number($('#lim-session').value),
+      maxUsdPerDay: Number($('#lim-day').value),
+      maxUsdPerTask: Number($('#lim-task').value),
+      maxConcurrentJobs: Number($('#lim-jobs').value),
+      maxTurnSeconds: Number($('#lim-turn').value)
+    });
+    try { await api('/cost/limits', { method: 'POST', body: JSON.stringify(lim) }); toast('限额已保存'); load(); }
+    catch (e) { toast('保存失败: ' + e.message); }
+  }
+  $('#save-limits').addEventListener('click', () => saveLimits());
+  $('#lim-enabled').addEventListener('change', () => { $('#gate-enabled').checked = $('#lim-enabled').checked; });
+  $('#gate-enabled').addEventListener('change', (e) => { $('#lim-enabled').checked = e.target.checked; saveLimits(e.target.checked); });
+  $('#reset-cost').addEventListener('click', async () => {
+    try { await api('/cost/reset', { method: 'POST', body: '{}' }); toast('花费记录已清空'); load(); }
+    catch (e) { toast('失败: ' + e.message); }
+  });
+  async function sendPush(title) {
+    try {
+      const r = await api('/push/notify', { method: 'POST', body: JSON.stringify({ title, body: '来自 Pondera 设置页', tag: 'pondera-test', url: '/mobile' }) });
+      toast('已发送给 ' + r.sent + ' 台设备');
+    } catch (e) { toast('发送失败: ' + e.message); }
+  }
+  $('#push-test').addEventListener('click', () => sendPush('Pondera 测试通知'));
+  $('#push-send').addEventListener('click', () => sendPush($('#push-title').value || 'Pondera'));
+  $('#copy-vapid').addEventListener('click', () => {
+    if (!window.__vapid) return;
+    navigator.clipboard.writeText(window.__vapid).then(() => toast('已复制公钥')).catch(() => toast('复制失败'));
+  });
+  load();
+})();
+</script>
+</body>
+</html>

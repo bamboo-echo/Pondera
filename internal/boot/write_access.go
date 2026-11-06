@@ -37,7 +37,7 @@ func newSubagentSkillOptionsFactory(
 		opts := agent.Options{
 			MaxSteps: steps, Temperature: cfg.Temperature, Pricing: price, QuoteContext: quoteCtx, UsageSource: event.UsageSourceSubagent,
 			RetryCount: cfg.RetryCount,
-			Gate: gate, ContextWindow: ctxWin, RecentKeep: cfg.RecentKeep,
+			Gate:       gate, ContextWindow: ctxWin, RecentKeep: cfg.RecentKeep,
 			SoftCompactRatio: cfg.SoftCompactRatio, ToolResultSnipRatio: cfg.ToolResultSnipRatio,
 			CompactRatio: cfg.CompactRatio, CompactForceRatio: cfg.CompactForceRatio, ContextEditing: cfg.ContextEditing,
 			ArchiveDir: config.ArchiveDir(), KeepPolicy: keepPolicy,
