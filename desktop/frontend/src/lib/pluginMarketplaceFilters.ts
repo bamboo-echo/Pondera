@@ -1,4 +1,5 @@
 import type { PluginMarketplaceEntryView } from "../generated/desktopContract.generated";
+import { getLocale } from "./i18n";
 
 // Marketplace filtering is shared by the panel and its tests. Category, domain
 // and search compose with AND semantics; domains themselves are aggregated from
@@ -45,7 +46,7 @@ export function marketplaceDomainOptions(
   }
   return Array.from(counts, ([domain, count]) => ({ domain, count }))
     .filter((option) => option.count >= minCount)
-    .sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain, "zh"));
+    .sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain, getLocale()));
 }
 
 export function filterMarketplaceEntries(
