@@ -2463,7 +2463,7 @@ export const zhTW: Record<DictKey, string> = {
   "notice.recoveryPausedBody": "Pondera 已停止重複嘗試，並保留已完成的工作。傳送「繼續」即可開始新一輪，也可以補充要求來調整方向。",
   "notice.completionUncertainTitle": "完成狀態未確認",
   "notice.completionUncertainBody": "目前結果未能確認已完成。回答與已完成的工作均已保留。傳送「繼續」可接著完成，或補充需要調整的內容。",
-  "notice.deliveryIncompleteBody": "內容已經產生，但必要的驗證或複審仍未完成",
+  "notice.deliveryIncompleteBody": "內容已經產生，但必要的驗證或複審仍未完成。",
   "notice.deliveryIncompleteContinue": "繼續檢查",
   "notice.deliveryIncompleteAccept": "結束檢查",
   "notice.deliveryIncompleteContinuePrompt": "繼續完成剩餘的任務收尾檢查",
