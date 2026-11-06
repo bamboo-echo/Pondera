@@ -2386,7 +2386,7 @@ export function useController() {
   const bump = useCallback(() => setVersion((v) => v + 1), []);
   const notifyLiveListeners = useCallback((tabId: string) => {
     for (const listener of liveListenersByTabRef.current.get(tabId) ?? []) listener();
-  }, [t]);
+  }, []);
   const disposeComposerProfileState = useCallback((tabId: string) => {
     appliedComposerProfileByTabRef.current.delete(tabId);
     composerProfileInFlightByTabRef.current.delete(tabId);
@@ -2975,7 +2975,7 @@ export function useController() {
       currentState: () => statesRef.current.get(targetTabId),
       dispatch: (action) => dispatchTo(targetTabId, action),
     });
-  }, [dispatchTo, ensureTranscriptSubscription, startTranscriptFollow]);
+  }, [dispatchTo, ensureTranscriptSubscription]);
 
   const loadNewerHistory = useCallback(async (tabId?: string, latest = false, readerCurrent?: () => boolean): Promise<HistoryLoadOutcome> => {
     const targetTabId = tabId || activeTabIdRef.current;
@@ -4046,7 +4046,7 @@ export function useController() {
       app.ContextUsageForTab(tabId).then((context) => dispatchTo(tabId, { type: "context", context })).catch(() => {});
       void refreshTurnBoundaries(tabId);
     }
-  }, [activeTabId, invalidateCheckpoints, bumpSessionLoadSeq, dispatchTo, ensureTranscriptSubscription, loadSessionDataForTab, refreshTurnBoundaries, refreshMetaForTab, startTranscriptFollow, waitForTabReady]);
+  }, [activeTabId, invalidateCheckpoints, bumpSessionLoadSeq, dispatchTo, loadSessionDataForTab, refreshTurnBoundaries, refreshMetaForTab, startTranscriptFollow, waitForTabReady]);
 
   const clearSession = useCallback(async () => {
     const tabId = activeTabId;
@@ -4085,7 +4085,7 @@ export function useController() {
       await startTranscriptFollow(tabId, (await app.MetaForTab(tabId)).sessionPath ?? "");
       dispatchTo(tabId, { type: "hydrate_done" });
     }
-  }, [activeTabId, invalidateCheckpoints, bumpSessionLoadSeq, dispatchTo, ensureTranscriptSubscription, loadSessionDataForTab, startTranscriptFollow, waitForTabReady]);
+  }, [activeTabId, invalidateCheckpoints, bumpSessionLoadSeq, dispatchTo, loadSessionDataForTab, startTranscriptFollow, waitForTabReady]);
 
   const listSessions = useCallback(async (): Promise<SessionMeta[]> => {
     const page = await app.ListHistorySessions({ scope: "all", workspaceRoot: "", status: "all", timeFilter: "all", query: "", cursor: "", limit: 200 });
@@ -4206,7 +4206,7 @@ export function useController() {
       return terminal("ready");
     })().catch(() => failSessionNavigation(navigationSeq, tabId));
     return { value: undefined, surfaceReady };
-  }, [beginActiveNavigation, bumpSessionLoadSeq, dispatchTo, ensureTranscriptSubscription, failSessionNavigation, invalidateCheckpoints, isNavigationIntentCurrent, navigationCompletionCurrent, reconcileSessionNavigationForTab, refreshTurnBoundaries, requireRegisteredNavigationIntent, sessionLoadCurrent, startTranscriptFollow, snapshotNavigationSourceTab, waitForTabReady]);
+  }, [beginActiveNavigation, bumpSessionLoadSeq, dispatchTo, failSessionNavigation, invalidateCheckpoints, isNavigationIntentCurrent, navigationCompletionCurrent, reconcileSessionNavigationForTab, refreshTurnBoundaries, requireRegisteredNavigationIntent, sessionLoadCurrent, startTranscriptFollow, snapshotNavigationSourceTab, waitForTabReady]);
 
   const { openCanonicalSession, previewSession, deleteSession, restoreSession, purgeTrashedSession, renameSession } =
     useSessionCatalogActions(requireRegisteredNavigationIntent, isNavigationIntentCurrent, syncActiveTabFromBackend, invalidateCache);

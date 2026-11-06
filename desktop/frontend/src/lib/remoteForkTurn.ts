@@ -89,7 +89,7 @@ export function useRemoteForkTurn(
     const targets = await readRemoteForkTargets(bindings, tabId);
     if (!targets || readSeqRef.current !== readSeq || readIdentityRef.current !== readIdentity) return;
     setTranscript((current) => reducer(current, { type: "fork_targets", targets }));
-  }, [bindings, session, setTranscript, tabId]);
+  }, [bindings, setTranscript, tabId]);
   useEffect(() => { forkTargetsRefreshRef.current = refreshForkTargets; }, [refreshForkTargets]);
 
   const forkTurn = useCallback(async (target: ForkTargetView): Promise<{ sessionId: string; operationId: string } | undefined> => {

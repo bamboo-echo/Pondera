@@ -96,7 +96,7 @@ export function useRemoteComposer(
     const text = (submitText || displayText).trim();
     if (!text) return;
     await session.submit(text, displayText, choice);
-  }, [session, showToast]);
+  }, [session]);
   const onCancel = useCallback(async (_queuedItemIDs?: string[]): Promise<CancelOutcome> => {
     void session.cancelTurn().catch((error) => {
       showToast(error instanceof Error ? error.message : String(error), "error");

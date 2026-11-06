@@ -4719,7 +4719,7 @@ export function ModelPicker({
         };
       })
       .filter((group) => group.options.length > 0);
-  }, [refs, s, t]);
+  }, [refs, s]);
 
   return (
     <div className="settings-model-picker">

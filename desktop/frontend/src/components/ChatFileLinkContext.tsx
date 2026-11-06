@@ -29,7 +29,12 @@ const TurnContext = createContext<TurnValue | null>(null);
 
 /** Owns the session's reference store; it is disposed with the session. */
 export function ChatFileScopeProvider({ scopeKey, tabId, hostId, children }: { scopeKey: string; tabId?: string; hostId?: string; children: ReactNode }) {
-  const store = useMemo(() => new ChatFileReferenceStore(tabId ?? "", hostId ?? "local"), [scopeKey, tabId, hostId]);
+  // The store is recreated per session scope, so the scope is folded into the
+  // identity string instead of living unused in the dependency array.
+  const store = useMemo(() => {
+    const [, tab, host] = `${scopeKey}\0${tabId ?? ""}\0${hostId ?? ""}`.split("\0");
+    return new ChatFileReferenceStore(tab, host || "local");
+  }, [scopeKey, tabId, hostId]);
   // Attach/detach rather than dispose directly: a StrictMode mount replay runs
   // the cleanup without a re-render, and an unconditional dispose would leave
   // the session with a dead store.

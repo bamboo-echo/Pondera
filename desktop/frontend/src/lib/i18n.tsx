@@ -152,7 +152,12 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const tt = useCallback<Translator>(
-    (key, vars) => translate(detectLocale(pref), key, vars),
+    (key, vars) => {
+      // Reading the counter is what makes a lazily preloaded dictionary
+      // recreate the translator, so memoized consumers pick up the copy.
+      void dictionaryVersion;
+      return translate(detectLocale(pref), key, vars);
+    },
     [dictionaryVersion, pref],
   );
 

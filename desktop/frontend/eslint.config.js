@@ -24,7 +24,8 @@ export default defineConfig([
     },
   },
   {
-    files: ["src/app-runtime/**/*.{ts,tsx}", "src/app-shell/**/*.{ts,tsx}",
+    files: ["src/components/**/*.{ts,tsx}", "src/lib/**/*.{ts,tsx}", "src/assistant/**/*.{ts,tsx}",
+      "src/app-runtime/**/*.{ts,tsx}", "src/app-shell/**/*.{ts,tsx}",
       "src/app-features/**/*.{ts,tsx}", "src/app-domain/**/*.{ts,tsx}", "src/lib/useCommitted*.ts"],
     rules: { "react-hooks/exhaustive-deps": "error" },
   },

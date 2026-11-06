@@ -3220,7 +3220,7 @@ export function Composer({
       setTextareaAutoOverflow((current) => (current === nextOverflow ? current : nextOverflow));
       return;
     }
-    const richHeight = invocationsRef.current.length > 0 ? richInputRef.current?.scrollHeight() : 0;
+    const richHeight = invocations.length > 0 ? richInputRef.current?.scrollHeight() : 0;
     const scrollHeight = richHeight || measureTaRef.current?.scrollHeight || 0;
     if (!scrollHeight) return;
     const sizing = resolveComposerContentSizing({

@@ -31,7 +31,7 @@ interface BranchSwitcherInput {
 }
 
 export function useBranchSwitcher({ tabId, scopeKey, workspaceRoot, gitBranch, rootRef, onBranchChanged }: BranchSwitcherInput) {
-  const identity = useMemo(() => ({}), [tabId, scopeKey, workspaceRoot]);
+  const identity = useMemo(() => ({ tabId, scopeKey, workspaceRoot }), [tabId, scopeKey, workspaceRoot]);
   const currentIdentity = useRef<object | null>(null);
   const listRequest = useRef(0);
   const operation = useRef<object | null>(null);

@@ -3382,7 +3382,7 @@ export function SkillsSettingsPage({ activeWorkspaceKey = "" }: { activeWorkspac
 			app.ListTabs().catch(() => []),
 		]);
 		if (sequence !== reloadSequence.current) return;
-		const key = settingsSnapshotKey(meta, tabs);
+		const key = `${activeWorkspaceKey ?? ""}\0${settingsSnapshotKey(meta, tabs)}`;
 		setSnapshotKey(key);
 		const cached = key ? skillsSettingsSnapshot : null;
 		if (cached?.key === key) {
