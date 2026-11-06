@@ -37,8 +37,9 @@ export function HistoricalImportList({ active, onOpenSession }: { active: boolea
     if (!active) return;
     setBusy("");
     void reload(true);
+    const generationRef = generation;
     const timer = setInterval(() => void reload(), 2000);
-    return () => { generation.current++; clearInterval(timer); };
+    return () => { generationRef.current++; clearInterval(timer); };
   }, [active, reload]);
   const open = async (item: HistoricalSessionView) => {
     if (busy) return;

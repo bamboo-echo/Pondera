@@ -175,6 +175,8 @@ export function PromptAction({
     setInternalExpanded(false);
   }, [description, label]);
 
+  const hasOverflowHandler = Boolean(onDescriptionOverflowChange);
+
   useLayoutEffect(() => {
     const elements = [labelRef.current, descriptionRef.current].filter(
       (element): element is HTMLSpanElement => element !== null,
@@ -223,7 +225,7 @@ export function PromptAction({
       observer?.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [descriptionDisclosure, expanded, resolvedDescriptionId, description, label, Boolean(onDescriptionOverflowChange)]);
+  }, [descriptionDisclosure, expanded, resolvedDescriptionId, description, label, hasOverflowHandler]);
 
   useEffect(() => {
     if (!selected && !active && !expanded) return;

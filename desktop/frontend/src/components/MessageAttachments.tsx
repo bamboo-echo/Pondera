@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Folder, Image } from "lucide-react";
 import { app } from "../lib/bridge";
 import { sortDisplayAttachments, type DisplayAttachment } from "../lib/attachmentDisplay";
@@ -50,11 +50,17 @@ export function MessageAttachments({ attachments, tabId = "" }: {
   }, [previews, tabId]);
 
   const previewKey = ordered.filter(item => item.kind === "image" && item.source === "attachment").map(item => item.path).join("\n");
+  // The effect polls previews keyed by previewKey; reading the latest list and
+  // cache through refs keeps it from re-running on every render.
+  const orderedRef = useRef(ordered);
+  orderedRef.current = ordered;
+  const previewsRef = useRef(previews);
+  previewsRef.current = previews;
   useEffect(() => {
     let cancelled = false;
     for (const path of previewKey ? previewKey.split("\n") : []) {
-      if (previews[path]) continue;
-      const attachment = ordered.find(item => item.path === path);
+      if (previewsRef.current[path]) continue;
+      const attachment = orderedRef.current.find(item => item.path === path);
       if (!attachment) continue;
       loadPreview(tabId, attachment).then(url => {
         if (!cancelled) setPreviews(previous => previous[path] ? previous : { ...previous, [path]: url });

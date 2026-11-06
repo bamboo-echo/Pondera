@@ -48,7 +48,8 @@ export function ManualSessionRecovery({ sessionId, attempt, onRetry, onNew, onCh
       }
     };
     void refresh();
-    return () => { disposed = true; ++observation.current; clearTimeout(timer); };
+    const observationRef = observation;
+    return () => { disposed = true; ++observationRef.current; clearTimeout(timer); };
   }, [attempt, sessionId, dismissed]);
 
   const item = attempt?.operation ?? restored;
