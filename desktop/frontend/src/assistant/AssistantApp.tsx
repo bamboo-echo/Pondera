@@ -153,7 +153,20 @@ export default function AssistantApp() {
       ) : null}
 
       {!onboarding && tab === "diagnose" ? <Diagnose refreshKey={refreshKey} /> : null}
-      {!onboarding && tab === "history" ? <History refreshKey={refreshKey} /> : null}
+      {!onboarding && tab === "history" ? (
+        <History
+          refreshKey={refreshKey}
+          onRestored={() => {
+            // A restore rewrites the config under the chat surface: drop the
+            // stale preview/answer and reload the diagnostic snapshot.
+            setPlan(null);
+            setApplied(false);
+            setApplyError(null);
+            setLast(null);
+            setRefreshKey((value) => value + 1);
+          }}
+        />
+      ) : null}
 
       <footer className="assistant-footer assistant-muted">
         {copy.footerChain}

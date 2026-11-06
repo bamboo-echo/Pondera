@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { assistantApi } from "./api";
 import { assistantCopy } from "./copy";
 import { useI18n } from "../lib/i18n";
+import { InlineConfirmButton } from "../components/InlineConfirmButton";
 import type { AssistantHistoryRecord } from "../generated/desktopContract.generated";
 
 // History lists committed changes newest first and offers one-click restore.
-export function History({ refreshKey }: { refreshKey: number }) {
+export function History({ refreshKey, onRestored }: { refreshKey: number; onRestored?: () => void }) {
   const { locale } = useI18n();
   const copy = assistantCopy(locale);
   const [records, setRecords] = useState<AssistantHistoryRecord[]>([]);
@@ -32,8 +33,10 @@ export function History({ refreshKey }: { refreshKey: number }) {
     setError(null);
     try {
       await assistantApi.rollback(id);
-      const list = await assistantApi.history();
-      setRecords(list);
+      setRecords(await assistantApi.history());
+      // The restore rewrote config underneath the other assistant panels; let
+      // the owner drop stale previews and refresh its own views.
+      onRestored?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -63,9 +66,17 @@ export function History({ refreshKey }: { refreshKey: number }) {
               </div>
             ) : null}
             {record.backup_id ? (
-              <button type="button" disabled={busyId === record.backup_id} onClick={() => void rollback(record.backup_id)}>
-                {busyId === record.backup_id ? copy.restoring : copy.restore}
-              </button>
+              busyId === record.backup_id ? (
+                <button type="button" disabled>{copy.restoring}</button>
+              ) : (
+                <InlineConfirmButton
+                  label={copy.restore}
+                  confirmLabel={copy.confirmRestore}
+                  cancelLabel={copy.cancel}
+                  danger
+                  onConfirm={() => rollback(record.backup_id)}
+                />
+              )
             ) : null}
           </li>
         ))}
