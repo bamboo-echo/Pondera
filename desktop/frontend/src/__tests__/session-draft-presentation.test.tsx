@@ -108,7 +108,10 @@ try {
   assert.equal(document.querySelector('[role="status"]')?.textContent, "draft.startFailed");
   assert.equal(document.querySelectorAll(".session-draft-surface__error").length, 1, "one runtime error is rendered once");
   assert.ok(!document.body.textContent?.includes("draft.retrySave"), "runtime recovery does not offer a save retry");
-  await act(async () => document.querySelector<HTMLButtonElement>(".session-draft-attention button")!.click());
+  const resumeButton = [...document.querySelectorAll<HTMLButtonElement>(".session-draft-attention button")]
+    .find((button) => button.textContent === "draft.resume");
+  assert.ok(resumeButton, "runtime recovery offers a resume action");
+  await act(async () => resumeButton!.click());
   assert.equal(resumed, 1, "runtime recovery retries the original submission");
 
   await act(async () => root.unmount());

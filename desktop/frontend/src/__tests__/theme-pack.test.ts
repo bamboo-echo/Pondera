@@ -712,7 +712,7 @@ ok(
     stylesSource.includes("background: var(--tp-code-del-bg)"),
   "live and preview diff rows consume the same pre-composited safe backgrounds",
 );
-ok(localeZh.includes('"settings.themeEditor.safeArea": "界面内容区域"') && localeZh.includes('"settings.themeEditor.safeAreaHint": "选择文字和卡片主要显示的位置；建议避开图片主体。"'), "Chinese content-area copy explains foreground placement");
+ok(localeZh.includes('"settings.themeEditor.safeArea": "界面内容区域"') && localeZh.includes('"settings.themeEditor.safeAreaHint": "选择文字和卡片主要显示的位置；建议避开图片主体"'), "Chinese content-area copy explains foreground placement with the short-copy rule: no terminal full stop");
 
 // Pack overlay stays at :root — Workbench/Creation element-scoped auto-light
 // selectors must keep winning in their subtree (theme never overrides them).
