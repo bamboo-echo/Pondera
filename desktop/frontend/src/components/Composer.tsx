@@ -4558,7 +4558,7 @@ export function Composer({
                 : reference.source === "terminal"
                   ? t("composer.selectedTerminal")
                   : reference.source === "browser"
-                    ? (locale === "en" ? "Page element" : "页面元素")
+                    ? (locale === "en" ? "Page element" : locale === "zh-TW" ? "頁面元素" : "页面元素")
                   : t("composer.selectedText")}
               icon={reference.path
                 ? <FileText size={20} />
@@ -4894,7 +4894,7 @@ export function Composer({
                   {pendingFollowup ? <Search size={16} /> : running ? <CornerDownRight size={16} /> : <ArrowUp size={16} />}
                 </button>
               </Tooltip>
-              {running && !finishing && !maintenanceActive && <button type="button" className="btn btn--small composer__queue-steer" disabled={submitBlocked || Boolean(pendingFollowup)} onClick={() => void submit(true)}>{locale.startsWith("zh") ? "引导当前轮" : "Guide current turn"}</button>}
+              {running && !finishing && !maintenanceActive && <button type="button" className="btn btn--small composer__queue-steer" disabled={submitBlocked || Boolean(pendingFollowup)} onClick={() => void submit(true)}>{locale === "zh-TW" ? "引導目前輪" : locale.startsWith("zh") ? "引导当前轮" : "Guide current turn"}</button>}
               {submitUnavailableHint && <span className="composer-toolbar-send__hint">{submitUnavailableHint}</span>}
               {authentication && authentication.status !== "ready" && <Suspense fallback={null}>
                 <AuthenticationRecoveryActions

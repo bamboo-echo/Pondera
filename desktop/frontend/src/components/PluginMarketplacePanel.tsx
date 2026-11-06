@@ -49,6 +49,7 @@ type Copy = {
   noInstallSource: string;
   allDomains: string;
   domainEmpty: string;
+  domains: Record<string, string>;
   categories: Record<CategoryKey, string>;
 };
 
@@ -83,6 +84,18 @@ const COPY: Record<Locale, Copy> = {
     noInstallSource: "This entry has no installable source.",
     allDomains: "All domains",
     domainEmpty: "No plugins in this domain yet.",
+    domains: {
+      "开发工具": "Developer tools",
+      "開發工具": "Developer tools",
+      "效率提升": "Productivity",
+      "界面设计": "UI design",
+      "介面設計": "UI design",
+      "调研分析": "Research",
+      "調研分析": "Research",
+      "内容创作": "Content",
+      "內容創作": "Content",
+      "其他": "Other",
+    },
     categories: {
       all: "All",
       recommended: "Recommended",
@@ -124,6 +137,18 @@ const COPY: Record<Locale, Copy> = {
     noInstallSource: "该条目没有可安装的来源。",
     allDomains: "全部领域",
     domainEmpty: "该领域下暂无插件。",
+    domains: {
+      "开发工具": "开发工具",
+      "開發工具": "开发工具",
+      "效率提升": "效率提升",
+      "界面设计": "界面设计",
+      "介面設計": "界面设计",
+      "调研分析": "调研分析",
+      "調研分析": "调研分析",
+      "内容创作": "内容创作",
+      "內容創作": "内容创作",
+      "其他": "其他",
+    },
     categories: {
       all: "全部",
       recommended: "推荐",
@@ -165,6 +190,18 @@ const COPY: Record<Locale, Copy> = {
     noInstallSource: "此條目沒有可安裝的來源。",
     allDomains: "所有領域",
     domainEmpty: "此領域暫無外掛。",
+    domains: {
+      "开发工具": "開發工具",
+      "開發工具": "開發工具",
+      "效率提升": "效率提升",
+      "界面设计": "介面設計",
+      "介面設計": "介面設計",
+      "调研分析": "調研分析",
+      "調研分析": "調研分析",
+      "内容创作": "內容創作",
+      "內容創作": "內容創作",
+      "其他": "其他",
+    },
     categories: {
       all: "全部",
       recommended: "推薦",
@@ -377,7 +414,7 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
                   type="button"
                   onClick={() => setDomain(option.domain)}
                 >
-                  {option.domain}
+                  {copy.domains[option.domain] ?? option.domain}
                 </button>
               ))}
             </div>

@@ -91,9 +91,11 @@ function formatRunDuration(durationMs: number): string {
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor(total / 60) % 60;
   const seconds = total % 60;
-  const zh = getLocale() !== "en";
+  const locale = getLocale();
+  const zh = locale !== "en";
+  const hant = locale === "zh-TW";
   if (hours > 0) return zh
-    ? `${hours}时 ${String(minutes).padStart(2, "0")}分 ${String(seconds).padStart(2, "0")}秒`
+    ? `${hours}${hant ? "時" : "时"} ${String(minutes).padStart(2, "0")}分 ${String(seconds).padStart(2, "0")}秒`
     : `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
   if (minutes > 0) return zh
     ? `${minutes}分 ${String(seconds).padStart(2, "0")}秒`

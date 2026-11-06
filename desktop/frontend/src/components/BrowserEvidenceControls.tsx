@@ -5,7 +5,8 @@ import { useI18n } from "../lib/i18n";
 
 type Recording = Awaited<ReturnType<NonNullable<DesktopBrowserHost["record"]>>>;
 export function BrowserEvidenceControls({ tabId }: { tabId: string }) {
-  const chinese = useI18n().locale !== "en";
+  const locale = useI18n().locale;
+  const tr = (en: string, hans: string, hant: string) => locale === "en" ? en : locale === "zh-TW" ? hant : hans;
   const [recording, setRecording] = useState<Recording>(null);
   const [busy, setBusy] = useState(false);
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
@@ -22,7 +23,7 @@ export function BrowserEvidenceControls({ tabId }: { tabId: string }) {
   const active = recording && ["preparing", "recording", "finalizing"].includes(recording.state);
   const run = async (action: "start" | "stop" | "cancel") => {
     const { host, notify } = useBrowserPanelStore.getState();
-    if (!host?.record) { notify(chinese ? "当前宿主不支持录制" : "Recording is unavailable"); return; }
+    if (!host?.record) { notify(tr("Recording is unavailable", "当前宿主不支持录制", "目前宿主不支援錄影")); return; }
     setBusy(true);
     try { setRecording(await host.record(tabId, action)); } catch (error) { notify(String(error)); }
     finally { setBusy(false); }
@@ -31,16 +32,16 @@ export function BrowserEvidenceControls({ tabId }: { tabId: string }) {
     <button type="button" className="btn btn--small" onClick={() => {
       const { host, notify } = useBrowserPanelStore.getState();
       void host?.screenshot?.(tabId).then(setCapture).catch(error => notify(String(error)));
-    }}>{chinese ? "截图" : "Screenshot"}</button>
-    {capture && <button type="button" className="btn btn--small" title={capture.path} onClick={() => { void navigator.clipboard.writeText(capture.path); }}>{capture.width}×{capture.height} · {chinese ? "复制路径" : "Copy path"}</button>}
-    <button type="button" className="btn btn--small" title={chinese ? "关闭面板后也可通过 View 菜单或 Ctrl/⌘+Shift+R 停止录制" : "Stop from the View menu or Ctrl/⌘+Shift+R even when this panel is closed"} disabled={busy} onClick={() => void run(active ? "stop" : "start")}>{active ? (chinese ? "停止录制" : "Stop recording") : (chinese ? "录制 · 20 秒" : "Record · 20 s")}</button>
-    {active && <button type="button" className="btn btn--small" onClick={() => void run("cancel")}>{chinese ? "取消录制" : "Cancel recording"}</button>}
+    }}>{tr("Screenshot", "截图", "截圖")}</button>
+    {capture && <button type="button" className="btn btn--small" title={capture.path} onClick={() => { void navigator.clipboard.writeText(capture.path); }}>{capture.width}×{capture.height} · {tr("Copy path", "复制路径", "複製路徑")}</button>}
+    <button type="button" className="btn btn--small" title={tr("Stop from the View menu or Ctrl/⌘+Shift+R even when this panel is closed", "关闭面板后也可通过 View 菜单或 Ctrl/⌘+Shift+R 停止录制", "關閉面板後也可透過 View 選單或 Ctrl/⌘+Shift+R 停止錄影")} disabled={busy} onClick={() => void run(active ? "stop" : "start")}>{active ? tr("Stop recording", "停止录制", "停止錄影") : tr("Record · 20 s", "录制 · 20 秒", "錄影 · 20 秒")}</button>
+    {active && <button type="button" className="btn btn--small" onClick={() => void run("cancel")}>{tr("Cancel recording", "取消录制", "取消錄影")}</button>}
     {recording && <span role="status" title={recording.path ?? recording.error}>{recording.state} · {Math.ceil(recording.bytes / 1024)} KiB</span>}
-    {recording?.path && <button type="button" className="btn btn--small" onClick={() => { void navigator.clipboard.writeText(recording.path!); }}>{chinese ? "复制产物路径" : "Copy artifact path"}</button>}
+    {recording?.path && <button type="button" className="btn btn--small" onClick={() => { void navigator.clipboard.writeText(recording.path!); }}>{tr("Copy artifact path", "复制产物路径", "複製產物路徑")}</button>}
     <button type="button" className="btn btn--small" onClick={() => {
       const { host, notify } = useBrowserPanelStore.getState();
-      void host?.diagnostics?.(tabId).then(result => setDiagnostics(result.available ? JSON.stringify(result.entries ?? [], null, 2) : (chinese ? "诊断不可用" : "Diagnostics unavailable"))).catch(error => notify(String(error)));
-    }}>{chinese ? "页面诊断" : "Page diagnostics"}</button>
-    {diagnostics !== null && <details open><summary onClick={() => setDiagnostics(null)}>{chinese ? "关闭诊断" : "Close diagnostics"}</summary><pre>{diagnostics}</pre></details>}
+      void host?.diagnostics?.(tabId).then(result => setDiagnostics(result.available ? JSON.stringify(result.entries ?? [], null, 2) : tr("Diagnostics unavailable", "诊断不可用", "診斷不可用"))).catch(error => notify(String(error)));
+    }}>{tr("Page diagnostics", "页面诊断", "頁面診斷")}</button>
+    {diagnostics !== null && <details open><summary onClick={() => setDiagnostics(null)}>{tr("Close diagnostics", "关闭诊断", "關閉診斷")}</summary><pre>{diagnostics}</pre></details>}
   </div>;
 }

@@ -33,10 +33,14 @@ export function BrowserDockTab({ active, onSelect }: { active: boolean; onSelect
 
 export function BrowserPanel({ taskId }: { taskId: string | undefined }) {
   const copy = useBrowserCopy();
-  const chinese = useI18n().locale !== "en";
-  const operationLabels: Record<string, string> = chinese
-    ? { queued: "等待浏览器", preparing: "准备页面", reading: "AI 正在读取", interacting: "AI 正在操作", capturing: "AI 正在截图", picking: "请选择页面元素，Esc 退出", completed: "浏览器操作完成" }
-    : { queued: "Waiting for browser", preparing: "Preparing page", reading: "AI is reading", interacting: "AI is interacting", capturing: "AI is capturing", picking: "Select an element; Esc to exit", completed: "Browser operation completed" };
+  const locale = useI18n().locale;
+  const operationLabels: Record<string, string> = locale === "en"
+    ? { queued: "Waiting for browser", preparing: "Preparing page", reading: "AI is reading", interacting: "AI is interacting", capturing: "AI is capturing", picking: "Select an element; Esc to exit", completed: "Browser operation completed" }
+    : locale === "zh-TW"
+      ? { queued: "等待瀏覽器", preparing: "準備頁面", reading: "AI 正在讀取", interacting: "AI 正在操作", capturing: "AI 正在截圖", picking: "請選擇頁面元素，Esc 退出", completed: "瀏覽器操作完成" }
+      : { queued: "等待浏览器", preparing: "准备页面", reading: "AI 正在读取", interacting: "AI 正在操作", capturing: "AI 正在截图", picking: "请选择页面元素，Esc 退出", completed: "浏览器操作完成" };
+  const chinese = locale !== "en";
+  const traditional = locale === "zh-TW";
   const t = useT();
   const { showToast } = useToast();
   const host = desktopHost().browser;
@@ -140,8 +144,8 @@ export function BrowserPanel({ taskId }: { taskId: string | undefined }) {
       {activeTab?.operation && <div className="browser-panel__takeover" role="status">
         <span>{activeTab.operation.phase === "failed" ? activeTab.operation.message : operationLabels[activeTab.operation.phase] ?? activeTab.operation.phase}</span>
         {activeTab.operation.phase === "failed" && <>
-          <button type="button" className="btn btn--small" onClick={() => void host?.activate(activeTab.id)}>{chinese ? "显示页面" : "Show page"}</button>
-          <button type="button" className="btn btn--small" title={activeTab.operation.id} onClick={() => { void navigator.clipboard.writeText(activeTab.operation!.id); }}>{chinese ? "复制诊断编号" : "Copy diagnostic ID"}</button>
+          <button type="button" className="btn btn--small" onClick={() => void host?.activate(activeTab.id)}>{chinese ? (traditional ? "顯示頁面" : "显示页面") : "Show page"}</button>
+          <button type="button" className="btn btn--small" title={activeTab.operation.id} onClick={() => { void navigator.clipboard.writeText(activeTab.operation!.id); }}>{chinese ? (traditional ? "複製診斷編號" : "复制诊断编号") : "Copy diagnostic ID"}</button>
         </>}
       </div>}
       {activeTab?.mode === "human" && (
