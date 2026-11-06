@@ -4323,7 +4323,9 @@ export function useController() {
   const forget = useCallback(async (name: string) => { await app.Forget(name).catch(() => {}); }, []);
   const saveDoc = useCallback(async (path: string, body: string) => { await app.SaveDoc(path, body).catch(() => {}); }, []);
 
-  const adoptReturnedTab = async (tab: TabMeta, sourceTabId: string, navigationSeq: number, reason: string): Promise<string | undefined> => {
+  // Stable identity so rewind/fork callbacks never change on unrelated renders.
+  // Every volatile input is read through a ref inside the body.
+  const adoptReturnedTab = useCallback(async (tab: TabMeta, sourceTabId: string, navigationSeq: number, reason: string): Promise<string | undefined> => {
     const snapshotAt = promptEventClock();
     const navigationUnchanged = activeNavigationSeqRef.current === navigationSeq;
     const activateFork = tab.active && navigationUnchanged && activeTabIdRef.current === sourceTabId;
@@ -4349,7 +4351,7 @@ export function useController() {
     await loadSessionDataForTab(tab.id, true);
     await reconcileTabRuntime(tab.id, RUNTIME_STATUS_ONLY);
     return tab.id;
-  };
+  }, [beginActiveNavigation, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, syncActiveTabFromBackend, waitForTabReady, setActiveTabId]);
   const rewindForTabDetailed = useCallback(async (sourceTabId: string, turn: number, scope: string): Promise<RewindResultView & { ok: boolean }> => {
     if (!sourceTabId) return { ok: false };
     const forkNavigationSeq = activeNavigationSeqRef.current;
@@ -4394,7 +4396,7 @@ export function useController() {
     } finally {
       dispatchTo(sourceTabId, { type: "message_action_done" });
     }
-  }, [beginActiveNavigation, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, syncActiveTabFromBackend, waitForTabReady]);
+  }, [adoptReturnedTab, dispatchTo, loadSessionDataForTab, syncActiveTabFromBackend, waitForTabReady]);
 
   const rewindForTab = useCallback(async (sourceTabId: string, turn: number, scope: string): Promise<boolean> => {
     return (await rewindForTabDetailed(sourceTabId, turn, scope)).ok;
