@@ -2404,7 +2404,7 @@ func TestStreamSynthesizesIDsForIndexOnlyToolCalls(t *testing.T) {
 			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\":"}}]}}]}`,
 			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"a.txt\"}"}}]},"finish_reason":"tool_calls"}]}`,
 			`data: [DONE]`,
-		}, "\n\n") + "\n\n")
+		}, "\n\n")+"\n\n")
 	}))
 	defer srv.Close()
 
