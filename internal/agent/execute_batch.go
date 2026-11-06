@@ -67,6 +67,7 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 	// state separate so refreshing a dependent preview never mutates shared
 	// session memory outside Session's lock.
 	calls = append([]provider.ToolCall(nil), calls...)
+	assignMissingCallIDs(calls)
 	if err := a.prepareToolBatch(ctx, calls); err != nil {
 		return batchExecution{err: err}
 	}

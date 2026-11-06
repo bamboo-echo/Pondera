@@ -19,6 +19,18 @@ func (a *Agent) prepareToolBatch(ctx context.Context, calls []provider.ToolCall)
 	return nil
 }
 
+// assignMissingCallIDs gives every call a key derived from its batch slot.
+// snapshotDispatchClasses and applyDispatchGenerationGate both key on the id;
+// id-less calls would otherwise all collapse onto "" and the last classified
+// call would be applied to every sibling, blocking them as stale.
+func assignMissingCallIDs(calls []provider.ToolCall) {
+	for i := range calls {
+		if calls[i].ID == "" {
+			calls[i].ID = fmt.Sprintf("#%d", i)
+		}
+	}
+}
+
 func (a *Agent) snapshotDispatchClasses(calls []provider.ToolCall) {
 	if a == nil || len(calls) == 0 || a.svc.tools == nil {
 		return
