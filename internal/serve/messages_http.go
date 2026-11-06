@@ -29,17 +29,24 @@ var (
 	messageOpMaxKeys = 1024
 )
 
-func cachedMessageOp(operationID string) (messageOpResult, bool) {
+// cachedMessageOp looks up an idempotent result inside one session. The scope
+// keeps two sessions (or two embedded instances in the same process) from
+// replaying each other's operation ids.
+func cachedMessageOp(scope, operationID string) (messageOpResult, bool) {
 	if operationID == "" {
 		return messageOpResult{}, false
 	}
 	messageOpsMu.Lock()
 	defer messageOpsMu.Unlock()
-	r, ok := messageOpsCache[operationID]
+	r, ok := messageOpsCache[messageOpKey(scope, operationID)]
 	return r, ok
 }
 
-func rememberMessageOp(operationID string, status int, body any) {
+// messageOpKey namespaces an operation id by session. The NUL separator can
+// never appear in a session id or operation id.
+func messageOpKey(scope, operationID string) string { return scope + "\x00" + operationID }
+
+func rememberMessageOp(scope, operationID string, status int, body any) {
 	if operationID == "" {
 		return
 	}
@@ -61,7 +68,7 @@ func rememberMessageOp(operationID string, status int, body any) {
 		}
 		delete(messageOpsCache, oldest)
 	}
-	messageOpsCache[operationID] = messageOpResult{body: body, status: status, at: now}
+	messageOpsCache[messageOpKey(scope, operationID)] = messageOpResult{body: body, status: status, at: now}
 }
 
 type messageOpResponse struct {
@@ -120,7 +127,8 @@ func (s *Server) retractMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if cached, ok := cachedMessageOp(strings.TrimSpace(body.OperationID)); ok {
+	scopeKey := s.currentSessionID()
+	if cached, ok := cachedMessageOp(scopeKey, strings.TrimSpace(body.OperationID)); ok {
 		writeJSONStatus(w, cached.status, cached.body)
 		return
 	}
@@ -191,7 +199,7 @@ func (s *Server) retractMessage(w http.ResponseWriter, r *http.Request) {
 	if scopeName == "both" {
 		out.Warning = "文件回滚只覆盖 checkpoint 捕获到的改动；bash 副作用与 coverage gap 无法保证还原。"
 	}
-	rememberMessageOp(out.OperationID, http.StatusOK, out)
+	rememberMessageOp(scopeKey, out.OperationID, http.StatusOK, out)
 	writeJSON(w, out)
 }
 
@@ -214,7 +222,8 @@ func (s *Server) editMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if cached, ok := cachedMessageOp(strings.TrimSpace(body.OperationID)); ok {
+	scopeKey := s.currentSessionID()
+	if cached, ok := cachedMessageOp(scopeKey, strings.TrimSpace(body.OperationID)); ok {
 		writeJSONStatus(w, cached.status, cached.body)
 		return
 	}
@@ -298,7 +307,7 @@ func (s *Server) editMessage(w http.ResponseWriter, r *http.Request) {
 		Action: "edit", ForkedSessionPath: forkPath,
 		Warning: "已在新分支重新发送；原分支完整保留。此前工具改动的文件不会自动还原。",
 	}
-	rememberMessageOp(out.OperationID, http.StatusOK, out)
+	rememberMessageOp(scopeKey, out.OperationID, http.StatusOK, out)
 	writeJSON(w, out)
 }
 

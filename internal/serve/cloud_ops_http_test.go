@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"pondera/internal/cloudsync"
 	"pondera/internal/config"
@@ -31,7 +32,7 @@ func TestCloudOpsRoutesRegistered(t *testing.T) {
 	t.Setenv("PONDERA_HOME", t.TempDir())
 	_, h := testServerWithAuth()
 	paths := []string{
-		"/mobile", "/settings", "/sw.js",
+		"/mobile", "/settings", "/sw.js", "/mobile/sw.js",
 		"/mirror/status?session=route-test", "/mirror/replay?session=route-test",
 		"/cost/status", "/cost/check?session=route-test",
 		"/push/vapid", "/push/subscriptions",
@@ -314,5 +315,83 @@ func TestSettingsAndServiceWorkerAreEmbedded(t *testing.T) {
 	s.serviceWorker(rr, httptest.NewRequest(http.MethodGet, "/sw.js", nil))
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "pondera-outbox") {
 		t.Fatal("service worker not served")
+	}
+	rr = httptest.NewRecorder()
+	s.mobileServiceWorker(rr, httptest.NewRequest(http.MethodGet, "/mobile/sw.js", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "pondera-outbox") {
+		t.Fatal("mobile service worker not served")
+	}
+	if got := rr.Header().Get("Service-Worker-Allowed"); got != "/mobile" {
+		t.Fatalf("mobile worker scope header = %q, want /mobile", got)
+	}
+}
+
+func TestMirrorSessionRegistryIsBounded(t *testing.T) {
+	cloudOps.mirrorMu.Lock()
+	saved := cloudOps.mirrors
+	cloudOps.mirrors = map[string]*mirrorSession{}
+	cloudOps.mirrorMu.Unlock()
+	t.Cleanup(func() {
+		cloudOps.mirrorMu.Lock()
+		cloudOps.mirrors = saved
+		cloudOps.mirrorMu.Unlock()
+	})
+
+	for i := 0; i < mirrorSessionMax; i++ {
+		mirrorFor(fmt.Sprintf("s%d", i))
+	}
+	// At the cap with fresh sessions, a new id is not cached (bounded memory)
+	// but callers still get a working session.
+	overflow := mirrorFor("overflow")
+	cloudOps.mirrorMu.Lock()
+	_, cached := cloudOps.mirrors["overflow"]
+	cloudOps.mirrorMu.Unlock()
+	if cached {
+		t.Fatal("registry grew past its cap")
+	}
+	if overflow == nil || overflow.stream == nil {
+		t.Fatal("overflow session must still be usable")
+	}
+	// Once a session is idle and unsubscribed, the next allocation recycles it.
+	cloudOps.mirrorMu.Lock()
+	cloudOps.mirrors["s0"].mu.Lock()
+	cloudOps.mirrors["s0"].lastHB = time.Now().Add(-2 * mirrorSessionIdleTTL)
+	cloudOps.mirrors["s0"].mu.Unlock()
+	cloudOps.mirrorMu.Unlock()
+	mirrorFor("new")
+	cloudOps.mirrorMu.Lock()
+	_, oldStillThere := cloudOps.mirrors["s0"]
+	_, newThere := cloudOps.mirrors["new"]
+	size := len(cloudOps.mirrors)
+	cloudOps.mirrorMu.Unlock()
+	if oldStillThere || !newThere || size != mirrorSessionMax {
+		t.Fatalf("idle eviction failed: old=%v new=%v size=%d", oldStillThere, newThere, size)
+	}
+}
+
+func TestPushSubscriptionCapRecyclesOldest(t *testing.T) {
+	t.Setenv("PONDERA_HOME", t.TempDir())
+	s := &Server{}
+	for i := 0; i < pushSubscriptionMax+3; i++ {
+		sub := webpush.Subscription{
+			Endpoint: fmt.Sprintf("https://push.example/%d", i),
+			P256dh:   "key",
+			Auth:     "auth",
+		}
+		rr := httptest.NewRecorder()
+		s.pushSubscribe(rr, jsonRequest(http.MethodPost, "/push/subscribe", sub))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("subscribe %d: %d %s", i, rr.Code, rr.Body.String())
+		}
+	}
+	subs := loadSubs()
+	if len(subs) != pushSubscriptionMax {
+		t.Fatalf("subscriptions = %d, want cap %d", len(subs), pushSubscriptionMax)
+	}
+	if subs[len(subs)-1].Endpoint != fmt.Sprintf("https://push.example/%d", pushSubscriptionMax+2) {
+		t.Fatalf("newest subscription missing: %+v", subs[len(subs)-1])
+	}
+	if subs[0].Endpoint == "https://push.example/0" {
+		t.Fatalf("oldest subscription was not recycled: %+v", subs[0])
 	}
 }

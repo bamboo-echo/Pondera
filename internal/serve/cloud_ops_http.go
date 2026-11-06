@@ -51,20 +51,53 @@ var cloudOps = struct {
 
 func cloudHome() string { return config.PonderaHomeDir() }
 
+const (
+	// Spectators can address arbitrary session ids, so the registry is capped
+	// and idle, unsubscribed sessions are recycled on the next allocation.
+	mirrorSessionMax     = 64
+	mirrorSessionIdleTTL = 30 * time.Minute
+	// Subscriptions live in one file; keep it bounded and evict the oldest
+	// entry when a new device joins instead of growing without a limit.
+	pushSubscriptionMax = 32
+	// A serial fan-out with a 15s per-endpoint timeout would otherwise take
+	// n*15s; cap the whole notification at one budget.
+	pushNotifyBudget = 30 * time.Second
+)
+
 func mirrorFor(sessionID string) *mirrorSession {
 	cloudOps.mirrorMu.Lock()
 	defer cloudOps.mirrorMu.Unlock()
 	if m, ok := cloudOps.mirrors[sessionID]; ok {
 		return m
 	}
+	evictIdleMirrorsLocked(time.Now())
 	m := &mirrorSession{
 		stream: cloudsync.NewMirrorStream(sessionID, "", cloudsync.DefaultMirrorHeartbeat),
 		buffer: cloudsync.NewMirrorBuffer(512),
 		subs:   map[chan cloudsync.MirrorFrame]struct{}{},
 		lastHB: time.Now(),
 	}
+	if len(cloudOps.mirrors) >= mirrorSessionMax {
+		// Still return a working session so a writer's frames are validated,
+		// but do not let the in-memory registry grow past the cap.
+		return m
+	}
 	cloudOps.mirrors[sessionID] = m
 	return m
+}
+
+// evictIdleMirrorsLocked drops sessions nobody watches and that have not
+// heartbeat for a while. Sessions with live subscribers are never removed: a
+// stream handler holds the pointer and would silently stop receiving frames.
+func evictIdleMirrorsLocked(now time.Time) {
+	for id, m := range cloudOps.mirrors {
+		m.mu.Lock()
+		idle := len(m.subs) == 0 && now.Sub(m.lastHB) > mirrorSessionIdleTTL
+		m.mu.Unlock()
+		if idle {
+			delete(cloudOps.mirrors, id)
+		}
+	}
 }
 
 func (m *mirrorSession) broadcast(f cloudsync.MirrorFrame) {
@@ -452,6 +485,11 @@ func (s *Server) pushSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !found {
+		if len(subs) >= pushSubscriptionMax {
+			// Bounded registry: recycle the oldest device rather than growing
+			// forever. Existing endpoints keep working until they are evicted.
+			subs = subs[1:]
+		}
 		subs = append(subs, sub)
 	}
 	if err := saveSubs(subs); err != nil {
@@ -532,10 +570,24 @@ func (s *Server) pushNotify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	subs := loadSubs()
-	client := &http.Client{Timeout: 15 * time.Second}
+	deadline := time.Now().Add(pushNotifyBudget)
 	results := make([]map[string]any, 0, len(subs))
 	alive := make([]webpush.Subscription, 0, len(subs))
 	for _, sub := range subs {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			results = append(results, map[string]any{
+				"endpoint": parseEndpointHostOrRaw(sub.Endpoint),
+				"error":    "notification budget exhausted",
+			})
+			alive = append(alive, sub) // not attempted: keep it
+			continue
+		}
+		timeout := 15 * time.Second
+		if remaining < timeout {
+			timeout = remaining
+		}
+		client := &http.Client{Timeout: timeout}
 		res, sendErr := webpush.Send(client, k, sub, payload, 24*time.Hour)
 		if sendErr != nil {
 			results = append(results, map[string]any{"error": sendErr.Error()})
@@ -551,7 +603,18 @@ func (s *Server) pushNotify(w http.ResponseWriter, r *http.Request) {
 	if len(alive) != len(subs) {
 		_ = saveSubs(alive)
 	}
-	writeJSON(w, map[string]any{"ok": true, "sent": len(subs), "results": results, "retained": len(alive)})
+	writeJSON(w, map[string]any{
+		"ok": true, "sent": len(subs), "results": results, "retained": len(alive),
+		"budgetMs": pushNotifyBudget.Milliseconds(),
+	})
+}
+
+func parseEndpointHostOrRaw(endpoint string) string {
+	host, err := parseEndpointHost(endpoint)
+	if err != nil {
+		return endpoint
+	}
+	return host
 }
 
 // ---- settings page / service worker --------------------------------------
@@ -575,6 +638,22 @@ func (s *Server) serviceWorker(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("Service-Worker-Allowed", "/")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(data)
+}
+
+// mobileServiceWorker serves the same worker under /mobile/sw.js. The mobile
+// page installs it with scope "/mobile", so it cannot intercept the desktop
+// web UI; the legacy root scope stays available only for already-installed
+// clients, which the page actively unregisters.
+func (s *Server) mobileServiceWorker(w http.ResponseWriter, _ *http.Request) {
+	data, err := cloudAssets.ReadFile("mobile-sw.js")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Service-Worker-Allowed", "/mobile")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(data)
 }

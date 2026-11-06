@@ -86,11 +86,12 @@ func TestWriteMessageOpErrorStatusMapping(t *testing.T) {
 
 func TestMessageOpIdempotencyCache(t *testing.T) {
 	op := "op-" + strings.Repeat("a", 24)
-	if _, ok := cachedMessageOp(op); ok {
+	const scope = "session-a"
+	if _, ok := cachedMessageOp(scope, op); ok {
 		t.Fatal("cache hit before remember")
 	}
-	rememberMessageOp(op, http.StatusOK, messageOpResponse{OK: true, MessageID: "m1"})
-	cached, ok := cachedMessageOp(op)
+	rememberMessageOp(scope, op, http.StatusOK, messageOpResponse{OK: true, MessageID: "m1"})
+	cached, ok := cachedMessageOp(scope, op)
 	if !ok || cached.status != http.StatusOK {
 		t.Fatalf("cache miss: %+v %v", cached, ok)
 	}
@@ -98,9 +99,13 @@ func TestMessageOpIdempotencyCache(t *testing.T) {
 	if !ok || !body.OK || body.MessageID != "m1" {
 		t.Fatalf("cached body wrong: %+v", cached.body)
 	}
+	// The same operation id in another session must not replay this result.
+	if _, ok := cachedMessageOp("session-b", op); ok {
+		t.Fatal("operation id leaked across sessions")
+	}
 	// Empty operation ids must never be cached or replayed.
-	rememberMessageOp("", http.StatusOK, "x")
-	if _, ok := cachedMessageOp(""); ok {
+	rememberMessageOp(scope, "", http.StatusOK, "x")
+	if _, ok := cachedMessageOp(scope, ""); ok {
 		t.Fatal("empty operation id was cached")
 	}
 }
