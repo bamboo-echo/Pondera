@@ -30,8 +30,9 @@ export function useContextPanelSnapshot(tabId: string | undefined, sessionGen: n
 
   useEffect(() => {
     void refresh();
+    const requestSeqRef = requestSeq;
     return () => {
-      requestSeq.current++;
+      requestSeqRef.current++;
       clearTimeout(timer.current);
       timer.current = undefined;
     };

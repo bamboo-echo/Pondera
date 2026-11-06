@@ -26,6 +26,8 @@ export function useCollapseAnimation(
   const onCloseRef = useRef(opts?.onCloseComplete);
   onOpenRef.current = opts?.onOpenComplete;
   onCloseRef.current = opts?.onCloseComplete;
+  const configuredDuration = opts?.duration;
+  const prevHeight = opts?.prevHeight;
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -42,10 +44,9 @@ export function useCollapseAnimation(
     if (prevOpen.current === open) return;
     prevOpen.current = open;
 
-    const configuredDuration = opts?.duration ?? DUR_BASE;
     const duration = prefersReducedMotion()
       ? 0
-      : (Number.isFinite(configuredDuration) && configuredDuration >= 0 ? configuredDuration : DUR_BASE) * 1000;
+      : (configuredDuration !== undefined && Number.isFinite(configuredDuration) && configuredDuration >= 0 ? configuredDuration : DUR_BASE) * 1000;
     let superseded = false;
     let settled = false;
     const finish = () => {
@@ -65,8 +66,8 @@ export function useCollapseAnimation(
       ? [{ height: "0px" }, { height: `${el.scrollHeight}px` }]
       : [
           {
-            height: `${opts?.prevHeight && opts.prevHeight > 0
-              ? opts.prevHeight
+            height: `${prevHeight && prevHeight > 0
+              ? prevHeight
               : Math.max(el.getBoundingClientRect().height, el.scrollHeight)}px`,
           },
           { height: "0px" },
@@ -92,5 +93,5 @@ export function useCollapseAnimation(
         // Cancellation is cleanup-only; the next render already owns state.
       }
     };
-  }, [open, ref]);
+  }, [configuredDuration, open, prevHeight, ref]);
 }

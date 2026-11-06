@@ -131,7 +131,7 @@ export function useWorkspaceRefresh(tabId: string, scopeKey: string, enabled: bo
         if (activeScopeByTab.get(tabId) === scopeKey) activeScopeByTab.delete(tabId);
       }
     };
-  }, [snapshotKey]);
+  }, [snapshotKey, scopeKey, tabId]);
   const getSnapshot = useCallback(() => snapshots.get(snapshotKey) ?? emptySnapshot(), [snapshotKey]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
@@ -158,7 +158,7 @@ export function useWorkspaceRefresh(tabId: string, scopeKey: string, enabled: bo
       live = false;
       if (activeScopeByTab.get(tabId) === scopeKey) activeScopeByTab.delete(tabId);
     };
-  }, [enabled, scopeKey, tabId]);
+  }, [enabled, getSnapshot, scopeKey, tabId]);
 
   return snapshot;
 }

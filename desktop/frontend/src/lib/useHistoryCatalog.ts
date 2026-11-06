@@ -99,8 +99,9 @@ export function useHistoryCatalog({ isTrash, suppliedSessions, scope, status, ti
     windowSize.current = { sessions: 50, search: 50 };
     refreshPending.current = false;
     const initial = !isTrash && desktopHost().kind !== "none" ? setTimeout(() => { void fetchPage(false, seq); }, query.trim() ? 200 : 0) : undefined;
+    const generationRef = generation;
     return () => {
-      clearTimeout(initial); ++generation.current;
+      clearTimeout(initial); ++generationRef.current;
       if (timer.current !== undefined) clearTimeout(timer.current); timer.current = undefined;
     };
   }, [fetchPage, identity, isTrash, query]);

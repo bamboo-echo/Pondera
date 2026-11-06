@@ -229,7 +229,7 @@ async function recoverInput(entry: Entry) {
 
 export function useSessionComposerPersistence(ref: SessionRef | undefined, tabId: string | undefined) {
   const key = ref?.hostId === "local" ? keyFor(ref) : "";
-  const entry = useMemo(() => key && ref ? entryFor(ref) : undefined, [key]);
+  const entry = useMemo(() => key && ref ? entryFor(ref) : undefined, [key, ref]);
   useSyncExternalStore(subscribe, snapshot);
   useEffect(() => {
     if (!entry) return;
