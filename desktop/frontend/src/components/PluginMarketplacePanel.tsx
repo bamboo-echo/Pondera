@@ -32,6 +32,7 @@ type Copy = {
   configureTitle: string;
   configureHint: string;
   featured: string;
+  noDescription: string;
   empty: string;
   install: string;
   installed: string;
@@ -67,6 +68,7 @@ const COPY: Record<Locale, Copy> = {
     configureTitle: "No marketplace index configured",
     configureHint: "Set an index source to browse plugins from a .claude-plugin/marketplace.json file.",
     featured: "Featured",
+    noDescription: "No description",
     empty: "No plugins match this filter.",
     install: "Install",
     installed: "Installed",
@@ -120,6 +122,7 @@ const COPY: Record<Locale, Copy> = {
     configureTitle: "尚未配置插件市场索引",
     configureHint: "设置一个 .claude-plugin/marketplace.json 索引源后即可浏览插件。",
     featured: "精选",
+    noDescription: "无描述",
     empty: "没有符合当前筛选的插件。",
     install: "安装",
     installed: "已安装",
@@ -173,6 +176,7 @@ const COPY: Record<Locale, Copy> = {
     configureTitle: "尚未設定外掛市場索引",
     configureHint: "設定一個 .claude-plugin/marketplace.json 索引來源後即可瀏覽外掛。",
     featured: "精選",
+    noDescription: "無描述",
     empty: "沒有符合目前篩選的外掛。",
     install: "安裝",
     installed: "已安裝",
@@ -451,7 +455,7 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
                     <PluginIcon entry={entry} size={34} />
                     <span style={{ minWidth: 0, textAlign: "left" }}>
                       <span style={{ display: "block", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
-                      <span style={{ display: "block", fontSize: 12, color: "var(--fg-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.description || copy.categories[entry.category as CategoryKey] || copy.categories.other}</span>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--fg-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.description || copy.noDescription}</span>
                     </span>
                   </button>
                 ))}
@@ -479,7 +483,7 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
                     <PluginIcon entry={entry} size={38} />
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</div>
-                      <div style={{ fontSize: 12, color: "var(--fg-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.description || copy.categories[entry.category as CategoryKey] || copy.categories.other}</div>
+                      <div style={{ fontSize: 12, color: "var(--fg-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.description || copy.noDescription}</div>
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10 }}>
