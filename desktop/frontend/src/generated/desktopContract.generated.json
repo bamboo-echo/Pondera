@@ -45981,6 +45981,13 @@
           }
         },
         {
+          "name": "retryAfterMs",
+          "optional": true,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
           "name": "elapsedMs",
           "optional": true,
           "type": {

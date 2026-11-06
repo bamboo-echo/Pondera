@@ -3,7 +3,7 @@
 
 export const DESKTOP_PROTOCOL_VERSION = 11;
 
-export const DESKTOP_CONTRACT_DIGEST = "sha256:094d1af9550b2ccad2eb69f906a1b2108790830ccc1b0355886510ca420d7b0a";
+export const DESKTOP_CONTRACT_DIGEST = "sha256:27df810095fb5de995d1fde5bef0ad59b195cecda6ba878ff1b47987052f0ec1";
 
 export const DESKTOP_COMMANDS = [
   "AIRenameSession",
@@ -5334,6 +5334,7 @@ export interface AttemptFailure {
   code?: string;
   retryable: boolean;
   backoffMs?: number;
+  retryAfterMs?: number;
   elapsedMs?: number;
   at?: number;
   providerId?: string;
