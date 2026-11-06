@@ -177,6 +177,9 @@ func TestEditMessageHandsOffForkedSession(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("edit did not resend into the forked session")
 	}
+	// The resend is asynchronous: wait for the turn to finish persisting before
+	// the test returns, or TempDir cleanup races the session writer.
+	waitNotRunning(t, f.ctrl)
 }
 
 // TestRetractMessageHandsOffForkedSessionAndReportsAffected covers both halves
