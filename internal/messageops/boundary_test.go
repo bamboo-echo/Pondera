@@ -39,8 +39,10 @@ func TestResolveBoundaryFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveBoundary: %v", err)
 	}
-	if b.Turn != 2 || b.Exact {
-		t.Fatalf("expected inexact fallback to turn 2: %+v", b)
+	// The cut happens at the nearest preceding boundary (index 2), so the
+	// truncation drops indices 2..7 (six messages), not just 5..7 (three).
+	if b.Turn != 2 || b.Exact || b.MessageIndex != 5 || b.Affected != 6 {
+		t.Fatalf("expected inexact fallback to turn 2 with affected 6: %+v", b)
 	}
 }
 

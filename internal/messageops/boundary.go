@@ -98,11 +98,13 @@ func ResolveBoundary(msgs []provider.Message, turnsByIndex map[int]int, messageI
 		return Boundary{}, fail(CodeCompacted,
 			"message %q predates every recorded boundary (compacted session)", messageID)
 	}
+	// The rewind truncates at the recorded boundary (bestIdx), not at the
+	// target message, so the dropped span starts where the fork starts.
 	return Boundary{
 		MessageID:    messageID,
 		MessageIndex: idx,
 		Turn:         bestTurn,
-		Affected:     len(msgs) - idx,
+		Affected:     len(msgs) - bestIdx,
 		Exact:        false,
 	}, nil
 }
