@@ -82,7 +82,8 @@ export function ArchivedSessionsList({ active, onOpenSession }: {
     void reload().catch(() => {});
     const unsubscribe = onProjectTreeChanged(() => { if (!mutating.current) void reload().catch(() => {}); });
     const unsubscribeCleanup = onLegacyEmptySessionCleanupChanged(setCleanupStatus);
-    return () => { generation.current++; previewGeneration.current++; surfaceGeneration.current++; unsubscribe(); unsubscribeCleanup(); };
+    const generationRef = generation, previewGenerationRef = previewGeneration, surfaceGenerationRef = surfaceGeneration;
+    return () => { generationRef.current++; previewGenerationRef.current++; surfaceGenerationRef.current++; unsubscribe(); unsubscribeCleanup(); };
   }, [active, reload]);
   useEffect(() => { if (!active) dismiss(); }, [active, dismiss]);
   useEffect(() => { if (!active) { setManagementMenu(null); setSessionMenu(null); } }, [active]);

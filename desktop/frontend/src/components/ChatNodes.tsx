@@ -236,7 +236,7 @@ function ChatReasoning({ node, loader, source, scroll }: { node: Extract<ChatNod
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const epoch = useRef(0);
-  useEffect(() => { return () => { epoch.current++; }; }, []);
+  useEffect(() => { const epochRef = epoch; return () => { epochRef.current++; }; }, []);
   const text = node.item.reasoning;
   const streaming = Boolean(node.item.streaming);
   const settled = result && (result.item === node.item || result.text === node.item.reasoning) ? result.text : undefined;
@@ -252,8 +252,10 @@ function ChatReasoning({ node, loader, source, scroll }: { node: Extract<ChatNod
     catch (error) { if (ticket === epoch.current) setError(true); throw error; }
     finally { if (ticket === epoch.current) setBusy(false); }
   };
+  const loadRef = useRef(load);
+  loadRef.current = load;
   useEffect(() => {
-    if (following && !streaming) void load().catch(() => {});
+    if (following && !streaming) void loadRef.current().catch(() => {});
   }, [following, streaming]);
   if (!text) return null;
   const needsFull = error || full === undefined && (text.length > 8000 || loader.needsFullContent(node.item, "reasoning"));
@@ -325,7 +327,7 @@ export function ChatDetails({ source, nodeKey, loader, onClose, onNavigate }: { 
   const [visibleChildren, setVisibleChildren] = useState<number>(TOOL_RELATION_PAGE_SIZE);
   const root = useRef<HTMLElement>(null);
   const epoch = useRef(0);
-  useEffect(() => { root.current?.focus(); return () => { epoch.current++; }; }, []);
+  useEffect(() => { root.current?.focus(); const epochRef = epoch; return () => { epochRef.current++; }; }, []);
   useEffect(() => setVisibleChildren(TOOL_RELATION_PAGE_SIZE), [nodeKey]);
   const load = async () => {
     if (node?.kind !== "tool") throw new Error("Tool unavailable");

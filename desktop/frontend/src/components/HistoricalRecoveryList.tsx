@@ -51,7 +51,8 @@ export function HistoricalRecoveryList({ active, onOpenSession }: {
     if (!active) return;
     void reload().catch(() => {});
     const unsubscribe = onProjectTreeChanged(() => { if (!mutating.current) void reload().catch(() => {}); });
-    return () => { generation.current++; previewGeneration.current++; surfaceGeneration.current++; unsubscribe(); };
+    const generationRef = generation, previewGenerationRef = previewGeneration, surfaceGenerationRef = surfaceGeneration;
+    return () => { generationRef.current++; previewGenerationRef.current++; surfaceGenerationRef.current++; unsubscribe(); };
   }, [active, reload]);
   const restore = async (entry: RecoveryEntryView) => {
     if (mutating.current) return;

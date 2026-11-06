@@ -97,7 +97,9 @@ export function HistoryPanel({
     setMenuSession(null);
     setMenuConfirmTarget(null);
     setEditing(null);
-    return () => { ++previewSeq.current; ++lineageSeq.current; };
+    const previewSeqRef = previewSeq;
+    const lineageSeqRef = lineageSeq;
+    return () => { ++previewSeqRef.current; ++lineageSeqRef.current; };
   }, [readIdentity]);
 
   const loadSearchContext = useCallback(async (hit: HistorySearchHit) => {
@@ -169,11 +171,13 @@ export function HistoryPanel({
     if (scopeFilter === "global" && scopeCounts.global === 0) setScopeFilter("all");
   }, [isTrash, presentation, scopeCounts.global, scopeCounts.project, scopeFilter]);
 
+  const currentStatusCount = statusCounts.current;
+  const openStatusCount = statusCounts.open;
   useEffect(() => {
     if (!isTrash) return;
-    if (statusFilter === "current" && statusCounts.current === 0) setStatusFilter("all");
-    if (statusFilter === "open" && statusCounts.open === 0) setStatusFilter("all");
-  }, [isTrash, statusCounts.current, statusCounts.open, statusFilter]);
+    if (statusFilter === "current" && currentStatusCount === 0) setStatusFilter("all");
+    if (statusFilter === "open" && openStatusCount === 0) setStatusFilter("all");
+  }, [currentStatusCount, isTrash, openStatusCount, statusFilter]);
 
   useEffect(() => {
     if (!isTrash || presentation === "page") return;
