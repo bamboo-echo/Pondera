@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Download, RefreshCw, Search, Star, X } from "lucide-react";
 import { app } from "../lib/bridge";
 import { getLocale, useT, type Locale } from "../lib/i18n";
@@ -225,6 +225,29 @@ const COPY: Record<Locale, Copy> = {
 
 const CATEGORY_ORDER: CategoryKey[] = ["all", "recommended", "dev", "productivity", "design", "research", "content", "other"];
 
+// Both chip rows share one results panel, so every tab points at it.
+const MARKETPLACE_RESULTS_ID = "cap-marketplace-results";
+
+// Roving tabindex: only the selected tab is in the tab order, and arrows move the
+// selection (and focus) within the row.
+function handleTabListKeyDown<T>(
+  event: ReactKeyboardEvent<HTMLDivElement>,
+  values: readonly T[],
+  current: T,
+  select: (value: T) => void,
+) {
+  const index = values.indexOf(current);
+  let next = index;
+  if (event.key === "ArrowRight") next = (index + 1) % values.length;
+  else if (event.key === "ArrowLeft") next = (index - 1 + values.length) % values.length;
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = values.length - 1;
+  else return;
+  event.preventDefault();
+  select(values[next]);
+  event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
+}
+
 export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => void }) {
   const t = useT();
   const copy = COPY[getLocale()] ?? COPY.en;
@@ -291,6 +314,11 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
   // Domains come from the installed index, never from a hard-coded list. Chips
   // are ordered by entry count and long-tail single-entry domains are hidden.
   const domainOptions = useMemo(() => marketplaceDomainOptions(view?.entries ?? []), [view]);
+  const domainValues = useMemo(
+    () => [ALL_DOMAINS, ...domainOptions.map((option) => option.domain)],
+    [domainOptions],
+  );
+  const domainIndex = domainValues.indexOf(domain);
 
   const featured = useMemo(() => {
     const list = view?.entries ?? [];
@@ -403,13 +431,21 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
 
       {view?.configured && (
         <>
-          <div className="cap-tabs" role="tablist" aria-label={copy.tabMarketplace}>
+          <div
+            className="cap-tabs"
+            role="tablist"
+            aria-label={copy.tabMarketplace}
+            onKeyDown={(event) => handleTabListKeyDown(event, CATEGORY_ORDER, category, setCategory)}
+          >
             {CATEGORY_ORDER.map((key) => (
               <button
                 key={key}
+                id={`cap-market-category-${key}`}
                 className={`cap-tab${category === key ? " cap-tab--active" : ""}`}
                 role="tab"
                 aria-selected={category === key}
+                aria-controls={MARKETPLACE_RESULTS_ID}
+                tabIndex={category === key ? 0 : -1}
                 type="button"
                 onClick={() => setCategory(key)}
               >
@@ -419,22 +455,34 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
           </div>
 
           {domainOptions.length > 0 && (
-            <div className="cap-tabs" role="tablist" aria-label={copy.allDomains} style={{ marginTop: 8 }}>
+            <div
+              className="cap-tabs"
+              role="tablist"
+              aria-label={copy.allDomains}
+              style={{ marginTop: 8 }}
+              onKeyDown={(event) => handleTabListKeyDown(event, domainValues, domain, setDomain)}
+            >
               <button
+                id="cap-market-domain-0"
                 className={`cap-tab${domain === ALL_DOMAINS ? " cap-tab--active" : ""}`}
                 role="tab"
                 aria-selected={domain === ALL_DOMAINS}
+                aria-controls={MARKETPLACE_RESULTS_ID}
+                tabIndex={domainIndex === 0 ? 0 : -1}
                 type="button"
                 onClick={() => setDomain(ALL_DOMAINS)}
               >
                 {copy.allDomains}
               </button>
-              {domainOptions.map((option) => (
+              {domainOptions.map((option, index) => (
                 <button
                   key={option.domain}
+                  id={`cap-market-domain-${index + 1}`}
                   className={`cap-tab${domain === option.domain ? " cap-tab--active" : ""}`}
                   role="tab"
                   aria-selected={domain === option.domain}
+                  aria-controls={MARKETPLACE_RESULTS_ID}
+                  tabIndex={domainIndex === index + 1 ? 0 : -1}
                   type="button"
                   onClick={() => setDomain(option.domain)}
                 >
@@ -444,6 +492,15 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
             </div>
           )}
 
+          <div
+            role="tabpanel"
+            id={MARKETPLACE_RESULTS_ID}
+            aria-labelledby={
+              domainIndex >= 0
+                ? `cap-market-category-${category} cap-market-domain-${domainIndex}`
+                : `cap-market-category-${category}`
+            }
+          >
           {featured.length > 0 && category === "all" && domain === ALL_DOMAINS && query.trim() === "" && (
             <div style={{ margin: "12px 0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, fontWeight: 600 }}>
@@ -515,6 +572,7 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
               ))}
             </div>
           )}
+          </div>
         </>
       )}
 
