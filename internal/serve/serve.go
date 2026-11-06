@@ -954,19 +954,40 @@ func (s *Server) fork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if ctrl, ok := s.ctl().(*control.Controller); ok {
-		s.setControllerPath(ctrl, ctrl.SessionPath())
-	}
-	s.bc.ResetSessionPath(s.ctl().SessionPath())
-	s.cacheForkTitle(sourcePath, s.ctl().SessionPath())
-	// The controller switched to the fork (a fresh path); the lease follows it.
-	if err := s.rebindSessionLease(s.ctl().SessionPath()); err != nil {
+	if err := s.adoptControllerFork(sourcePath); err != nil {
 		http.Error(w, sessionInUseError(err), http.StatusConflict)
 		return
 	}
 	// path is the session the controller is on now; branch is what the fork
 	// created: the same path for a file fork, a head id inside a schema-2 log.
 	writeJSON(w, map[string]string{"path": s.ctl().SessionPath(), "branch": path})
+}
+
+// adoptControllerFork performs the server-side handoff every endpoint that
+// makes the controller adopt a freshly forked session must run: the tag
+// identity, the broadcaster's current-session route and ledger, the fork title
+// cache and the session lease all have to follow the child path.
+//
+// The controller switches itself inside ForkNamed/Rewind. Hosts that installed
+// a session-transition handler already prime the tag route and acquire the
+// target lease there, but this method stays the endpoint's own contract: it is
+// nil-safe for embedded servers without a keeper, and it is the only place that
+// resets the child ledger and seeds the fork title. Repeating the lease rebind
+// is idempotent (SessionLeaseKeeper.rebindWith returns early when the held path
+// already matches), so it neither double-acquires nor releases the parent.
+func (s *Server) adoptControllerFork(sourcePath string) error {
+	if ctrl, ok := s.ctl().(*control.Controller); ok {
+		// Re-binds the tag to the child path/session id and publishes the new
+		// current route; a stale tag would stamp child frames with the parent.
+		s.setControllerPath(ctrl, ctrl.SessionPath())
+	}
+	target := s.ctl().SessionPath()
+	// ResetSession alone would clear the ledger of the path the broadcaster
+	// still believes is current (the parent). Reset the child instead.
+	s.bc.ResetSessionPath(target)
+	s.cacheForkTitle(sourcePath, target)
+	// The controller now writes the child; the lease must guard the same file.
+	return s.rebindSessionLease(target)
 }
 
 // cacheForkTitle gives a file-backed fork the same visible numbering as the

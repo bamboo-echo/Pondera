@@ -35,12 +35,19 @@ func (s *Server) rewind(w http.ResponseWriter, r *http.Request) {
 	if !s.validateExpectedSessionLocked(w, r) {
 		return
 	}
+	sourcePath := s.ctl().SessionPath()
 	if err := s.ctl().Rewind(body.Turn, scope); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if scope != control.RewindCode {
-		s.bc.ResetSession()
+		// A conversation rewind forks and switches the controller to the child.
+		// Reuse the POST /fork handoff instead of clearing the parent's ledger:
+		// the tag, current route, fork title and lease must follow the child.
+		if err := s.adoptControllerFork(sourcePath); err != nil {
+			http.Error(w, sessionInUseError(err), http.StatusConflict)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

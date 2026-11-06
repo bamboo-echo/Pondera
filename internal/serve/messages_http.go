@@ -162,12 +162,19 @@ func (s *Server) retractMessage(w http.ResponseWriter, r *http.Request) {
 			"turn %d has no checkpoint boundary (resumed session)", boundary.Turn))
 		return
 	}
+	sourcePath := ctrl.SessionPath()
 	if err := ctrl.Rewind(boundary.Turn, scope); err != nil {
 		writeMessageOpError(w, err)
 		return
 	}
 	if scope != control.RewindCode {
-		s.bc.ResetSession()
+		// Conversation rewind forks and makes the controller adopt the child;
+		// without the POST /fork handoff the tag, ledger, title cache and lease
+		// stay bound to the parent branch.
+		if err := s.adoptControllerFork(sourcePath); err != nil {
+			writeMessageOpError(w, messageopsError(messageops.CodeUnavailable, "%s", sessionInUseError(err)))
+			return
+		}
 	}
 	s.bc.Emit(event.Event{
 		Kind:  event.Notice,
@@ -261,9 +268,17 @@ func (s *Server) editMessage(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = "edited: " + truncateForName(newInput)
 	}
+	sourcePath := ctrl.SessionPath()
 	forkPath, err := concrete.ForkNamed(boundary.Turn, name)
 	if err != nil {
 		writeMessageOpError(w, err)
+		return
+	}
+	// ForkNamed makes the controller adopt the child. Complete the same
+	// handoff POST /fork performs before submitting into the child, so the
+	// resend runs with the child's route, ledger, title and lease in place.
+	if err := s.adoptControllerFork(sourcePath); err != nil {
+		writeMessageOpError(w, messageopsError(messageops.CodeUnavailable, "%s", sessionInUseError(err)))
 		return
 	}
 	if routing, ok := ctrl.(interface{ SetTurnSubmissionID(string) }); ok {
@@ -275,7 +290,6 @@ func (s *Server) editMessage(w http.ResponseWriter, r *http.Request) {
 		writeMessageOpError(w, err)
 		return
 	}
-	s.bc.ResetSession()
 
 	out := messageOpResponse{
 		OK: true, OperationID: strings.TrimSpace(body.OperationID),
