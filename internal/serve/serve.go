@@ -531,6 +531,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /mobile", s.mobileIndex)
 	mux.HandleFunc("GET /mobile/manifest.webmanifest", s.mobileManifest)
 	mux.HandleFunc("GET /sw.js", s.serviceWorker)
+	mux.HandleFunc("GET /mobile/sw.js", s.mobileServiceWorker)
 	mux.HandleFunc("GET /settings", s.settingsIndex)
 	// Cross-machine mirror (cloud writer -> local spectator).
 	mux.HandleFunc("GET /mirror/stream", s.mirrorStream)

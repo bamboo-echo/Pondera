@@ -634,7 +634,17 @@ a.link{color:var(--accent)}
   readToken();
   applyLock();
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').then(() => {
+    // Older builds registered /sw.js with scope "/", which let the mobile
+    // worker intercept desktop web pages. Drop that registration, then install
+    // the same worker scoped to the mobile page only.
+    if (navigator.serviceWorker.getRegistrations) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) {
+          if (new URL(reg.scope).pathname === '/') reg.unregister();
+        }
+      }).catch(() => {});
+    }
+    navigator.serviceWorker.register('/mobile/sw.js', { scope: '/mobile' }).then(() => {
       updateQueueBadge(); flushNow();
       navigator.serviceWorker.ready.then((reg) => {
         if (reg.pushManager) reg.pushManager.getSubscription().then((s) => { $('#pushToggle').checked = !!s; });
