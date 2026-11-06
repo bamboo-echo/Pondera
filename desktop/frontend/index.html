@@ -1,15 +1,37 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pondera</title>
+    <!-- Resolve the saved theme before the boot stylesheet is parsed, so a
+         light-theme user never sees the dark splash. Mirrors normalizeThemePreference
+         (legacy names included). Settings that only exist on the host are applied
+         later by initTheme; with no local value the splash follows the OS scheme. -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("pondera-theme");
+          if (!raw) return;
+          var value;
+          try { value = JSON.parse(raw); } catch (e) { value = raw; }
+          if (value && typeof value === "object") value = value.mode;
+          if (value === "light" || value === "focus" || value === "forest") {
+            document.documentElement.setAttribute("data-theme", "light");
+          } else if (value === "dark" || value === "midnight" || value === "contrast") {
+            document.documentElement.setAttribute("data-theme", "dark");
+          }
+        } catch (e) { /* storage unavailable: fall through to the OS scheme */ }
+      })();
+    </script>
     <!-- Critical boot shell: paint useful branded state before the desktop
          bundle and full application stylesheet finish parsing. React replaces
          this tree only after styles.css is ready, so the app never flashes
          unstyled content. Keep these rules in sync with StartupSplash. -->
     <style>
       html,body,#root{width:100%;height:100%;margin:0}body{overflow:hidden;background:#111214;color:#f4f4f3;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.boot-shell{position:fixed;inset:0;display:grid;place-items:center;background:#111214}.boot-shell__card{display:flex;flex-direction:column;align-items:center;gap:10px}.boot-shell__mark{display:grid;width:64px;height:64px;place-items:center}.boot-shell__mark img{display:block;width:56px;height:56px}.boot-shell__name{font-size:22px;font-weight:650;letter-spacing:0}.boot-shell__dots{display:flex;height:12px;align-items:center;gap:5px}.boot-shell__dots span{width:5px;height:5px;border-radius:50%;background:#e58a3a;animation:boot-pulse 1s ease-in-out infinite}.boot-shell__dots span:nth-child(2){animation-delay:.14s}.boot-shell__dots span:nth-child(3){animation-delay:.28s}@keyframes boot-pulse{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}.boot-shell__error{max-width:360px;text-align:center;font-size:13px;line-height:1.5;color:#ffb27a}.boot-shell__retry{margin-top:4px;padding:6px 16px;border-radius:8px;border:1px solid #e58a3a;background:transparent;color:#e58a3a;font:inherit;font-weight:600;cursor:pointer}
+      @media (prefers-color-scheme: light){html:not([data-theme="dark"]) body,html:not([data-theme="dark"]) .boot-shell{background:#f7f8fb;color:#111827}html:not([data-theme="dark"]) .boot-shell__error{color:#8a3d0a}html:not([data-theme="dark"]) .boot-shell__retry{border-color:#a4510c;color:#a4510c}}
+      html[data-theme="light"] body,html[data-theme="light"] .boot-shell{background:#f7f8fb;color:#111827}html[data-theme="light"] .boot-shell__error{color:#8a3d0a}html[data-theme="light"] .boot-shell__retry{border-color:#a4510c;color:#a4510c}
     </style>
   </head>
   <body>
