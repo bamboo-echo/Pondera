@@ -5,6 +5,10 @@ import { useI18n } from "../lib/i18n";
 import { InlineConfirmButton } from "../components/InlineConfirmButton";
 import type { AssistantHistoryRecord } from "../generated/desktopContract.generated";
 
+// The list grows with every assistant write; render it in pages so a long-lived
+// install never mounts an unbounded number of rows in one commit.
+const HISTORY_PAGE_SIZE = 20;
+
 // History lists committed changes newest first and offers one-click restore.
 export function History({ refreshKey, onRestored }: { refreshKey: number; onRestored?: () => void }) {
   const { locale } = useI18n();
@@ -12,13 +16,17 @@ export function History({ refreshKey, onRestored }: { refreshKey: number; onRest
   const [records, setRecords] = useState<AssistantHistoryRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [visible, setVisible] = useState(HISTORY_PAGE_SIZE);
 
   useEffect(() => {
     let cancelled = false;
     void assistantApi
       .history()
       .then((list) => {
-        if (!cancelled) setRecords(list);
+        if (!cancelled) {
+          setRecords(list);
+          setVisible(HISTORY_PAGE_SIZE);
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -50,7 +58,7 @@ export function History({ refreshKey, onRestored }: { refreshKey: number; onRest
       {error ? <div className="assistant-error">{error}</div> : null}
       {records.length === 0 ? <p className="assistant-muted">{copy.historyEmpty}</p> : null}
       <ul>
-        {records.map((record) => (
+        {records.slice(0, visible).map((record) => (
           <li key={record.id}>
             <div className="assistant-history-head">
               <strong>{record.intent || record.kind}</strong>
@@ -81,6 +89,11 @@ export function History({ refreshKey, onRestored }: { refreshKey: number; onRest
           </li>
         ))}
       </ul>
+      {records.length > visible ? (
+        <button type="button" onClick={() => setVisible((value) => value + HISTORY_PAGE_SIZE)}>
+          {copy.showMore}
+        </button>
+      ) : null}
     </div>
   );
 }
