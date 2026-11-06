@@ -231,6 +231,12 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
   const [sourceDraft, setSourceDraft] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
   const detailRef = useRef<HTMLElement>(null);
+  // Index reads can overlap (mount, Refresh, install, save). Only the newest
+  // request may write state, so an older response cannot overwrite a fresher one.
+  const requestSeq = useRef(0);
+  // Once the user touches the source input it owns that value; a reload must
+  // never refill text they cleared on purpose.
+  const sourceEditedRef = useRef(false);
 
   // The detail drawer is a real modal: focus moves inside on open, Escape closes
   // it, Tab stays inside, and a pointer press elsewhere dismisses it.
@@ -246,18 +252,24 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
   }, [selected]);
 
   const reload = useCallback(async () => {
+    const request = ++requestSeq.current;
+    let failure: string | null = null;
     const [next, source] = await Promise.all([
       app.PluginMarketplace().catch((e) => {
-        setErr(String((e as Error)?.message ?? e));
+        failure = String((e as Error)?.message ?? e);
         return null;
       }),
       app.PluginMarketplaceSource().catch(() => ({ source: "", kind: "" })),
     ]);
+    if (request !== requestSeq.current) return;
+    // A successful snapshot clears any older error banner; a failed one replaces
+    // it, so a stale failure never outlives the read that produced it.
+    setErr(failure);
     if (next) {
       setView(next);
       if (!next.configured) setSourceOpen(true);
     }
-    setSourceDraft((current) => current || source.source);
+    setSourceDraft((current) => (!sourceEditedRef.current && current === "" ? source.source : current));
     if (!source.source) setSourceOpen(true);
   }, []);
 
@@ -289,6 +301,8 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
     setNotice(null);
     try {
       await app.SetPluginMarketplaceSource(sourceDraft.trim());
+      // The saved draft is now the stored value, so a later reload may resync it.
+      sourceEditedRef.current = false;
       setSourceOpen(false);
       await reload();
     } catch (e) {
@@ -357,7 +371,7 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
               aria-label={copy.sourceTitle}
               placeholder={copy.sourcePlaceholder}
               value={sourceDraft}
-              onChange={(e) => setSourceDraft(e.target.value)}
+              onChange={(e) => { sourceEditedRef.current = true; setSourceDraft(e.target.value); }}
             />
             <button className="btn btn--primary btn--small" type="button" disabled={busy} onClick={() => void saveSource()}>
               {copy.sourceSave}
