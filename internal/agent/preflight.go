@@ -306,10 +306,17 @@ func (a *Agent) CacheState() string {
 }
 
 func (a *Agent) persistCompactionStateLocked() error {
-	if a.sess.path == "" {
+	return persistCompactionStateSnapshot(a.sess.path, a.sess.compactionState)
+}
+
+// persistCompactionStateSnapshot writes the sidecar for a state captured outside
+// compactionMu. Callers must not hold the lock: a large session's write can take
+// seconds and must not block the read paths behind it.
+func persistCompactionStateSnapshot(sessionPath string, state CompactionState) error {
+	if sessionPath == "" {
 		return nil
 	}
-	return SaveCompactionState(a.sess.path, a.sess.compactionState)
+	return SaveCompactionState(sessionPath, state)
 }
 
 // promptCacheKey builds a stable lineage key for session + model identity.
