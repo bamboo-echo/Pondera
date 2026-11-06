@@ -129,6 +129,11 @@ const legacyRemotePolicyNotice = createLegacyRemotePolicyNoticeTracker();
 export function useRemoteSession(tabId: string | undefined, initial?: RemoteTabStateValue, sessionPath?: string): RemoteSessionApi {
   const runtimeState = useRuntimeSession(tabId, sessionPath);
   const [state, setState] = useState<RemoteTabStateValue>(initial === "disconnected" ? "connecting" : (initial ?? "connecting"));
+  // `initial` only describes the mount; the activation effect resubscribes on
+  // tab/session changes, so read it through a ref instead of re-running when
+  // the parent's remote state flips later.
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
   const [error, setError] = useState("");
   const transcript = useSyncExternalStore(
     useCallback(listener => tabId ? getTranscriptStore().subscribeState(tabId, listener) : () => {}, [tabId]),
@@ -230,8 +235,8 @@ export function useRemoteSession(tabId: string | undefined, initial?: RemoteTabS
     // Restored shells arrive as disconnected shells. Activation must kick the
     // backend revive (SetActiveTab → bootstrap) and never park the UI on a
     // reconnect placeholder — treat them as connecting until ready/error.
-    const revivedFromShell = initial === "disconnected";
-    const mountedState = revivedFromShell ? "connecting" : (initial ?? "connecting");
+    const revivedFromShell = initialRef.current === "disconnected";
+    const mountedState = revivedFromShell ? "connecting" : (initialRef.current ?? "connecting");
     setState(mountedState);
     setError("");
     setPromptError("");
@@ -490,7 +495,7 @@ export function useRemoteSession(tabId: string | undefined, initial?: RemoteTabS
       refreshStatusRef.current = null;
       reconcileHistoryRef.current = null;
     };
-  }, [applyRemoteStatus, noteOwnership, tabId, sessionPath, setTranscript]);
+  }, [applyRemoteStatus, forkTargetsRefreshRef, noteOwnership, tabId, sessionPath, setTranscript]);
 
   // A spectator surface idles with no status traffic: the running watchdog
   // only reconciles turns, and the read-only composer blocks the sends that
@@ -582,7 +587,7 @@ export function useRemoteSession(tabId: string | undefined, initial?: RemoteTabS
       setPromptError(error instanceof Error ? error.message : String(error));
       throw error;
     }
-  }, [tabId]);
+  }, [setTranscript, tabId]);
 
   const resolvePlanDecision = useCallback(async (
     callId: string,
@@ -598,7 +603,7 @@ export function useRemoteSession(tabId: string | undefined, initial?: RemoteTabS
       setPromptError(error instanceof Error ? error.message : String(error));
       throw error;
     }
-  }, [tabId]);
+  }, [setTranscript, tabId]);
 
   const answer = useCallback(async (callId: string, answers: RemoteAskAnswer[]) => {
     if (!tabId) return;
@@ -610,13 +615,13 @@ export function useRemoteSession(tabId: string | undefined, initial?: RemoteTabS
       setPromptError(error instanceof Error ? error.message : String(error));
       throw error;
     }
-  }, [tabId]);
+  }, [setTranscript, tabId]);
 
   const clearExtensionForm = useCallback((pluginId: string, surfaceId: string, formInstanceId?: string) => {
     setTranscript((s) => s.extensionForm?.pluginId === pluginId && s.extensionForm.surfaceId === surfaceId &&
       (!formInstanceId || s.extensionForm.formInstanceId === formInstanceId)
       ? reducer(s, { type: "clearExtensionForm" }) : s);
-  }, []);
+  }, [setTranscript]);
 
   const retryHydration = useCallback((): Promise<void> => {
     setError("");
@@ -721,7 +726,7 @@ export function useRemoteSession(tabId: string | undefined, initial?: RemoteTabS
 
   const drainApprovals = useCallback((ids: string[]) => {
     setTranscript((current) => reducer(current, { type: "approval_drained", ids, epoch: current.promptEpoch }));
-  }, []);
+  }, [setTranscript]);
 
   return {
     state, error, transcript, liveStore, hydrated, revalidating, syncMode: "v2", navigateToTurn: (target, current) => navigateRef.current?.(target, current) ?? Promise.resolve("cancelled"), loadOlderHistory: (_targetTurn?: number, trigger?: HistoryLoadTrigger) => olderRef.current?.(trigger) ?? Promise.resolve("empty"), loadNewerHistory: (latest = false, current) => newerRef.current?.(latest, current) ?? Promise.resolve("empty"), running: transcript.running, modelLabel, commands,
