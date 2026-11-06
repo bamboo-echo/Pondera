@@ -45,12 +45,12 @@ var fullGitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
 // Entry is one installable plugin reduced to the fields the settings UI needs.
 type Entry struct {
-	Name          string   `json:"name"`
-	Description   string   `json:"description,omitempty"`
-	Author        string   `json:"author,omitempty"`
-	AuthorURL     string   `json:"authorUrl,omitempty"`
-	Version       string   `json:"version,omitempty"`
-	Category      string   `json:"category"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Author      string `json:"author,omitempty"`
+	AuthorURL   string `json:"authorUrl,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Category    string `json:"category"`
 	// Domain is the optional free-form Chinese domain label (CAD, Blender,
 	// 学术写作, …). Older indexes omit it; an empty value keeps every existing
 	// filter unchanged and never produces a warning.

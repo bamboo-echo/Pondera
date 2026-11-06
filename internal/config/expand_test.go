@@ -11,11 +11,11 @@ func TestExpandVars(t *testing.T) {
 
 	cases := []struct{ in, want string }{
 		{"Bearer ${PONDERA_TEST_TOKEN}", "Bearer sk-123"},
-		{"${PONDERA_TEST_MISSING}", ""},                                   // unset, no default → empty
-		{"${PONDERA_TEST_MISSING:-fallback}", "fallback"},                 // unset → default
-		{"${PONDERA_TEST_EMPTY:-fallback}", "fallback"},                   // set-but-empty → default
-		{"${PONDERA_TEST_TOKEN:-fallback}", "sk-123"},                     // set → value, default ignored
-		{"no vars here", "no vars here"},                                   // untouched
+		{"${PONDERA_TEST_MISSING}", ""},                                  // unset, no default → empty
+		{"${PONDERA_TEST_MISSING:-fallback}", "fallback"},                // unset → default
+		{"${PONDERA_TEST_EMPTY:-fallback}", "fallback"},                  // set-but-empty → default
+		{"${PONDERA_TEST_TOKEN:-fallback}", "sk-123"},                    // set → value, default ignored
+		{"no vars here", "no vars here"},                                 // untouched
 		{"a${PONDERA_TEST_TOKEN}b${PONDERA_TEST_MISSING}c", "ask-123bc"}, // multiple refs
 	}
 	for _, c := range cases {

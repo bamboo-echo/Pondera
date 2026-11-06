@@ -40,9 +40,9 @@ const (
 )
 
 const (
-	cookieToken     = "pondera_token"    // holds the token for token mode
-	cookieSession   = "pondera_session"  // holds the HMAC-signed session for password mode
-	cookieRedirect  = "pondera_redirect" // temporary: where to go after login
+	cookieToken     = "pondera_token"     // holds the token for token mode
+	cookieSession   = "pondera_session"   // holds the HMAC-signed session for password mode
+	cookieRedirect  = "pondera_redirect"  // temporary: where to go after login
 	tokenByteLen    = 32                  // 256-bit random token
 	sessionDuration = 30 * 24 * time.Hour // how long a password session lasts
 	bcryptCost      = 12                  // bcrypt cost factor
