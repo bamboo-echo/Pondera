@@ -1,6 +1,6 @@
 import { ErrorMessage } from "./ErrorMessage";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { app } from "../lib/bridge";
+import { app, appCommand } from "../lib/bridge";
 import { asArray } from "../lib/array";
 import { useT } from "../lib/i18n";
 import type { HistoricalImportStatus, HistoricalSessionView, HistoricalSourceUpdateView } from "../generated/desktopContract.generated";
@@ -29,7 +29,8 @@ export function HistoricalImportList({ active, onOpenSession }: { active: boolea
     const request = ++requests.current;
     if (desktopHost().kind === "none") { setStatus(emptyHistoricalStatus); return; }
     try {
-      const next = await (scan ? app.ListHistoricalSessions?.() : app.GetHistoricalImportStatus?.()) ?? emptyHistoricalStatus;
+      const read = scan ? appCommand("ListHistoricalSessions") : appCommand("GetHistoricalImportStatus");
+      const next = (await read?.()) ?? emptyHistoricalStatus;
       if (current === generation.current && request === requests.current) setStatus({ ...next, items: asArray<HistoricalSessionView>(next.items) });
     } catch (err) { if (current === generation.current) setError(String(err)); }
   }, []);

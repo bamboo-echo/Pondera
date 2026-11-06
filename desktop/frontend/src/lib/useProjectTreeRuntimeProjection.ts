@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import { app } from "./bridge";
+import { appCommand } from "./bridge";
 import type { ProjectNode } from "./types";
 
 type RuntimeProjection = {
@@ -17,7 +17,7 @@ export function useProjectTreeRuntimeProjection(
     void import("./projectTreeRuntime").then((runtime) => {
       if (active) projectionRef.current = runtime.bindProjectTreeRuntime(
         setTree,
-        () => app.GetProjectTreeRuntimeSnapshot?.(),
+        () => appCommand("GetProjectTreeRuntimeSnapshot")?.(),
         excludedTopicIds,
       );
     }).catch(() => {});

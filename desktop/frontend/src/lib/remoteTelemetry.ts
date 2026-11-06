@@ -1,6 +1,6 @@
 import type { BalanceInfo, ContextInfo, CostQuote, JobView, WireUsage } from "./types";
 import type { State } from "./useController";
-import { app } from "./bridge";
+import { app, appCommand } from "./bridge";
 
 type RemoteTelemetryStatus = {
   used?: unknown;
@@ -26,7 +26,8 @@ async function retryRemote<T>(load: () => Promise<T>, maxAttempts: number, cance
 
 export function loadRemoteStatusSnapshot(tabId: string, maxAttempts: number, cancelled: () => boolean, valid: (status: unknown) => boolean, metadataOnly = false) {
   return retryRemote(async () => {
-    const snapshot = metadataOnly && app.RemoteTabMetadata ? await app.RemoteTabMetadata(tabId) : await app.RemoteTabSnapshot(tabId);
+    const metadata = metadataOnly ? appCommand("RemoteTabMetadata") : undefined;
+    const snapshot = metadata ? await metadata(tabId) : await app.RemoteTabSnapshot(tabId);
     const status = snapshot.status ?? await app.RemoteTabStatus(tabId);
     if (!valid(status)) throw new Error("remote status is incomplete");
     return [snapshot, status] as const;

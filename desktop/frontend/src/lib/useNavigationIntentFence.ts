@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import { app } from "./bridge";
+import { app, appCommand } from "./bridge";
 
 interface NavigationIntentRegistration {
   token: string;
@@ -17,7 +17,7 @@ function navigationIntentToken(hint: string): string {
 
 function scheduleNavigationIntent(hint: string): NavigationIntentRegistration {
   const token = navigationIntentToken(hint);
-  const binding = app.RegisterNavigationIntent;
+  const binding = appCommand("RegisterNavigationIntent");
   const registered = navigationIntentRegistrationTail.then(async () => {
     if (typeof binding !== "function") throw new Error("navigation intent binding is unavailable");
     await binding.call(app, token);

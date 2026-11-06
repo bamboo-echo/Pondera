@@ -1,6 +1,6 @@
 import { ErrorMessage } from "./ErrorMessage";
 import { useEffect, useState } from "react";
-import { app } from "../lib/bridge";
+import { app, appCommand } from "../lib/bridge";
 import { useT } from "../lib/i18n";
 import { appliedOnce, type ModelApplicationChoice, type ModelApplicationDetails } from "../lib/modelApplication";
 import { useModelApplicationStatus } from "../lib/useModelApplicationStatus";
@@ -43,7 +43,7 @@ export function ModelApplicationRecovery({ tabId, details, onChange, onUseApplie
     setBusy(true);
     setError("");
     try {
-      if (stop) await app.CancelModelApplicationBlockers?.(tabId, appliedOnce(details), selected);
+      if (stop) await appCommand("CancelModelApplicationBlockers")?.(tabId, appliedOnce(details), selected);
       const result = await app.RetryModelSettingsApplication(tabId);
       const target = result.targets.find(target => target.tabId === tabId);
       if (target?.application === "applied") onChange(undefined);
@@ -61,14 +61,14 @@ export function ModelApplicationRecovery({ tabId, details, onChange, onUseApplie
     {details.connectionTarget && <span>{details.connectionTarget}</span>}
     {details.blockingJobs.length > 0 && <button type="button" onClick={() => setExpanded(!expanded)}>{t("modelApply.jobs")}</button>}
     {allows("retry") && <button type="button" disabled={applying} onClick={() => void retry()}>{t("modelApply.retry")}</button>}
-    {details.canUseApplied && allows("applied_once") && app.StartTurnWithModelApplication &&
+    {details.canUseApplied && allows("applied_once") && appCommand("StartTurnWithModelApplication") &&
       <button type="button" disabled={blocked || applying} onClick={() => onUseApplied(appliedOnce(details))}>{t("modelApply.useCurrent")}</button>}
     {expanded && <div className="model-application-recovery__jobs">
       {details.blockingJobs.map(job => <label key={job.id}>
         <input type="checkbox" checked={selected.includes(job.id)} onChange={event => setSelected(event.target.checked ? [...selected, job.id] : selected.filter(id => id !== job.id))} />
         {job.label || job.id}
       </label>)}
-      {app.CancelModelApplicationBlockers && allows("stop_selected") &&
+      {appCommand("CancelModelApplicationBlockers") && allows("stop_selected") &&
         <button type="button" disabled={applying || selected.length === 0} onClick={() => void retry(true)}>{t("modelApply.stopSelected")}</button>}
     </div>}
     {!details.canUseApplied && details.continuationUnavailable &&

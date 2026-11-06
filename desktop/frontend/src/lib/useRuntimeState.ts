@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { app } from "./bridge";
+import { appCommand } from "./bridge";
 import { runtimeStateStore, selectRuntime, selectRuntimeSession } from "./runtimeStateStore";
 import type { SessionIdentity } from "./sessionIdentity";
 
@@ -12,7 +12,7 @@ export function useRuntimeSession(tabId: string | undefined, identity: SessionId
 
 export function useRuntimeStateSync() {
   useEffect(() => {
-    if (!app.GetRuntimeStateSnapshot) return;
+    if (!appCommand("GetRuntimeStateSnapshot")) return;
     let disposed = false;
     let stop: (() => void) | undefined;
     void import("./runtimeStateSync").then(({ startAppRuntimeStateSync }) => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { app, onRuntimeRebuilt } from "./bridge";
+import { appCommand, onRuntimeRebuilt } from "./bridge";
 import { runtimeStateStore } from "./runtimeStateStore";
 import type { ModelSettingsResult } from "./modelSettingsTypes";
 
@@ -8,7 +8,8 @@ export function useModelApplicationStatus(tabId?: string) {
   const [target,setTarget]=useState<ModelSettingsResult["targets"][number]>();
   useEffect(()=>{
     setTarget(undefined);
-    if(!tabId || !app.GetModelSettingsApplication) return;
+    const read = appCommand("GetModelSettingsApplication");
+    if(!tabId || !read) return;
     let active=true, reading=false, pending=false;
     const refresh=async()=>{
       if(reading){pending=true;return;}
@@ -16,7 +17,7 @@ export function useModelApplicationStatus(tabId?: string) {
       do {
         pending=false;
         try {
-          const result=await app.GetModelSettingsApplication();
+          const result=await read();
           if(active) setTarget(result.targets.find(item=>item.tabId===tabId));
         } catch { /* Keep confirmed status on transport failure. */ }
       } while(active && pending);

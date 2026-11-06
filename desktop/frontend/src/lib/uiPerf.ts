@@ -1,4 +1,4 @@
-import { app, appCommandAvailable } from "./bridge";
+import { appCommand } from "./bridge";
 
 // UI latency telemetry: turn-scoped, content-free counters and percentiles for
 // the streaming render pipeline. Everything reported is a bounded (signal,
@@ -233,9 +233,10 @@ export const uiPerfTracker: UIPerfTracker = createUIPerfTracker((signals) => {
   // Older shells and lightweight browser/test bridge doubles may not expose
   // the optional telemetry endpoint. Diagnostics must never turn a completed
   // turn into a rejected event handler in those environments.
-  if (!appCommandAvailable("RecordUIPerf")) return;
+  const record = appCommand("RecordUIPerf");
+  if (!record) return;
   try {
-    void Promise.resolve(app.RecordUIPerf(signals)).catch(() => {});
+    void Promise.resolve(record(signals)).catch(() => {});
   } catch {
     // A partially initialized desktop binding can still throw synchronously.
   }

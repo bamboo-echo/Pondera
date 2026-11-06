@@ -21,8 +21,8 @@ export async function submitTurn(
 ): Promise<SubmitOutcome> {
   let receipt: unknown;
   if (structured?.modelApplicationChoice) {
-    if (!app.StartTurnWithModelApplication) throw new Error("Model application choice is unsupported by this host");
-    const result=await app.StartTurnWithModelApplication(tabId,submissionId,{
+    if (!appTargetSupports(app, "StartTurnWithModelApplication")) throw new Error("Model application choice is unsupported by this host");
+    const result=await app.StartTurnWithModelApplication!(tabId,submissionId,{
       input:structured.input,display:structured.display,original,
       goal:initialGoal?.goal,toolApprovalMode:initialGoal?.toolApprovalMode,
       invocations:structured.invocations,attachments:structured.attachments ?? [],

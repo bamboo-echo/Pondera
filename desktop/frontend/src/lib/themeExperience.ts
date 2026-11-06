@@ -2,7 +2,7 @@
 // and theme gallery. Backend is source of truth for persistence; selected and
 // temporary-preview ids stay in memory only.
 
-import { app, appCommandAvailable } from "./bridge";
+import { app, appCommand } from "./bridge";
 import {
   applyThemePack,
   beginThemePreview,
@@ -51,15 +51,10 @@ export function configuredBaseStyleForSync(view: ThemeExperienceView): ThemeStyl
 
 export async function loadThemeExperience(): Promise<ThemeExperienceView> {
   // Prefer the unified API; fall back for older shells / partial mocks.
-  const api = app as typeof app & {
-    GetThemeExperience?: () => Promise<ThemeExperienceView>;
-    ActivateBaseStyle?: (style: string) => Promise<void>;
-    DisableThemePack?: () => Promise<void>;
-    RestoreGraphiteAppearance?: () => Promise<void>;
-  };
-  if (appCommandAvailable("GetThemeExperience")) {
+  const readExperience = appCommand("GetThemeExperience");
+  if (readExperience) {
     try {
-      const view = await api.GetThemeExperience();
+      const view = await readExperience();
       experienceCache = normalizeExperience(view);
       return experienceCache;
     } catch {
@@ -76,9 +71,9 @@ export async function loadThemeExperience(): Promise<ThemeExperienceView> {
       Settings?: () => Promise<{ desktopTheme?: string; desktopThemeStyle?: string }>;
     };
     const settings =
-      appCommandAvailable("DesktopStartupSettings")
+      appCommand("DesktopStartupSettings")
         ? await settingsApi.DesktopStartupSettings()
-        : typeof settingsApi.Settings === "function"
+        : typeof settingsApi.Settings === "function" && appCommand("Settings")
           ? await settingsApi.Settings()
           : null;
     if (settings) {
@@ -91,9 +86,10 @@ export async function loadThemeExperience(): Promise<ThemeExperienceView> {
 
   let activePack: ThemePackView | null = null;
   let activeThemeId: string | undefined;
+  const readPack = appCommand("GetActiveThemePack");
   try {
-    if (appCommandAvailable("GetActiveThemePack")) {
-      const active = await app.GetActiveThemePack();
+    if (readPack) {
+      const active = await readPack();
       activePack = active?.pack ?? null;
       activeThemeId = active?.activeThemeId || undefined;
     }
@@ -141,9 +137,9 @@ export function applyExperienceToDOM(view: ThemeExperienceView): void {
 }
 
 export async function activateBaseStyle(style: ThemeStyle): Promise<ThemeExperienceView> {
-  const api = app as typeof app & { ActivateBaseStyle?: (style: string) => Promise<void> };
-  if (appCommandAvailable("ActivateBaseStyle")) {
-    await api.ActivateBaseStyle(style);
+  const activate = appCommand("ActivateBaseStyle");
+  if (activate) {
+    await activate(style);
   } else {
     // Legacy fallback: clear pack then set appearance.
     await app.ResetThemePack();
@@ -169,9 +165,9 @@ export async function activateThemePack(id: string): Promise<ThemeExperienceView
 }
 
 export async function disableThemePack(): Promise<ThemeExperienceView> {
-  const api = app as typeof app & { DisableThemePack?: () => Promise<void> };
-  if (appCommandAvailable("DisableThemePack")) {
-    await api.DisableThemePack();
+  const disable = appCommand("DisableThemePack");
+  if (disable) {
+    await disable();
   } else {
     await app.ResetThemePack();
   }
@@ -182,9 +178,9 @@ export async function disableThemePack(): Promise<ThemeExperienceView> {
 }
 
 export async function restoreGraphiteAppearance(): Promise<ThemeExperienceView> {
-  const api = app as typeof app & { RestoreGraphiteAppearance?: () => Promise<void> };
-  if (appCommandAvailable("RestoreGraphiteAppearance")) {
-    await api.RestoreGraphiteAppearance();
+  const restore = appCommand("RestoreGraphiteAppearance");
+  if (restore) {
+    await restore();
   } else {
     await app.ResetThemePack();
     const theme = (experienceCache?.themeMode as Theme) || "auto";

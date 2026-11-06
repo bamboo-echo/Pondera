@@ -1,5 +1,5 @@
 import { noteSessionObservation } from "./sessionObservationDiagnostics";
-import { app } from "./bridge";
+import { app, appCommand } from "./bridge";
 import { bindNativeTranscriptHistory, nativeSnapshotWindow } from "./nativeTranscriptHistory";
 import { entriesFor, registerTranscriptContentRecovery } from "./canonicalTranscriptBackend";
 import { TranscriptFollowClient } from "./transcriptFollowClient";
@@ -156,7 +156,7 @@ export class TranscriptSessionFollowerRuntime {
         if (!local.messageId || this.coverage <= (this.submissionCoverage.get(local.submissionId) ?? this.coverage)) continue;
         const previous = this.confirmationReads.get(local.submissionId);
         if (previous?.pending || previous?.coverage === this.coverage) continue;
-        const read = this.remote ? app.RemoteSessionHistoryWindowForTab : app.SessionHistoryWindowForTab;
+        const read = appCommand(this.remote ? "RemoteSessionHistoryWindowForTab" : "SessionHistoryWindowForTab");
         if (!read) continue;
         const ticket = { coverage: this.coverage, pending: true };
         this.confirmationReads.set(local.submissionId, ticket);

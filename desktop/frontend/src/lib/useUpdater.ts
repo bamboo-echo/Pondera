@@ -1,5 +1,5 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { app, appCommandAvailable, onUpdaterProgress } from "./bridge";
+import { app, appCommand, onUpdaterProgress } from "./bridge";
 import type { UpdateInfo } from "./types";
 
 // useUpdater drives the auto-update state machine shared by the top banner and the
@@ -332,8 +332,9 @@ function useUpdaterInternal(): Updater {
     const operation = beginOperation(active.channel || "stable", "abandoning");
     setStatus({ kind: "checking" });
     try {
-      if (appCommandAvailable("AbandonPendingUpdate")) {
-        await app.AbandonPendingUpdate!();
+      const abandon = appCommand("AbandonPendingUpdate");
+      if (abandon) {
+        await abandon();
       }
       if (!isCurrentOperation(operation)) return;
       completeOperation(operation);

@@ -17,7 +17,7 @@ import { createControllerModelCommands } from "./controllerModelCommands";
 import { compactArchivedToolItems } from "./archivedToolItems";
 import { addBreadcrumb } from "./breadcrumbs";
 import { desktopHost } from "./desktopHost";
-import { app, appCommandAvailable, onEvent, onReady, onRuntimeRebuilt, onTabMeta, onTopicActivation } from "./bridge";
+import { app, appCommand, onEvent, onReady, onRuntimeRebuilt, onTabMeta, onTopicActivation } from "./bridge";
 import { startControllerEventRecovery } from "./controllerEventRecovery";
 import { metaFromTab } from "./controllerTabMeta";
 import { outputQuarters, tokensFromQuarters, unbilledOutputTokens, type TurnRateSample } from "./turnMetrics";
@@ -3741,7 +3741,7 @@ export function useController() {
   const steerForTab = useCallback(async (tabId: string, text: string) => {
     if (!tabId) throw new Error(t("composer.workspaceStarting"));
     const state = statesRef.current.get(tabId);
-    const target = await app.CaptureInboxTarget?.(tabId, sessionIdentityRoute(state?.meta) ?? "");
+    const target = await appCommand("CaptureInboxTarget")?.(tabId, sessionIdentityRoute(state?.meta) ?? "");
     const { enqueueGuidanceForTarget } = await import("./inboxGuidanceSubmit");
     await enqueueGuidanceForTarget(app, target, tabId, text, state?.activeTurnId);
     // queued_followup is success: the instruction is durable and will run at
@@ -3777,8 +3777,8 @@ export function useController() {
     try {
       let turnId = statesRef.current.get(tabId)?.activeTurnId;
       const exactAPIAvailable = inboxItemIDs.length > 0
-        ? appCommandAvailable("InterruptTurnWithInboxItemsForTab")
-        : appCommandAvailable("InterruptTurnForTab");
+        ? appCommand("InterruptTurnWithInboxItemsForTab")
+        : appCommand("InterruptTurnForTab");
       if (!turnId && exactAPIAvailable) {
         turnId = await resolveActiveTurnId(app, tabId);
       }
@@ -4154,8 +4154,9 @@ export function useController() {
       const switchStarted = performance.now();
       let phases: import("./sessionDiagnostics").HistorySwitchPhases | void;
       try {
-        if (!app.ResumeTranscriptSessionForTab) throw new Error("Transcript v2 requires an updated Desktop");
-        phases = await app.ResumeTranscriptSessionForTab(targetTabId, path);
+        const resume = appCommand("ResumeTranscriptSessionForTab");
+        if (!resume) throw new Error("Transcript v2 requires an updated Desktop");
+        phases = await resume(targetTabId, path);
       } catch {
         if (!isNavigationIntentCurrent(navigationSeq) || !sessionLoadCurrent(targetTabId, seq)) return terminal("superseded");
         return failSessionNavigation(navigationSeq, targetTabId);
@@ -4194,8 +4195,9 @@ export function useController() {
       const switchStarted = performance.now();
       let phases: import("./sessionDiagnostics").HistorySwitchPhases | void;
       try {
-        if (!app.OpenChannelTranscriptSessionForTab) throw new Error("Transcript v2 requires an updated Desktop");
-        phases = await app.OpenChannelTranscriptSessionForTab(tabId, path);
+        const open = appCommand("OpenChannelTranscriptSessionForTab");
+        if (!open) throw new Error("Transcript v2 requires an updated Desktop");
+        phases = await open(tabId, path);
       } catch {
         if (!isNavigationIntentCurrent(navigationSeq) || !sessionLoadCurrent(tabId, seq)) return terminal("superseded");
         return failSessionNavigation(navigationSeq, tabId);

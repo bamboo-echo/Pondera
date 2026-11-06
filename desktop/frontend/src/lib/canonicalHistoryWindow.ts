@@ -1,4 +1,4 @@
-import { app, appCommandAvailable } from "./bridge";
+import { appCommand } from "./bridge";
 import { asArray } from "./array";
 import { entriesFor } from "./canonicalTranscriptBackend";
 import { readBoundHistoryWindow } from "./historyReadBinding";
@@ -16,19 +16,21 @@ function unsupportedWindow(): HistoryWindowPageView {
 export async function readCanonicalHistoryWindow(tabId: string, req: HistoryWindowRequestView, remote: boolean): Promise<HistoryWindowPageView> {
   let page: HistoryWindowPage;
   if (remote) {
-    if (!appCommandAvailable("RemoteSessionHistoryWindowForTab")) {
+    const read = appCommand("RemoteSessionHistoryWindowForTab");
+    if (!read) {
       return unsupportedWindow();
     }
-    page = await app.RemoteSessionHistoryWindowForTab(tabId, req);
+    page = await read(tabId, req);
   } else {
 	const bound = await readBoundHistoryWindow(tabId, req);
 	if (bound && "entries" in bound) return bound;
 	if (bound) page = bound;
 	else {
-    if (!appCommandAvailable("SessionHistoryWindowForTab")) {
+    const readLocal = appCommand("SessionHistoryWindowForTab");
+    if (!readLocal) {
       return unsupportedWindow();
     }
-    page = await app.SessionHistoryWindowForTab(tabId, req);
+    page = await readLocal(tabId, req);
 	}
   }
   const status = (page.status || "ready") as HistoryWindowPageView["status"];

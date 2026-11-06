@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Folder, Image } from "lucide-react";
-import { app, appCommandAvailable } from "../lib/bridge";
+import { app, appCommand } from "../lib/bridge";
 import { sortDisplayAttachments, type DisplayAttachment } from "../lib/attachmentDisplay";
 import { useT } from "../lib/i18n";
 import { ImageViewer } from "./ImageViewer";
@@ -8,17 +8,19 @@ import { Tooltip } from "./Tooltip";
 
 function loadPreview(tabId: string, attachment: DisplayAttachment): Promise<string> {
   const { path } = attachment;
-  if (path.startsWith("draft:") && appCommandAvailable("ReadDraftImageForTab")) {
-    return app.ReadDraftImageForTab(tabId, path.slice("draft:".length));
+  const readDraft = appCommand("ReadDraftImageForTab");
+  if (path.startsWith("draft:") && readDraft) {
+    return readDraft(tabId, path.slice("draft:".length));
   }
-  if (path.startsWith("attachment:") && appCommandAvailable("ReadSessionAttachmentForTab")) {
+  const readAttachment = appCommand("ReadSessionAttachmentForTab");
+  if (path.startsWith("attachment:") && readAttachment) {
     const digest = path.slice("attachment:".length).slice(0, 64);
     const mime = attachment.mime || (attachment.ext === "JPG" || attachment.ext === "JPEG" ? "image/jpeg" : `image/${attachment.ext.toLowerCase() || "png"}`);
     return import("../lib/sessionAttachmentRead").then(module => module.readSessionAttachmentDataURL(
       tabId,
       digest,
       mime,
-      (id, nextDigest, offset) => app.ReadSessionAttachmentForTab!(id, nextDigest, offset),
+      (id, nextDigest, offset) => readAttachment(id, nextDigest, offset),
     ));
   }
   return app.AttachmentDataURLForTab(tabId, path);

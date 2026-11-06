@@ -1,4 +1,4 @@
-import type { AppBindings } from "./bridge";
+import { appTargetSupports, type AppBindings } from "./bridge";
 import type { StructuredInvocationSubmit } from "./invocationDisplay";
 import { pendingFollowups, type PendingFollowup } from "./pendingFollowup";
 import { formatInboxError } from "./inboxError";
@@ -56,8 +56,8 @@ export function createTransientGuidance(context: RetryContext) {
           return;
         }
         try {
-          const target = app.CaptureInboxTarget
-            ? await app.CaptureInboxTarget(options.submitTabId, options.sessionPath)
+          const target = appTargetSupports(app, "CaptureInboxTarget")
+            ? await app.CaptureInboxTarget!(options.submitTabId, options.sessionPath)
             : undefined;
           const receipt = await enqueueComposerGuidance(app, { ...request, target }, options.queueOnly, options.turnId);
           if (receipt?.error) throw new Error(receipt.error);
@@ -114,9 +114,9 @@ export function createTransientGuidance(context: RetryContext) {
 }
 
 export async function captureStableInboxTarget(app: AppBindings, tabId: string, sessionPath: string) {
-  if (!app.CaptureInboxTarget) return undefined;
+  if (!appTargetSupports(app, "CaptureInboxTarget")) return undefined;
   for (let attempt = 0; ; attempt++) {
-    try { return await app.CaptureInboxTarget(tabId, sessionPath); }
+    try { return await app.CaptureInboxTarget!(tabId, sessionPath); }
     catch (error) {
       if (!isTransientInboxTargetError(error) || attempt >= TRANSIENT_GUIDANCE_RETRY_DELAYS_MS.length) throw error;
       await new Promise(resolve => window.setTimeout(resolve, TRANSIENT_GUIDANCE_RETRY_DELAYS_MS[attempt]));

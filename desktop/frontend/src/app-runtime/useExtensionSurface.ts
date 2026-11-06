@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { app } from "../lib/bridge";
+import { appCommand } from "../lib/bridge";
 import { useCommittedCommand } from "../lib/useCommittedCommand";
 import { hasSessionGeneration } from "../lib/sessionIdentity";
 
@@ -64,10 +64,11 @@ export function useExtensionSurface(input: {
     const requestKey = formKey;
     setBusyFormKey(requestKey);
     try {
-      if (!app.SubmitExtensionFormExact || !pending.formInstanceExact || !target.sessionId || !hasSessionGeneration(input.sessionGeneration) || !target.pluginGeneration || !target.formInstanceId) {
+      const submitExact = appCommand("SubmitExtensionFormExact");
+      if (!submitExact || !pending.formInstanceExact || !target.sessionId || !hasSessionGeneration(input.sessionGeneration) || !target.pluginGeneration || !target.formInstanceId) {
         throw new Error("Exact extension form submission is unavailable; refresh or upgrade Pondera.");
       }
-      await app.SubmitExtensionFormExact(target, values);
+      await submitExact(target, values);
       dismissForm(target.tabId, identity);
     } catch (err) {
       if (visibleFormKeyRef.current === requestKey) showToast(err instanceof Error ? err.message : String(err), "error");
@@ -93,8 +94,9 @@ export function useExtensionSurface(input: {
     const requestKey = formKey;
     setBusyFormKey(requestKey);
     try {
-      if (app.SubmitExtensionFormExact && pending.formInstanceExact && target.tabId && target.sessionId && hasSessionGeneration(input.sessionGeneration) && target.pluginGeneration && target.formInstanceId) {
-        await app.SubmitExtensionFormExact(target, { cancelled: true }).catch(() => {});
+      const submitExact = appCommand("SubmitExtensionFormExact");
+      if (submitExact && pending.formInstanceExact && target.tabId && target.sessionId && hasSessionGeneration(input.sessionGeneration) && target.pluginGeneration && target.formInstanceId) {
+        await submitExact(target, { cancelled: true }).catch(() => {});
       }
       dismissForm(target.tabId, identity);
     } finally {

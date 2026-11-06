@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { app, type DesktopShellStatusView } from "../lib/bridge";
+import { app, appCommand, type DesktopShellStatusView } from "../lib/bridge";
 import { desktopHost } from "../lib/desktopHost";
 
 export function DesktopCloseBehaviorHint({
@@ -23,7 +23,7 @@ export function DesktopCloseBehaviorHint({
         reason: typeof candidate.reason === "string" ? candidate.reason : undefined,
       });
     };
-    const getStatus = app.GetDesktopShellStatus;
+    const getStatus = appCommand("GetDesktopShellStatus");
     if (typeof getStatus === "function") void getStatus.call(app).then(update).catch(() => undefined);
     const host = desktopHost();
     const off = host.kind === "none" ? undefined : host.events.on("desktop:shell-status", update);

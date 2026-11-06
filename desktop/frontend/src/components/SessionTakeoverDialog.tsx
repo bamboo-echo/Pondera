@@ -2,7 +2,7 @@ import { ErrorMessage } from "./ErrorMessage";
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../lib/i18n";
-import { app } from "../lib/bridge";
+import { app, appCommand } from "../lib/bridge";
 import type { SessionTakeoverView, TabMeta } from "../lib/types";
 import type { HistoricalSourceUpdateView, SessionPreparationView } from "../generated/desktopContract.generated";
 import { historicalPreparationSnapshot, reconcileHistoricalPreparation, subscribeHistoricalPreparation, type DesktopNavigationIntent } from "../app-runtime/desktopNavigationOwner";
@@ -162,13 +162,14 @@ export function HistoricalSessionBanners({ tab, navigate, captureNavigation, ope
     setUpdate(null);
     setUpdateError(null);
     setBusy(false);
-    if (!activeSessionId || activeHostId !== "local" || !app.CheckHistoricalSourceUpdate) return () => { current = false; };
+    const checkSource = appCommand("CheckHistoricalSourceUpdate");
+    if (!activeSessionId || activeHostId !== "local" || !checkSource) return () => { current = false; };
     const ref = { hostId: activeHostId, sessionId: activeSessionId };
     const run = async () => {
-      let next = await app.CheckHistoricalSourceUpdate!({ ref });
+      let next = await checkSource({ ref });
       for (let attempt = 0; current && next.status === "checking" && attempt < 60; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 500));
-        if (current) next = await app.CheckHistoricalSourceUpdate!({ ref });
+        if (current) next = await checkSource({ ref });
       }
       if (!current || next.status !== "available" || !next.version || !next.source) return;
       try {
@@ -187,16 +188,19 @@ export function HistoricalSessionBanners({ tab, navigate, captureNavigation, ope
     setUpdate(null);
   };
   const importUpdate = () => {
-    if (!update?.source || !update.version || !app.PrepareHistoricalSourceVersion) return;
+    const prepareVersion = appCommand("PrepareHistoricalSourceVersion");
+    if (!update?.source || !update.version || !prepareVersion) return;
     const { source, version } = update;
-    return runPreparation(() => app.PrepareHistoricalSourceVersion!(source, version));
+    return runPreparation(() => prepareVersion(source, version));
   };
   const importSource = () => {
-    if (!historicalSource || !app.PrepareSession) return;
-    return runPreparation(() => app.PrepareSession!({ source: historicalSource }));
+    const prepare = appCommand("PrepareSession");
+    if (!historicalSource || !prepare) return;
+    return runPreparation(() => prepare({ source: historicalSource }));
   };
   const runPreparation = async (start: () => Promise<SessionPreparationView>) => {
-    if (busy || !app.GetSessionPreparation) return;
+    const readPreparation = appCommand("GetSessionPreparation");
+    if (busy || !readPreparation) return;
     const expectedActive = activeKey;
     const operation = ++updateOperation.current;
     const navigationCurrent = captureNavigation?.() ?? (() => activeKeyRef.current === expectedActive);
@@ -208,7 +212,7 @@ export function HistoricalSessionBanners({ tab, navigate, captureNavigation, ope
       while (current() && !terminalPreparation.has(view.status)) {
         await new Promise(resolve => setTimeout(resolve, 300));
         if (!current()) return;
-        view = await app.GetSessionPreparation(view.operationId);
+        view = await readPreparation(view.operationId);
       }
       if (!current()) return;
       if (view.status !== "ready" || !view.target) {
@@ -226,12 +230,12 @@ export function HistoricalSessionBanners({ tab, navigate, captureNavigation, ope
     finally { if (mounted.current && operation === updateOperation.current) setBusy(false); }
   };
   const cancelPreparation = async () => {
-    if (!preparation || !app.CancelSessionPreparation || cancellingOperationRef.current === preparation.operationId) return;
+    if (!preparation || !appCommand("CancelSessionPreparation") || cancellingOperationRef.current === preparation.operationId) return;
     const operationId = preparation.operationId;
     cancellingOperationRef.current = operationId;
     setCancellingOperationId(operationId);
     try {
-      const view = await app.CancelSessionPreparation(operationId);
+      const view = await app.CancelSessionPreparation!(operationId);
       if (mounted.current) reconcileHistoricalPreparation(preparation, view);
     } catch { /* The preparation poll remains the authority after a failed cancellation request. */ }
     finally {

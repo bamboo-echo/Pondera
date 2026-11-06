@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { app } from "./bridge";
+import { appCommand } from "./bridge";
 import { inboxQueueDrafts, type QueueEditDraft } from "./inboxQueueDrafts";
 import type { InboxQueueRequest, InboxQueueResult } from "./inboxQueueCommands";
 import type { InboxSnapshotLike } from "./composerInboxQueue";
@@ -32,15 +32,17 @@ export function useInboxQueueEditor(scope: string, tabId: string, sessionPath: s
   };
   const capture = async (check: () => void) => {
     check();
-    if (!app.CaptureInboxTarget || !app.InboxQueueForTarget) throw new Error("unsupported");
-    const target = await app.CaptureInboxTarget(tabId, sessionPath);
+    const captureTarget = appCommand("CaptureInboxTarget");
+    if (!captureTarget || !appCommand("InboxQueueForTarget")) throw new Error("unsupported");
+    const target = await captureTarget(tabId, sessionPath);
     check();
     return target;
   };
   const call = async (target: InboxTarget, request: InboxQueueRequest, check: () => void): Promise<InboxQueueResult> => {
     check();
-    if (!app.InboxQueueForTarget) throw new Error("unsupported");
-    const result = await app.InboxQueueForTarget(target, request);
+    const queue = appCommand("InboxQueueForTarget");
+    if (!queue) throw new Error("unsupported");
+    const result = await queue(target, request);
     check();
     if (result.snapshot?.sessionPath === sessionPath) apply(result.snapshot);
     return result;

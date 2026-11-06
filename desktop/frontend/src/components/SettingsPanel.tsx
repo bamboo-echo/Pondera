@@ -23,7 +23,7 @@ import { RuleList } from "./SettingsRuleList";
 import { CopyButton } from "./CopyButton";
 import { CHANNEL_ICONS } from "./channelIcons";
 import { botAccessEntryCount, botAccessReady, botConnectionCredentialSummary, botConnectionLabel, botConnectionScopeLabel, botConnectionSecretEnv, botConnectionSecretPatch, botInstallTargetForConnection, botInstallTargetMatchesConnection, botTargetHint, botTargetLabel, diagnosticMessage, diagnosticReportDetail, firstConnectionRemote, formatInstallTimeLeft, formatInstallUserCode, qqBotAdded, type BotInstallTarget, type BotOfficialInstallTarget } from "./botConnectionSettings";
-import { app, appCommandAvailable, COMPACT_RATIO_MAX_PERCENT, COMPACT_RATIO_MIN_PERCENT, onRuntimeRebuilt, openExternal } from "../lib/bridge";
+import { app, appCommand, COMPACT_RATIO_MAX_PERCENT, COMPACT_RATIO_MIN_PERCENT, onRuntimeRebuilt, openExternal } from "../lib/bridge";
 import { normalizeLangPref, useI18n, type DictKey, type LangPref } from "../lib/i18n";
 import { createLatestRequestGate, mergedFetchedProviderModels, mergeProviderModelContextWindows, providerApiKeyEnvForSave, providerDefaultModel, providerIsConfigured, providerModelCandidates, providerModelContextWindowDrafts, providerRequiresKey } from "../lib/providerModels";
 import { cachedFetchProviderModelCatalog, cachedFetchProviderModels, invalidateProviderCacheByAPIKeyEnv, shouldSkipAutoRefresh } from "../lib/providerModelCache";
@@ -2161,7 +2161,7 @@ function BotsSection({ s, busy, apply, initialFocus }: BotsSectionProps) {
   useEffect(() => {
     let cancelled = false;
     const refresh = () => {
-      if (!appCommandAvailable("BotRuntimeStatus")) return;
+      if (!appCommand("BotRuntimeStatus")) return;
       void app.BotRuntimeStatus()
         .then((status) => {
           if (!cancelled) setRuntimePlatforms(status.platforms ?? {});
@@ -5097,7 +5097,7 @@ export function ProvidersSection({ s, busy, apply, onboarding, focusProvider, fo
             detail
             onCopy={() => void apply(() => saveModelSettings(s, {kind: "connection_add", name: group.providers[0].name, key: ""}))}
             onRename={(label) => apply(() => {
-              if (!appCommandAvailable("RenameProviderConnections")) throw new Error(t("settings.connections.restartRequired"));
+              if (!appCommand("RenameProviderConnections")) throw new Error(t("settings.connections.restartRequired"));
               return saveModelSettings(s, {kind: "rename", names: group.providers.map(p => p.name), ref: label});
             })}
             group={group}

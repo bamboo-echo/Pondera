@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import { normalizeAddress, zoomStep } from "./browserAddress";
-import { app } from "./bridge";
+import { appCommand } from "./bridge";
 import type { BrowserDownloadView, BrowserNavigationTarget, BrowserTabView, DesktopBrowserHost } from "./browserHost";
 
 /** Tabs the user opens from the panel belong to this pseudo task and show beside every task's tabs. */
@@ -174,8 +174,8 @@ export const useBrowserPanelStore = create<BrowserPanelState>((set, get) => {
       if (!host) return;
       const closingURL = get().tabs.find(tab => tab.id === tabId)?.url;
       await call(host.close(tabId).then(() => project({ tabs: get().tabs.filter((tab) => tab.id !== tabId) })));
-      const revokePreview = (app as Partial<typeof app>).RevokeWorkspaceBrowserPreview;
-      if (closingURL && typeof revokePreview === "function") void revokePreview.call(app, closingURL).catch(() => undefined);
+      const revokePreview = appCommand("RevokeWorkspaceBrowserPreview");
+      if (closingURL && revokePreview) void revokePreview(closingURL).catch(() => undefined);
     },
     async navigate(tabId, target) {
       const { host } = get();

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRuntimeSession } from "./useRuntimeState";
 import { createLegacyRemotePolicyNoticeTracker } from "./legacyRemotePolicyNotice";
-import { app, onRemoteTabEvent, onRemoteTabState } from "./bridge";
+import { app, appCommand, onRemoteTabEvent, onRemoteTabState } from "./bridge";
 import { queuedFollowupOutcome } from "./pendingFollowup";
 import { onRemoteTabUpdated } from "./remoteTabEvents";
 import { hydrateRemoteTelemetry, loadRemoteStatusSnapshot } from "./remoteTelemetry";
@@ -533,10 +533,12 @@ export function useRemoteSession(tabId: string | undefined, initial?: RemoteTabS
     runtimeAtActivityRef.current = runtimeState.state;
     if(!unresolved) setTranscript((s) => reducer(s, { type: "user", text: displayText.trim(), submitText:trimmed, seq: s.seq, submissionId }));
     try {
+      const withApplication = appCommand("SubmitRemoteTabWithModelApplication");
+      const withSubmission = appCommand("SubmitRemoteTabWithSubmission");
       if (choice) {
-        if (!app.SubmitRemoteTabWithModelApplication) throw new Error("Upgrade Desktop to use model application recovery");
-        await app.SubmitRemoteTabWithModelApplication(tabId, trimmed, submissionId, choice);
-      } else if (app.SubmitRemoteTabWithSubmission) await app.SubmitRemoteTabWithSubmission(tabId, trimmed, submissionId);
+        if (!withApplication) throw new Error("Upgrade Desktop to use model application recovery");
+        await withApplication(tabId, trimmed, submissionId, choice);
+      } else if (withSubmission) await withSubmission(tabId, trimmed, submissionId);
       else await app.SubmitRemoteTab(tabId, trimmed);
       if (current()) setTranscript(s => reducer(s, { type: "send_confirmed", submissionId }));
     } catch (e) {

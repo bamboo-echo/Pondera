@@ -1,4 +1,4 @@
-import { app } from "./bridge";
+import { app, appCommand } from "./bridge";
 import { useBrowserPanelStore, waitForBrowserHost } from "./browserPanelStore";
 import { useActivityBarStore } from "../store/activityBar";
 import { useLayoutStore } from "../store/layout";
@@ -110,11 +110,11 @@ async function openBrowserPreview(ref: FileResourceRef, userInitiated = false): 
     operation.finish();
     return owned ? outcome : CANCELLED;
   };
-  const openFilePreview = (app as Partial<typeof app>).OpenFileBrowserPreviewForTab;
-  if (typeof openFilePreview === "function") {
+  const openFilePreview = appCommand("OpenFileBrowserPreviewForTab");
+  if (openFilePreview) {
     try {
       if (!operation.owns()) return finish(CANCELLED);
-      const result = await openFilePreview.call(app, ref.tabId, {
+      const result = await openFilePreview(ref.tabId, {
         source: ref.source,
         path: ref.path,
         toolCallId: ref.source === "presented" ? ref.toolCallId : undefined,

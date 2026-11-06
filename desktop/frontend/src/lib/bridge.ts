@@ -1169,68 +1169,22 @@ function elapsedMs(startedAt: number): number {
   return Math.max(0, Math.round(now - startedAt));
 }
 
-// Optional desktop commands are absent from older preloads. `app[method]` is now
-// always callable (a missing command rejects with a clear error instead of a
-// synchronous TypeError), so feature detection must ask this helper rather than
-// `typeof app.X === "function"`, which would now always say yes.
-function supportsCurrentApp(method: string): boolean {
-  const host = desktopHost().app;
-  if (host) return typeof (host as unknown as Record<string, unknown>)[method] === "function";
-  // The dev mock claims every non-Inbox command: the proxy below synthesizes an
-  // attachment fallback for those even when the mock table has no entry.
-  return typeof (getMock() as unknown as Record<string, unknown>)[method] === "function" || !method.includes("Inbox");
-}
-
-export function appCommandAvailable(method: string): boolean {
-  return supportsCurrentApp(method);
-}
-
-// Older preloads legitimately lack these commands, and their callers still tell
-// presence apart with `typeof app.X`, truthiness or optional calls. They must
-// keep resolving to undefined; every other missing PascalCase command gets the
-// rejecting stub below so a blind call fails loudly instead of as a TypeError.
-const DEFERRED_HOST_COMMANDS = new Set([
-  "StartTurnForTab", "StartTurnForTabWithDrafts", "StartTurnWithModelApplication",
-  "SubmitRemoteTabWithModelApplication", "SubmitRemoteTabWithSubmission", "SubmitExtensionFormExact",
-  "ResolveRemoteTabPromptExact", "SubmitRemoteTabExtensionFormExact",
-  "EnqueueInboxSteerForTurn", "EnqueueInboxSteer", "SteerInboxItemForTurn",
-  "CaptureInboxTarget", "InboxQueueForTarget", "InboxSnapshot",
-  "CancelSessionForTab", "CancelTabWithInboxItems", "CancelTabWithInboxItemsResult",
-  "InterruptTurnForTab", "InterruptTurnWithInboxItemsForTab",
-  "ApproveTabForTurn", "ResolvePlanDecisionTabForTurn", "ResolveRecoveryTabForTurn",
-  "AnswerMCPInteractionForTurn", "AnswerPromptForTab", "ResolvePromptForTab",
-  "PendingPromptIdentitiesForTab", "ReplayPendingPromptIdentitiesForTab", "ReplayPendingPromptsForTab",
-  "TurnEventsForTab", "TranscriptReplayForTab", "ResumeTranscriptSessionForTab",
-  "OpenChannelTranscriptSessionForTab",
-  "ReadDraftImageForTab", "ReadSessionAttachmentForTab",
-  "ReadSessionHistoryOutline", "SearchSessionHistoryRead", "BeginSessionHistoryReadForTab",
-  "ReleaseSessionHistoryRead", "ReadSessionHistoryWindow", "SessionHistoryOutlineForTab",
-  "RemoteSessionHistoryOutlineForTab", "RemoteSessionHistoryWindowForTab", "SessionHistoryWindowForTab",
-  "ForkTargetsForTab", "GetSessionOrganization", "GetProjectGroups",
-  "ReleaseAttachmentTarget", "AttachDroppedForTarget", "AttachmentDataURLForTarget", "StageImageForTarget",
-  "ListHistoricalSessions", "GetHistoricalImportStatus", "CheckHistoricalSourceUpdate",
-  "PrepareHistoricalSourceVersion", "PrepareSession", "GetSessionPreparation",
-  "CancelModelApplicationBlockers", "GetModelSettingsApplication", "GetProjectTreeRuntimeSnapshot",
-  "RemoteTabMetadata", "SyncRuntimeState", "GetRuntimeStateSnapshot",
-  "RegisterNavigationIntent", "WorkspaceRevisionForTab",
-  "BotRuntimeStatus", "RenameProviderConnections", "ReconcileRecoveryVersions",
-  "GetActiveThemePack", "GetThemeExperience", "DesktopStartupSettings", "Settings",
-  "ActivateBaseStyle", "DisableThemePack", "RestoreGraphiteAppearance",
-  "RecordUIPerf", "AbandonPendingUpdate", "OpenUserConfigPath", "ReloadUserConfig",
-  "GetDesktopShellStatus", "RevokeWorkspaceBrowserPreview", "OpenFileBrowserPreviewForTab",
-]);
+// A command the preload contract does not advertise is callable but refuses:
+// calling it rejects with a clear error instead of throwing a synchronous
+// TypeError at the call site. Feature detection must therefore consult the
+// binding itself (via appCommand) rather than `typeof app.X === "function"`.
+const unavailable = (..._args: unknown[]) => Promise.reject(new Error("desktop command unavailable"));
 
 // The same question for code that receives an app binding as a parameter: tests
-// inject plain objects, while the real bridge proxy exposes __supportsCommand.
+// inject plain objects, while the real binding is the bridge proxy, whose
+// missing commands all resolve to the shared refusal above.
 export function appTargetSupports(target: unknown, method: string): boolean {
-  const probe = (target as { __supportsCommand?: (name: string) => boolean } | null | undefined)?.__supportsCommand;
-  if (typeof probe === "function") return probe(method);
-  return typeof (target as Record<string, unknown> | null | undefined)?.[method] === "function";
+  const binding = (target as Record<string, unknown> | null | undefined)?.[method];
+  return typeof binding === "function" && binding !== unavailable;
 }
 
 export const app: AppBindings = new Proxy({} as AppBindings, {
   get(_t, prop) {
-    if (prop === "__supportsCommand") return supportsCurrentApp;
     const host = desktopHost().app, target = host ?? getMock();
     let v = (target as unknown as Record<string, unknown>)[String(prop)];
     // Inbox commands are optional. A synthesized attachment fallback would
@@ -1239,13 +1193,11 @@ export const app: AppBindings = new Proxy({} as AppBindings, {
         !prop.includes("Inbox")) v = (...args: unknown[]) => import("./attachmentBindings").then(
       module => module.callMockAttachment(target, prop as keyof AttachmentBindings, args));
     if (typeof v !== "function") {
-      // A command the shell does not implement must fail like a rejected call, not
-      // as a synchronous TypeError at the call site. Only PascalCase command names
+      // The Electron host proxy yields undefined for any command the live
+      // contract omits; a command name must then fail like a rejected call,
+      // not as a synchronous TypeError at the call site. Only command names
       // get the stub; symbols and inspection properties keep their real value.
-      if (host && typeof prop === "string" && /^[A-Z][A-Za-z0-9]*$/.test(prop) &&
-          !DEFERRED_HOST_COMMANDS.has(prop)) {
-        return (..._args: unknown[]) => Promise.reject(new Error(`desktop command ${prop} is not available in this build`));
-      }
+      if (host && typeof prop === "string" && /^[A-Z][A-Za-z0-9]*$/.test(prop)) return unavailable;
       return v;
     }
     return (...args: unknown[]) => {
@@ -1275,6 +1227,14 @@ export const app: AppBindings = new Proxy({} as AppBindings, {
     };
   },
 });
+
+// The binding itself, or undefined when the live contract does not advertise it:
+// the shape value-reads and optional calls need, so they stay undefined instead
+// of binding the shared refusal `app` returns for a missing command.
+export function appCommand<K extends keyof AppBindings>(method: K): AppBindings[K] | undefined {
+  const binding = app[method];
+  return binding === unavailable ? undefined : binding;
+}
 
 // openExternal opens a URL in the system browser (so links in rendered markdown
 // don't navigate the webview away from the app). Falls back to window.open in the

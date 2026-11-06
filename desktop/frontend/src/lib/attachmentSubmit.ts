@@ -1,4 +1,4 @@
-import type { AppBindings } from "./bridge";
+import { appTargetSupports, type AppBindings } from "./bridge";
 import type { StructuredInvocationSubmit } from "./invocationDisplay";
 import type { ComposerTarget } from "../generated/desktopContract.generated";
 import type { WorkspaceReference } from "./composerDraftTypes";
@@ -15,7 +15,7 @@ export async function restoreExternalFolderReferences(app: AppBindings, target: 
         throw new Error("External folder changed; reattach the folder before sending");
       }
     }
-  } finally { await app.ReleaseAttachmentTarget?.(token); }
+  } finally { if (appTargetSupports(app, "ReleaseAttachmentTarget")) await app.ReleaseAttachmentTarget!(token); }
 }
 
 export function isExternalWorkspaceReference(ref: WorkspaceReference): boolean {
@@ -40,8 +40,8 @@ export async function attachOrdinaryFile(
 ): Promise<{ kind: string; path: string; isDir?: boolean; displayPath?: string }> {
   const nativePath = getPathForFile?.(file);
   if (nativePath) {
-    if (!app.AttachDroppedForTarget) throw new Error("unsupported: attachments-v2");
-    return app.AttachDroppedForTarget(token, nativePath);
+    if (!appTargetSupports(app, "AttachDroppedForTarget")) throw new Error("unsupported: attachments-v2");
+    return app.AttachDroppedForTarget!(token, nativePath);
   }
   const query = new URLSearchParams({ target: token, name: file.name });
   const response = await fetcher(`/__pondera_attachment_upload?${query}`, {
@@ -93,16 +93,16 @@ export async function prepareImageSubmission(
     for (const [index, item] of attachments.entries()) {
       let draftId = item.draftId;
       if (!draftId && item.recoveryPath) {
-        if (!app.AttachmentDataURLForTarget || !app.StageImageForTarget) throw new Error("unsupported: attachments-v2");
-        const data = await app.AttachmentDataURLForTarget(token, item.recoveryPath);
-        const staged = await app.StageImageForTarget(token, `${submissionId}:restore:${index}`, item.displayName || "image", "", data);
+        if (!appTargetSupports(app, "AttachmentDataURLForTarget") || !appTargetSupports(app, "StageImageForTarget")) throw new Error("unsupported: attachments-v2");
+        const data = await app.AttachmentDataURLForTarget!(token, item.recoveryPath);
+        const staged = await app.StageImageForTarget!(token, `${submissionId}:restore:${index}`, item.displayName || "image", "", data);
         draftId = staged.draftId;
       }
       if (!draftId) throw new Error("Image source is unavailable; reattach the image before sending");
       restored.push({ clientAttachmentId: item.clientAttachmentId || `image-${index + 1}`, draftId });
     }
   } catch (error) {
-    await app.ReleaseAttachmentTarget?.(token).catch(() => {});
+    if (appTargetSupports(app, "ReleaseAttachmentTarget")) await app.ReleaseAttachmentTarget!(token).catch(() => {});
     throw error;
   }
   return {
@@ -120,8 +120,8 @@ export async function prepareImageSubmission(
 }
 
 export function submitAttachmentTurn(app: AppBindings, submissionId: string, structured: StructuredInvocationSubmit, original: string, initialGoal?: { goal: string; toolApprovalMode?: string }) {
-  if (!app.StartTurnForAttachmentTarget || !structured.attachmentTarget) throw new Error("unsupported: attachments-v2");
-  return app.StartTurnForAttachmentTarget(structured.attachmentTarget, submissionId, {
+  if (!appTargetSupports(app, "StartTurnForAttachmentTarget") || !structured.attachmentTarget) throw new Error("unsupported: attachments-v2");
+  return app.StartTurnForAttachmentTarget!(structured.attachmentTarget, submissionId, {
     input: structured.input, display: structured.display, original,
     goal: initialGoal?.goal, toolApprovalMode: initialGoal?.toolApprovalMode,
     invocations: structured.invocations, attachments: structured.attachments ?? [],
@@ -148,10 +148,10 @@ export async function captureAttachmentTarget(
   target: ComposerTarget,
   required: ReadonlyArray<keyof AppBindings>,
 ): Promise<string> {
-  if (!app.CaptureAttachmentTarget || required.some((name) => typeof app[name] !== "function")) {
+  if (!appTargetSupports(app, "CaptureAttachmentTarget") || required.some((name) => !appTargetSupports(app, String(name)))) {
     throw new Error("unsupported: attachments-v2");
   }
-  const captured = await app.CaptureAttachmentTarget(target);
+  const captured = await app.CaptureAttachmentTarget!(target);
   if (!captured.capabilities.includes("attachments-v2")) throw new Error("unsupported: attachments-v2");
   return captured.token;
 }

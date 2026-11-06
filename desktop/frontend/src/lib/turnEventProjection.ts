@@ -1,5 +1,5 @@
 import { asArray } from "./array";
-import { app, appCommandAvailable } from "./bridge";
+import { app, appCommand } from "./bridge";
 import { recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
 import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types";
 
@@ -232,7 +232,7 @@ export class TurnEventProjector {
   }
 
   private requestReplay(tabId: string, afterSeq: number, runtimeEpoch?: string) {
-    if (!this.transport && !appCommandAvailable("TurnEventsForTab") && !appCommandAvailable("TranscriptReplayForTab")) return;
+    if (!this.transport && !appCommand("TurnEventsForTab") && !appCommand("TranscriptReplayForTab")) return;
     if (this.repairByTab.has(tabId)) {
       this.pendingRepairByTab.set(tabId, { afterSeq, runtimeEpoch });
       return;
@@ -260,7 +260,7 @@ export class TurnEventProjector {
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const identity = this.snapshotBoundaryByTab.get(tabId)?.identity;
       const replay = await (this.transport ? this.transport.replay(tabId, cursor, identity) :
-        identity && app.TranscriptReplayForTab ? app.TranscriptReplayForTab(tabId, { identity, after: cursor }) : app.TurnEventsForTab!(tabId, cursor));
+        identity && appCommand("TranscriptReplayForTab") ? app.TranscriptReplayForTab!(tabId, { identity, after: cursor }) : app.TurnEventsForTab!(tabId, cursor));
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const currentEpoch = this.epochByTab.get(tabId);
       if ((requestedEpoch && currentEpoch && requestedEpoch !== currentEpoch) ||

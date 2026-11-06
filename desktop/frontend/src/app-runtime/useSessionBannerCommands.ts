@@ -1,4 +1,4 @@
-import { app } from "../lib/bridge";
+import { app, appCommand } from "../lib/bridge";
 import { useCommittedCommand } from "../lib/useCommittedCommand";
 import { useOverlayStore } from "../store/overlays";
 export type ConfigWarningsReload = (warnings: string[], revision: number) => void;
@@ -25,13 +25,13 @@ export function useSessionBannerCommands(options: { remote: boolean; reloadConfi
   const closeTakeoverDialog = useCommittedCommand(() => setTakeoverDialogTab(null));
 
   const openConfigFile = useCommittedCommand(() => {
-    void app.OpenUserConfigPath?.().catch(() => {});
+    void appCommand("OpenUserConfigPath")?.().catch(() => {});
   });
 
   const reloadConfigFile = useCommittedCommand(() => {
     void (async () => {
       try {
-        const view = await app.ReloadUserConfig?.();
+        const view = await appCommand("ReloadUserConfig")?.();
         options.reloadConfigWarnings(view?.configWarnings ?? [], view?.configWarningsRevision ?? 0);
       } catch {
         /* keep banner */

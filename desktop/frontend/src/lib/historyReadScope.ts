@@ -1,13 +1,13 @@
-import { app, appCommandAvailable } from "./bridge";
+import { app, appCommand } from "./bridge";
 import type { SessionHistoryReadHandle } from "../generated/desktopContract.generated";
 
 export type Binding = { promise: Promise<SessionHistoryReadHandle> };
 const bindings = new Map<string, Binding>();
 
 export function supportsHistoryRead(): boolean {
-  return appCommandAvailable("BeginSessionHistoryReadForTab")
-    && appCommandAvailable("ReleaseSessionHistoryRead")
-    && appCommandAvailable("ReadSessionHistoryWindow");
+  return !!appCommand("BeginSessionHistoryReadForTab")
+    && !!appCommand("ReleaseSessionHistoryRead")
+    && !!appCommand("ReadSessionHistoryWindow");
 }
 
 export function acquireHistoryRead(tabId: string): Binding {

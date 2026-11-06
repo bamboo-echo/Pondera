@@ -13,7 +13,7 @@ import { asArray } from "../lib/array";
 import { filterAtMatches } from "../lib/atMatches";
 import { DedupIndex, sha256, ordinaryFileSource } from "../lib/attachDedup";
 import { splitOversizeAttachments } from "../lib/attachmentLimits";
-import { app, appCommandAvailable, onFilesDropped } from "../lib/bridge";
+import { app, appCommand, onFilesDropped } from "../lib/bridge";
 import { attachmentExt, attachmentName, baseName, formatAttachmentDisplayReference, hasImageAttachments, sortComposerAttachments, type Attachment } from "../lib/composerAttachments";
 import type { PastedBlock, PersistentComposerDraft, PersistentComposerTarget, WorkspaceReference } from "../lib/composerDraftTypes";
 import { sendPersistedComposer, useSessionComposerPersistence } from "../lib/sessionComposerPersistence";
@@ -2312,7 +2312,7 @@ export function Composer({
       else if (persistentDraft?.onTaskError) persistentDraft.onTaskError(persistentDraft.draftId, persistentDraft.generation, formatInboxError(error, locale));
       else showToast(formatInboxError(error, locale), "warn");
 		} finally {
-			if (submissionAttachmentTarget) await app.ReleaseAttachmentTarget?.(submissionAttachmentTarget);
+			if (submissionAttachmentTarget) await appCommand("ReleaseAttachmentTarget")?.(submissionAttachmentTarget);
 			onReleaseSubmit?.(submissionCapture);
       updateSubmittingForDraft(submitDraftKey, false);
     }
@@ -2463,7 +2463,7 @@ export function Composer({
 			}
 		}
 		} finally {
-			await app.ReleaseAttachmentTarget?.(target);
+			await appCommand("ReleaseAttachmentTarget")?.(target);
 		}
 	};
 
@@ -2499,7 +2499,7 @@ export function Composer({
 			}
 		}
 		} finally {
-			await app.ReleaseAttachmentTarget?.(target);
+			await appCommand("ReleaseAttachmentTarget")?.(target);
 		}
 	};
 
@@ -2540,7 +2540,7 @@ export function Composer({
           else if (sourceDraftKey === activeDraftKeyRef.current) showToast(t("composer.pasteImageFailed"), "warn");
         }
 			} finally {
-				await app.ReleaseAttachmentTarget?.(target);
+				await appCommand("ReleaseAttachmentTarget")?.(target);
 				updatePendingPasteForDraft(sourceDraftKey, -1);
       }
     })();
@@ -2586,7 +2586,7 @@ export function Composer({
 				}
 			}
 			} finally {
-				await app.ReleaseAttachmentTarget?.(target);
+				await appCommand("ReleaseAttachmentTarget")?.(target);
 			}
 		})();
 		return trackPersistentTask(sourceDraftKey, task).catch((error) => {
@@ -3042,7 +3042,7 @@ export function Composer({
     setCancelSettlingRevision((value) => value + 1);
     // The durable queue has its own pause/delete controls. Stopping the current
     // task must not discard pending messages or restore truncated previews.
-    const ownedGuidance = appCommandAvailable("InboxQueueForTarget") ? [] : pendingGuidanceRef.current.filter((item) => item.id.startsWith("local-") || item.source === "desktop");
+    const ownedGuidance = appCommand("InboxQueueForTarget") ? [] : pendingGuidanceRef.current.filter((item) => item.id.startsWith("local-") || item.source === "desktop");
     const durableItemIDs = maintenanceActive ? [] : ownedGuidance
       .map((item) => item.id)
       .filter((id) => !id.startsWith("local-"));
@@ -4471,7 +4471,7 @@ export function Composer({
           />
         ) : null
       )}
-      {appCommandAvailable("InboxQueueForTarget") ? <Suspense fallback={null}>
+      {appCommand("InboxQueueForTarget") ? <Suspense fallback={null}>
         <ComposerInboxQueue key={queueScope} scope={queueScope} tabId={tabId || ""} sessionPath={inboxSessionPath || ""}
           items={pendingGuidance} snapshot={inboxSnapshot} disabled={Boolean(disabled || readOnly)} running={running}
           onSnapshot={acceptInboxSnapshot} onRefresh={refreshInboxQueue}

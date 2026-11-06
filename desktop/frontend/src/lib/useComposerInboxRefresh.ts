@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { InboxSnapshotLike } from "./composerInboxQueue";
-import { app, appCommandAvailable } from "./bridge";
+import { app, appCommand } from "./bridge";
 import {
   guidanceFromInboxSnapshot,
   hydrateEmptyGuidancePreviews,
@@ -57,11 +57,12 @@ export function useComposerInboxRefresh(
     if (guidanceDraftKey !== draftKey) return;
     let live = true;
     const fallback = localGuidanceFallback(previewKey);
-    if (!appCommandAvailable("InboxSnapshot")) {
+    const read = appCommand("InboxSnapshot");
+    if (!read) {
       applyQueue(fallback);
       return;
     }
-    void app.InboxSnapshot(tabId || "").then((snap) => {
+    void read(tabId || "").then((snap) => {
       if (!live || !inboxSnapshotBelongsToScope(snap?.sessionPath, inboxSessionKey)) return;
       if (!acceptSnapshot(snap)) return;
       const revision = Number(snap?.revision ?? -1);

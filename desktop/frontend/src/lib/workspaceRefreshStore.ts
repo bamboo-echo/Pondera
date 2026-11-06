@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { app, onEvent } from "./bridge";
+import { appCommand, onEvent } from "./bridge";
 import { tabMetaFallbackDelay } from "./tabMetaRefresh";
 import type { WireWorkspaceChanged, WorkspaceRevisions, WorkspaceWatchState } from "./types";
 
@@ -65,7 +65,7 @@ function ensureEvents(): void {
 }
 
 async function workspaceRevisionForTab(tabId: string) {
-  const binding = app.WorkspaceRevisionForTab;
+  const binding = appCommand("WorkspaceRevisionForTab");
   if (typeof binding !== "function") return undefined;
   return binding(tabId);
 }

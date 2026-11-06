@@ -1,4 +1,4 @@
-import { app } from "./bridge";
+import { app, appCommand } from "./bridge";
 import { desktopHost } from "./desktopHost";
 import { acceptRuntimeState } from "./runtimeStateReducer";
 import { runtimeStateStore, type RuntimeProjection } from "./runtimeStateStore";
@@ -62,8 +62,9 @@ export function startAppRuntimeStateSync() {
       diagnostic: data => console.debug("runtime synchronization", { source: "desktop-runtime", ...data }),
       subscribe: accept => desktopHost().events.on("runtime-state:changed", (snapshot: unknown) => accept(snapshot as RuntimeProjection)),
       read: async () => {
-        if (!app.SyncRuntimeState) return app.GetRuntimeStateSnapshot!();
-        try { return await app.SyncRuntimeState(); }
+        const sync = appCommand("SyncRuntimeState");
+        if (!sync) return app.GetRuntimeStateSnapshot!();
+        try { return await sync(); }
         catch { return app.GetRuntimeStateSnapshot!(); }
       },
       timer: (callback, delay) => window.setTimeout(callback, delay),

@@ -1,4 +1,4 @@
-import { app, appCommandAvailable } from "./bridge";
+import { app, appCommand } from "./bridge";
 import type { HistoryWindowPage, HistoryOutlinePage, HistoryOutlineRequest, SearchHistoryPage } from "../generated/desktopContract.generated";
 import type { HistoryWindowRequestView, HistoryWindowPageView } from "./types";
 import { supportsHistoryRead, acquireHistoryRead, currentHistoryReadBinding, releaseHistoryRead } from "./historyReadScope";
@@ -33,26 +33,28 @@ export async function readBoundHistoryWindow(tabId: string, req: HistoryWindowRe
 }
 
 export async function readBoundHistoryOutline(tabId: string, req: HistoryOutlineRequest): Promise<HistoryOutlinePage | undefined> {
-  if (!supportsHistoryRead() || !appCommandAvailable("ReadSessionHistoryOutline")) return undefined;
+  const read = appCommand("ReadSessionHistoryOutline");
+  if (!supportsHistoryRead() || !read) return undefined;
   const binding = acquireHistoryRead(tabId);
   const handle = await binding.promise;
   if (currentHistoryReadBinding(tabId) !== binding) return { entries: [], status: "stale_cursor", totalTurns: 0, nextTurn: 0, done: true, snapshotSequence: 0, coverageSequence: 0, generation: "" };
   if (!handle.capabilities?.includes("history-read-binding-v1")) return undefined;
-  const page = await app.ReadSessionHistoryOutline(handle.id, req);
+  const page = await read(handle.id, req);
   if (currentHistoryReadBinding(tabId) !== binding) return { ...page, entries: [], status: "stale_cursor" };
   if (page.status === "stale_cursor") releaseHistoryRead(tabId);
   return page;
 }
 
 export async function searchBoundHistory(tabId: string, text: string, cursor = "", limit = 50): Promise<SearchHistoryPage | undefined> {
-  if (!supportsHistoryRead() || !appCommandAvailable("SearchSessionHistoryRead")) return undefined;
+  const search = appCommand("SearchSessionHistoryRead");
+  if (!supportsHistoryRead() || !search) return undefined;
   const empty = (status: string): SearchHistoryPage => ({ hits: [], status, hasMore: false, snapshotSequence: 0, coverageSequence: 0 });
   const binding = acquireHistoryRead(tabId);
   const handle = await binding.promise;
   if (currentHistoryReadBinding(tabId) !== binding) return empty("stale_cursor");
   if (!handle.capabilities?.includes("history-read-binding-v1")) return undefined;
   if (handle.storageBackend !== "canonical" && !handle.capabilities?.includes("history-native-search-v1")) return empty("unsupported");
-  const page = await app.SearchSessionHistoryRead(handle.id, text, cursor, limit);
+  const page = await search(handle.id, text, cursor, limit);
   if (currentHistoryReadBinding(tabId) !== binding) return empty("stale_cursor");
   if (page.status === "stale_cursor") releaseHistoryRead(tabId);
   return page;

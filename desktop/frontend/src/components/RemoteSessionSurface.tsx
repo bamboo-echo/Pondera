@@ -1,6 +1,6 @@
 import { ErrorMessage } from "./ErrorMessage";
 import { useEffect, useRef, useState } from "react";
-import { app, openExternal } from "../lib/bridge";
+import { appCommand, openExternal } from "../lib/bridge";
 import { useRemoteNavigationCommand } from "../lib/remoteNavigationCommands";
 import { Transcript, type TranscriptProps } from "./Transcript";
 import { AskCard } from "./AskCard";
@@ -86,10 +86,11 @@ export function RemoteSessionSurface({ tab, session, surfaceCommitToken, onSurfa
     kind,
   });
   const resolvePrompt = (prompt: { id: string; turnId?: string; runtimeEpoch?: string }, kind: PromptKind, answer: Record<string, unknown>) => {
-    if (!tab.interactionTargetSupported || !app.ResolveRemoteTabPromptExact) {
+    const resolveExact = appCommand("ResolveRemoteTabPromptExact");
+    if (!tab.interactionTargetSupported || !resolveExact) {
       return Promise.reject(new Error("This remote Pondera Serve must be upgraded before this card can be answered safely."));
     }
-    return app.ResolveRemoteTabPromptExact(exactPromptTarget(prompt, kind), answer);
+    return resolveExact(exactPromptTarget(prompt, kind), answer);
   };
   const submitExtensionForm = (values: Record<string, unknown>) => {
     if (!extensionForm || extensionFormBusy) return;
@@ -97,10 +98,11 @@ export function RemoteSessionSurface({ tab, session, surfaceCommitToken, onSurfa
     const requestKey = formKey;
     setBusyFormKey(requestKey);
     runAction(async () => {
-      if (!tab.extensionFormInstanceSupported || !app.SubmitRemoteTabExtensionFormExact) {
+      const submitExact = appCommand("SubmitRemoteTabExtensionFormExact");
+      if (!tab.extensionFormInstanceSupported || !submitExact) {
         throw new Error("This remote Pondera Serve must be upgraded before this form can be submitted safely.");
       }
-      await app.SubmitRemoteTabExtensionFormExact({
+      await submitExact({
         tabId: tab.id,
         hostId: tab.remote!.hostId,
         sessionId: pending.sessionId ?? tab.sessionId ?? "",
