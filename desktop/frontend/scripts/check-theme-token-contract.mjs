@@ -65,18 +65,59 @@ const amberExpected = {
   },
 };
 
-function listCSSFiles(directory) {
+function listFiles(directory, extensions) {
   const files = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const target = path.join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...listCSSFiles(target));
-    else if (entry.isFile() && target.endsWith(".css")) files.push(target);
+    if (entry.isDirectory()) files.push(...listFiles(target, extensions));
+    else if (entry.isFile() && extensions.some((extension) => target.endsWith(extension))) files.push(target);
   }
   return files.sort();
 }
 
 function stripComments(source) {
   return source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
+}
+
+// Inline styles and token maps live in string literals, so strings stay intact;
+// only comments (which may quote a token in prose) are blanked out.
+function stripCodeComments(source) {
+  let result = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (char === "/" && next === "/") {
+      while (index < source.length && source[index] !== "\n") {
+        result += " ";
+        index += 1;
+      }
+      result += "\n";
+    } else if (char === "/" && next === "*") {
+      result += "  ";
+      index += 2;
+      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) {
+        result += source[index] === "\n" ? "\n" : " ";
+        index += 1;
+      }
+      result += "  ";
+      index += 1;
+    } else if (char === '"' || char === "'" || char === "`") {
+      result += char;
+      index += 1;
+      while (index < source.length && source[index] !== char) {
+        result += source[index];
+        if (source[index] === "\\") {
+          index += 1;
+          result += source[index] ?? "";
+        }
+        index += 1;
+      }
+      result += char;
+    } else {
+      result += char;
+    }
+  }
+  return result;
 }
 
 function lineNumber(source, index) {
@@ -123,12 +164,17 @@ function resolveToken(name, tokens, seen = new Set()) {
   return resolveToken(alias[1], tokens, nextSeen);
 }
 
-const cssFiles = listCSSFiles(sourceRoot);
-const sources = new Map(cssFiles.map((file) => [file, stripComments(fs.readFileSync(file, "utf8"))]));
+const cssFiles = listFiles(sourceRoot, [".css"]);
+const codeFiles = listFiles(sourceRoot, [".ts", ".tsx"]);
+const sources = new Map([
+  ...cssFiles.map((file) => [file, stripComments(fs.readFileSync(file, "utf8"))]),
+  ...codeFiles.map((file) => [file, stripCodeComments(fs.readFileSync(file, "utf8"))]),
+]);
 const definitions = new Set();
 const errors = [];
 
-for (const source of sources.values()) {
+for (const file of cssFiles) {
+  const source = sources.get(file);
   for (const match of source.matchAll(/^\s*(--[a-zA-Z0-9_-]+)\s*:/gm)) definitions.add(match[1]);
   for (const match of source.matchAll(/(?<=[{;])\s*(--[a-zA-Z0-9_-]+)\s*:/g)) definitions.add(match[1]);
 }
@@ -204,4 +250,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`Theme token contract OK (${cssFiles.length} CSS files, ${definitions.size} defined tokens).`);
+console.log(`Theme token contract OK (${cssFiles.length} CSS files, ${codeFiles.length} TS/TSX files, ${definitions.size} defined tokens).`);
