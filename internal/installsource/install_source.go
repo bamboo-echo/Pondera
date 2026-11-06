@@ -715,6 +715,8 @@ func nextForError(err error) string {
 		return "Choose another name, remove the existing entry, or retry MCP installs with replace=true."
 	case errors.Is(err, ErrUnsafeLinkTarget):
 		return "The link target escapes the project/home root. Pick a source path inside the workspace or home directory."
+	case errors.Is(err, ErrUnsafeSkillRoot):
+		return "A registered skill root must be a local absolute path inside the workspace or home directory. Move the skills there and retry."
 	case errors.Is(err, ErrApprovalDenied):
 		return "Host denied the install. Re-run without apply=true to revise the plan, or ask the user to confirm."
 	case errors.Is(err, ErrManifestMissing):

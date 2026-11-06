@@ -50,7 +50,7 @@ vet / test ./...` skip this directory, while the import path stays under
 ## Prerequisites
 
 - Go (matches the parent module).
-- Node 24+ and **pnpm 10** (`npm install -g pnpm@10`); `pnpm --dir desktop
+- Node 24+ and **pnpm 11** (`npm install -g pnpm@11`); `pnpm --dir desktop
   install` pulls the Electron toolchain for the shell.
 - No platform webview dependencies: the shell ships its own Chromium.
 

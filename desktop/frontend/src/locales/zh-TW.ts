@@ -1860,7 +1860,7 @@ export const zhTW: Record<DictKey, string> = {
   "settings.addWriteDirectory": "輸入允許寫入的目錄",
   "settings.copyDirectory": "複製目錄路徑",
   "settings.sandboxBoundaryHint": "權限模式統一執行檔案系統邊界。這裡設定網路存取與額外可信寫入目錄；macOS 用 Seatbelt，Linux 用 bubblewrap。",
-  "settings.sandboxBoundaryHintWindows": "Windows 的 Shell 以目前系統帳戶執行，不受此處檔案目錄或網路設定限制。",
+  "settings.sandboxBoundaryHintWindows": "Windows 的 Shell 以目前系統帳戶執行，可寫入該帳戶能存取的位置；此處設定僅是策略檢查，非核心強制邊界。",
   "settings.allowNetworkWindowsHint": "Windows 不可用：沒有 OS 級 Shell 沙箱，無法限制 Shell 的網路存取。",
   "settings.reloadSessionConfig": "重新載入設定",
   "settings.shellInstallManualNotice": "未偵測到 Git Bash。手動安裝 Git for Windows 後重新偵測，即可選它作為 Shell 解譯器。",

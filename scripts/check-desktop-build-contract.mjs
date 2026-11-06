@@ -74,14 +74,14 @@ for (const [name, workflow] of [
     return [block.match(/version:\s*(\d+)/)?.[1] ?? "missing"];
   });
   assert.ok(pnpmVersions.length > 0, `${name} workflow must set up pnpm`);
-  assert.deepEqual(new Set(pnpmVersions), new Set(["10"]));
+  assert.deepEqual(new Set(pnpmVersions), new Set(["11"]));
 }
 
 for (const [name, content] of [
   ["README.md", readme],
   ["desktop/README.md", desktopReadme],
 ]) {
-  assert.match(content, /npm i(?:nstall)? -g pnpm@10/);
+  assert.match(content, /npm i(?:nstall)? -g pnpm@11/);
   assert.doesNotMatch(
     content,
     /wails/i,

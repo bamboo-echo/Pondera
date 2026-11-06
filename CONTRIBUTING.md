@@ -5,9 +5,9 @@ everything you need to get started.
 
 ## Prerequisites
 
-- **Go 1.26+** — use the toolchain pinned in `go.mod` (`GOTOOLCHAIN=auto`)
+- **Go 1.27+** — use the toolchain pinned in `go.mod` (`GOTOOLCHAIN=auto`)
 - **Git** — for version control
-- **Node.js 24+ and pnpm 10** (optional) — only if you work on the desktop app
+- **Node.js 24+ and pnpm 11** (optional) — only if you work on the desktop app
   (`desktop/`)
 
 ## Getting started

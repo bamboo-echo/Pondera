@@ -20,14 +20,9 @@ provider 可见 schema 的基线。它是性能诊断工具，不是 Stable 发�
 2. 选择一组需要先发现再调用 MCP 的代表性任务。
 3. 每道任务分别运行代理和基线，并保持模型、effort、工作区、技能、Agent 与 MCP
    配置一致。
-4. 记录与 `internal/eval/replay/testdata/paired_runs.json` 相同的无内容配对数据。
-5. 运行中位数工具测试：
+4. 记录无内容配对数据，并用团队已有的表格或笔记工具汇总。
 
-```bash
-go test ./internal/eval/replay/ -run TestMedianReportFivePairedRuns
-```
-
-仓库夹具是合成数据，只用于证明中位数工具。团队可按需用真实观测做性能分析，但
+仓库不附带配对夹具或中位数辅助工具。团队可按需用真实观测做性能分析，但
 Stable 发布不要求提供配对数据集，也不要求达到任何配对阈值。
 
 第一方原生 Tool Search 仍默认关闭，不纳入本评测。
