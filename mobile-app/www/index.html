@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pondera · 连接云端</title>
+<style>
+:root{color-scheme:light dark;--bg:#f5f6f8;--surface:#fff;--surface2:#eef1f5;--line:#e2e6ec;
+  --fg:#1a1f27;--muted:#6d7684;--accent:#3b6ef5;--accent2:#8b5cf6;--soft:#e8efff;
+  --shadow:0 10px 30px rgba(16,24,40,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1014;--surface:#181c23;--surface2:#20252e;--line:#2b313b;
+  --fg:#e9ecf1;--muted:#98a2b1;--accent:#6b9bff;--soft:#1c2b48;--shadow:0 10px 30px rgba(0,0,0,.3)}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--fg);display:flex;align-items:center;
+  justify-content:center;padding:24px;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.card{width:min(100%,420px);background:var(--surface);border:1px solid var(--line);border-radius:20px;
+  box-shadow:var(--shadow);padding:28px 24px}
+.logo{width:56px;height:56px;border-radius:17px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:grid;place-items:center;color:#fff;font-size:26px;font-weight:800;margin-bottom:18px}
+h1{font-size:21px;margin:0 0 4px;letter-spacing:-.3px}
+p.sub{color:var(--muted);font-size:13px;margin:0 0 24px}
+label{display:block;font-size:12.5px;color:var(--muted);margin:14px 0 6px}
+input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+  background:var(--surface2);color:var(--fg);outline:none;font-size:15px}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
+button{width:100%;margin-top:22px;padding:13px;border:0;border-radius:12px;font-size:15px;font-weight:600;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.tip{margin-top:18px;padding:12px 14px;border-radius:11px;background:var(--soft);color:var(--accent);font-size:12px;line-height:1.55}
+.tip b{display:block;margin-bottom:3px}
+.err{color:#e0453b;font-size:12.5px;margin-top:10px;min-height:18px}
+.foot{margin-top:20px;text-align:center;color:var(--muted);font-size:11.5px}
+kbd{font:11px ui-monospace,Consolas,monospace;background:var(--surface2);border:1px solid var(--line);
+  padding:1px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">P</div>
+  <h1>连接你的云主机</h1>
+  <p class="sub">电脑不用开机，任务在云端跑。地址与 token 只保存在这台手机上。</p>
+
+  <label>云端 serve 地址</label>
+  <input id="server" type="url" placeholder="https://pondera.example.ts.net:8787" autocomplete="off" inputmode="url">
+  <label>访问 Token</label>
+  <input id="token" type="password" placeholder="serve 启动时生成的 token" autocomplete="off">
+  <div class="err" id="err"></div>
+  <button id="connect">连接并进入手机端</button>
+
+  <div class="tip"><b>建议走 Tailscale / 私有网</b>
+    不要把 serve 直接暴露到公网。云主机上用 <kbd>pondera serve</kbd> 启动，并配置
+    <kbd>credential_mode = "remote"</kbd>，这样 API Key 只留在云端。</div>
+  <div class="foot">Pondera Mobile · Capacitor 原生壳 · 页面由云端 serve 提供，自动保持最新</div>
+</div>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const KEY = 'pondera-mobile-config';
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (saved.server) $('#server').value = saved.server;
+    if (saved.token) $('#token').value = saved.token;
+  } catch (e) {}
+  $('#connect').addEventListener('click', () => {
+    const err = $('#err'); err.textContent = '';
+    let server = $('#server').value.trim().replace(/\/+$/, '');
+    const token = $('#token').value.trim();
+    if (!server) { err.textContent = '请填写云端 serve 地址'; return; }
+    if (!/^https?:\/\//i.test(server)) server = 'https://' + server;
+    let u;
+    try { u = new URL(server); } catch (e) { err.textContent = '地址格式不正确'; return; }
+    if (u.protocol !== 'https:' && u.hostname !== '127.0.0.1' && u.hostname !== 'localhost') {
+      err.textContent = '公网请使用 HTTPS（Web Push 与生物识别需要安全上下文）'; return;
+    }
+    localStorage.setItem(KEY, JSON.stringify({ server, token }));
+    const target = server + '/mobile' + (token ? '#token=' + encodeURIComponent(token) : '');
+    location.href = target;
+  });
+  // Enter submits.
+  $('#token').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#connect').click(); });
+})();
+</script>
+</body>
+</html>

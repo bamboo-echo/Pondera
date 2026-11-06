@@ -1,0 +1,25 @@
+{
+  "name": "pondera-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pondera 原生手机壳（Capacitor）：连接自有云主机，随时发指令、看任务进度",
+  "scripts": {
+    "verify": "node scripts/verify.mjs",
+    "add:android": "cap add android",
+    "sync": "cap sync android",
+    "open:android": "cap open android",
+    "build:apk": "cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+android/
+ios/
+.idea/
+*.apk
+*.aab
+.gradle/
+local.properties
+.DS_Store

@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build root module
+        run: go build ./...
+
+      - name: Build desktop module
+        working-directory: desktop
+        run: go build ./...
+
+      - name: Vet changed packages
+        run: |
+          go vet ./internal/cloudsync/... ./internal/messageops/... \
+                 ./internal/costgate/... ./internal/webpush/... \
+                 ./internal/serve/... ./internal/cli/... ./internal/session/...
+
+      - name: Unit tests (all new packages)
+        run: |
+          go test ./internal/cloudsync/... ./internal/messageops/... \
+                  ./internal/costgate/... ./internal/webpush/... -count=1
+
+      - name: Session slice tests
+        run: go test ./internal/session/ -run 'TestInspectSliceTurns|TestSliceExport|TestMatchTurnRefs' -count=1
+
+      - name: Focused serve tests
+        run: go test ./internal/serve/ -run 'TestMobile|TestMessageOp|TestCloud|TestCost|TestMirror|TestPush' -count=1
+
+      - name: Front-end script syntax
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          for name in ["internal/serve/mobile.html", "internal/serve/settings.html", "mobile-app/www/index.html"]:
+              s = pathlib.Path(name).read_text(encoding="utf-8")
+              js = "\n".join(re.findall(r'<script>(.*?)</script>', s, flags=re.S))
+              out = pathlib.Path("/tmp") / (name.replace("/", "_") + ".js")
+              out.write_text(js, encoding="utf-8")
+              print(name, "->", out)
+          PY
+          for f in /tmp/internal_serve_*.js /tmp/mobile-app_www_*.js; do node --check "$f"; done
+          node --check internal/serve/mobile-sw.js
+
+      - name: Capacitor project check
+        working-directory: mobile-app
+        run: node scripts/verify.mjs
+
+  diff-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l \
+            internal/cloudsync internal/messageops internal/costgate internal/webpush \
+            internal/session/slice_export.go internal/session/slice_export_test.go \
+            internal/serve/messages_http.go internal/serve/cloud_http.go \
+            internal/serve/cloud_ops_http.go internal/serve/cloud_http_test.go \
+            internal/serve/serve.go internal/cli/cloud.go internal/cli/cloud_transfer.go \
+            internal/cli/cloud_ops.go internal/cli/cli.go)
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted files:"; echo "$unformatted"; exit 1
+          fi
