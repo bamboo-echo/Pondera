@@ -9,7 +9,7 @@
 | --- | --- | --- |
 | Go | 1.26+ | `C:\Program Files\Go\bin` |
 | Node | 24+ | `C:\Program Files\nodejs` |
-| pnpm | 10 | `%APPDATA%\npm\pnpm.cmd` |
+| pnpm | 11 | `%APPDATA%\npm\pnpm.cmd` |
 | Git Bash | 5.x | `C:\Program Files\Git\usr\bin\bash.exe` |
 | NSIS | 3.12 | `.zwork\nsis\nsis-3.12`（含 `makensis.exe`） |
 | Electron | 44.2.0 win32-x64 | `%LOCALAPPDATA%\electron\Cache`（约 151 MB） |
@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts/fork-windows-build.ps1
 
 | 参数 | 默认 | 作用 |
 | --- | --- | --- |
-| `-Version` | `v0.1.0` | 构建版本号 |
+| `-Version` | 不传则自动递增 | 构建版本号；未指定时从 `v0.1.0` 起按 patch 递增（首次为 `v0.1.1`，计数存于 `.zwork\pondera-version.txt`） |
 | `-Channel` | `mod` | 更新渠道；`mod` 表示永不拉上游更新 |
 | `-SkipBuild` | 关 | 跳过编译，直接用 `dist/` 现有产物重装 |
 | `-NoInstall` | 关 | 只构建，不卸载/安装 |
@@ -84,8 +84,7 @@ node --import "$env:TEMP\pondera-locale-en.mjs" --import ./scripts/svg-stub-regi
 ```
 
 - shim 内容：把 `navigator.language` 置为 `en-US`（否则英文断言必失败，属环境问题）。
-- 全量前端套件：工作区根目录 `node run-tests-shim.mjs`（约 538 套，耗时较长）。
-- 必须在 `desktop/frontend` 目录下执行。
+- 全量前端套件：`desktop/frontend` 目录下 `node scripts/run-tests.mjs`（发现式套件，约 525 套；另有 18 套由专用 `pnpm test:*` 脚本承载，合计约 543 套，耗时较长）。
 
 **Go**
 
