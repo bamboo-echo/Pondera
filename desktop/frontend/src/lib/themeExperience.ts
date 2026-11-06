@@ -2,7 +2,7 @@
 // and theme gallery. Backend is source of truth for persistence; selected and
 // temporary-preview ids stay in memory only.
 
-import { app } from "./bridge";
+import { app, appCommandAvailable } from "./bridge";
 import {
   applyThemePack,
   beginThemePreview,
@@ -57,7 +57,7 @@ export async function loadThemeExperience(): Promise<ThemeExperienceView> {
     DisableThemePack?: () => Promise<void>;
     RestoreGraphiteAppearance?: () => Promise<void>;
   };
-  if (typeof api.GetThemeExperience === "function") {
+  if (appCommandAvailable("GetThemeExperience")) {
     try {
       const view = await api.GetThemeExperience();
       experienceCache = normalizeExperience(view);
@@ -76,7 +76,7 @@ export async function loadThemeExperience(): Promise<ThemeExperienceView> {
       Settings?: () => Promise<{ desktopTheme?: string; desktopThemeStyle?: string }>;
     };
     const settings =
-      typeof settingsApi.DesktopStartupSettings === "function"
+      appCommandAvailable("DesktopStartupSettings")
         ? await settingsApi.DesktopStartupSettings()
         : typeof settingsApi.Settings === "function"
           ? await settingsApi.Settings()
@@ -92,7 +92,7 @@ export async function loadThemeExperience(): Promise<ThemeExperienceView> {
   let activePack: ThemePackView | null = null;
   let activeThemeId: string | undefined;
   try {
-    if (typeof app.GetActiveThemePack === "function") {
+    if (appCommandAvailable("GetActiveThemePack")) {
       const active = await app.GetActiveThemePack();
       activePack = active?.pack ?? null;
       activeThemeId = active?.activeThemeId || undefined;
@@ -142,7 +142,7 @@ export function applyExperienceToDOM(view: ThemeExperienceView): void {
 
 export async function activateBaseStyle(style: ThemeStyle): Promise<ThemeExperienceView> {
   const api = app as typeof app & { ActivateBaseStyle?: (style: string) => Promise<void> };
-  if (typeof api.ActivateBaseStyle === "function") {
+  if (appCommandAvailable("ActivateBaseStyle")) {
     await api.ActivateBaseStyle(style);
   } else {
     // Legacy fallback: clear pack then set appearance.
@@ -170,7 +170,7 @@ export async function activateThemePack(id: string): Promise<ThemeExperienceView
 
 export async function disableThemePack(): Promise<ThemeExperienceView> {
   const api = app as typeof app & { DisableThemePack?: () => Promise<void> };
-  if (typeof api.DisableThemePack === "function") {
+  if (appCommandAvailable("DisableThemePack")) {
     await api.DisableThemePack();
   } else {
     await app.ResetThemePack();
@@ -183,7 +183,7 @@ export async function disableThemePack(): Promise<ThemeExperienceView> {
 
 export async function restoreGraphiteAppearance(): Promise<ThemeExperienceView> {
   const api = app as typeof app & { RestoreGraphiteAppearance?: () => Promise<void> };
-  if (typeof api.RestoreGraphiteAppearance === "function") {
+  if (appCommandAvailable("RestoreGraphiteAppearance")) {
     await api.RestoreGraphiteAppearance();
   } else {
     await app.ResetThemePack();

@@ -17,7 +17,7 @@ import { createControllerModelCommands } from "./controllerModelCommands";
 import { compactArchivedToolItems } from "./archivedToolItems";
 import { addBreadcrumb } from "./breadcrumbs";
 import { desktopHost } from "./desktopHost";
-import { app, onEvent, onReady, onRuntimeRebuilt, onTabMeta, onTopicActivation } from "./bridge";
+import { app, appCommandAvailable, onEvent, onReady, onRuntimeRebuilt, onTabMeta, onTopicActivation } from "./bridge";
 import { startControllerEventRecovery } from "./controllerEventRecovery";
 import { metaFromTab } from "./controllerTabMeta";
 import { outputQuarters, tokensFromQuarters, unbilledOutputTokens, type TurnRateSample } from "./turnMetrics";
@@ -3777,8 +3777,8 @@ export function useController() {
     try {
       let turnId = statesRef.current.get(tabId)?.activeTurnId;
       const exactAPIAvailable = inboxItemIDs.length > 0
-        ? typeof app.InterruptTurnWithInboxItemsForTab === "function"
-        : typeof app.InterruptTurnForTab === "function";
+        ? appCommandAvailable("InterruptTurnWithInboxItemsForTab")
+        : appCommandAvailable("InterruptTurnForTab");
       if (!turnId && exactAPIAvailable) {
         turnId = await resolveActiveTurnId(app, tabId);
       }

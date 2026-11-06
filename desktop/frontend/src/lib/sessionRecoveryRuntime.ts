@@ -1,4 +1,4 @@
-import { app, onSessionActiveVersionChanged, onSessionRecovered } from "./bridge";
+import { app, appCommandAvailable, onSessionActiveVersionChanged, onSessionRecovered } from "./bridge";
 import { recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
 import { onProjectTreeChangedV2 } from "./sessionCatalogBridge";
 import type { ProjectTopicKey } from "./sessionCatalogTypes";
@@ -62,7 +62,7 @@ export function startSessionRecoveryRuntime(options: SessionRecoveryRuntimeOptio
     options.onRecovered();
     const topicId = event.topicId;
     const reconcileKey = topicId ? [event.scope, event.workspaceRoot, topicId].join("\u0000") : "";
-    if (topicId && !reconciling.has(reconcileKey) && typeof app.ReconcileRecoveryVersions === "function") {
+    if (topicId && !reconciling.has(reconcileKey) && appCommandAvailable("ReconcileRecoveryVersions")) {
       reconciling.add(reconcileKey);
       void app.ReconcileRecoveryVersions({
         scope: event.scope || (event.workspaceRoot ? "project" : "global"),

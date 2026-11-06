@@ -5,7 +5,7 @@
 // child across renderer and Desktop restarts.
 
 import { asArray } from "./array";
-import { app } from "./bridge";
+import { app, appCommandAvailable } from "./bridge";
 import { errorMessage } from "./controllerNotices";
 import { forkCreateFailureText, type ForkTargetSetView, type ForkTargetView } from "./forkTargets";
 import { t } from "./i18n";
@@ -62,7 +62,7 @@ export function createForkTargetsRefresh(dispatch: (tabId: string, action: ForkT
   const refresh = async (tabId: string): Promise<void> => {
     // A shell that predates the command reads no targets instead of failing the
     // transcript around it.
-    if (typeof app.ForkTargetsForTab !== "function") return;
+    if (!appCommandAvailable("ForkTargetsForTab")) return;
     const seq = invalidate(tabId);
     const targets = await app.ForkTargetsForTab(tabId).catch(() => undefined);
     if (latestSeq.get(tabId) !== seq || targets === undefined) return;

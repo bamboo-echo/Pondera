@@ -1,4 +1,4 @@
-import { app } from "./bridge";
+import { app, appCommandAvailable } from "./bridge";
 import { readNativeTranscriptOutline } from "./nativeTranscriptHistory";
 import { readBoundHistoryOutline } from "./historyReadBinding";
 import { observeOutline } from "./transcriptOutlineSignals";
@@ -176,7 +176,7 @@ export class TranscriptOutlineStore {
 let singleton: TranscriptOutlineStore | undefined;
 export function getTranscriptOutlineStore(): TranscriptOutlineStore { return singleton ??= new TranscriptOutlineStore(); }
 const unsupported = (): HistoryOutlinePage => ({ status: "unsupported", entries: [], totalTurns: 0, generation: "", snapshotSequence: 0, coverageSequence: 0, nextTurn: 1, done: true });
-export const localOutlineRead: OutlineRead = async (tab, request) => (await readNativeTranscriptOutline(tab, request)) ?? (await readBoundHistoryOutline(tab, request)) ?? (typeof app.SessionHistoryOutlineForTab === "function"
-  ? app.SessionHistoryOutlineForTab(tab, request) : unsupported());
-export const remoteOutlineRead: OutlineRead = async (tab, request) => (await readNativeTranscriptOutline(tab, request)) ?? (typeof app.RemoteSessionHistoryOutlineForTab === "function"
-  ? app.RemoteSessionHistoryOutlineForTab(tab, request) : unsupported());
+export const localOutlineRead: OutlineRead = async (tab, request) => (await readNativeTranscriptOutline(tab, request)) ?? (await readBoundHistoryOutline(tab, request)) ?? (appCommandAvailable("SessionHistoryOutlineForTab")
+  ? app.SessionHistoryOutlineForTab!(tab, request) : unsupported());
+export const remoteOutlineRead: OutlineRead = async (tab, request) => (await readNativeTranscriptOutline(tab, request)) ?? (appCommandAvailable("RemoteSessionHistoryOutlineForTab")
+  ? app.RemoteSessionHistoryOutlineForTab!(tab, request) : unsupported());

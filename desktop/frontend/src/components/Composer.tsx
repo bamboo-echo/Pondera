@@ -13,7 +13,7 @@ import { asArray } from "../lib/array";
 import { filterAtMatches } from "../lib/atMatches";
 import { DedupIndex, sha256, ordinaryFileSource } from "../lib/attachDedup";
 import { splitOversizeAttachments } from "../lib/attachmentLimits";
-import { app, onFilesDropped } from "../lib/bridge";
+import { app, appCommandAvailable, onFilesDropped } from "../lib/bridge";
 import { attachmentExt, attachmentName, baseName, formatAttachmentDisplayReference, hasImageAttachments, sortComposerAttachments, type Attachment } from "../lib/composerAttachments";
 import type { PastedBlock, PersistentComposerDraft, PersistentComposerTarget, WorkspaceReference } from "../lib/composerDraftTypes";
 import { sendPersistedComposer, useSessionComposerPersistence } from "../lib/sessionComposerPersistence";
@@ -3042,7 +3042,7 @@ export function Composer({
     setCancelSettlingRevision((value) => value + 1);
     // The durable queue has its own pause/delete controls. Stopping the current
     // task must not discard pending messages or restore truncated previews.
-    const ownedGuidance = typeof app.InboxQueueForTarget === "function" ? [] : pendingGuidanceRef.current.filter((item) => item.id.startsWith("local-") || item.source === "desktop");
+    const ownedGuidance = appCommandAvailable("InboxQueueForTarget") ? [] : pendingGuidanceRef.current.filter((item) => item.id.startsWith("local-") || item.source === "desktop");
     const durableItemIDs = maintenanceActive ? [] : ownedGuidance
       .map((item) => item.id)
       .filter((id) => !id.startsWith("local-"));
@@ -4471,7 +4471,7 @@ export function Composer({
           />
         ) : null
       )}
-      {typeof app.InboxQueueForTarget === "function" ? <Suspense fallback={null}>
+      {appCommandAvailable("InboxQueueForTarget") ? <Suspense fallback={null}>
         <ComposerInboxQueue key={queueScope} scope={queueScope} tabId={tabId || ""} sessionPath={inboxSessionPath || ""}
           items={pendingGuidance} snapshot={inboxSnapshot} disabled={Boolean(disabled || readOnly)} running={running}
           onSnapshot={acceptInboxSnapshot} onRefresh={refreshInboxQueue}

@@ -1,4 +1,4 @@
-import { app } from "./bridge";
+import { app, appCommandAvailable } from "./bridge";
 import type { HistoryWindowPage, HistoryOutlinePage, HistoryOutlineRequest, SearchHistoryPage } from "../generated/desktopContract.generated";
 import type { HistoryWindowRequestView, HistoryWindowPageView } from "./types";
 import { supportsHistoryRead, acquireHistoryRead, currentHistoryReadBinding, releaseHistoryRead } from "./historyReadScope";
@@ -33,7 +33,7 @@ export async function readBoundHistoryWindow(tabId: string, req: HistoryWindowRe
 }
 
 export async function readBoundHistoryOutline(tabId: string, req: HistoryOutlineRequest): Promise<HistoryOutlinePage | undefined> {
-  if (!supportsHistoryRead() || typeof app.ReadSessionHistoryOutline !== "function") return undefined;
+  if (!supportsHistoryRead() || !appCommandAvailable("ReadSessionHistoryOutline")) return undefined;
   const binding = acquireHistoryRead(tabId);
   const handle = await binding.promise;
   if (currentHistoryReadBinding(tabId) !== binding) return { entries: [], status: "stale_cursor", totalTurns: 0, nextTurn: 0, done: true, snapshotSequence: 0, coverageSequence: 0, generation: "" };
@@ -45,7 +45,7 @@ export async function readBoundHistoryOutline(tabId: string, req: HistoryOutline
 }
 
 export async function searchBoundHistory(tabId: string, text: string, cursor = "", limit = 50): Promise<SearchHistoryPage | undefined> {
-  if (!supportsHistoryRead() || typeof app.SearchSessionHistoryRead !== "function") return undefined;
+  if (!supportsHistoryRead() || !appCommandAvailable("SearchSessionHistoryRead")) return undefined;
   const empty = (status: string): SearchHistoryPage => ({ hits: [], status, hasMore: false, snapshotSequence: 0, coverageSequence: 0 });
   const binding = acquireHistoryRead(tabId);
   const handle = await binding.promise;

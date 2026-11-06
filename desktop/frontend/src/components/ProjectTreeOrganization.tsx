@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense, type DragEvent, type HTMLAttributes, type ReactNode } from "react";
 import { Archive, Clock, FolderMinus, Pencil } from "lucide-react";
-import { app } from "../lib/bridge";
+import { app, appTargetSupports } from "../lib/bridge";
 import { asArray } from "../lib/array";
 import type { Translator } from "../lib/i18n";
 import { isTopicNode, projectTreeTopicArchiveBlocked } from "../lib/projectTreeTopic";
@@ -208,9 +208,9 @@ export function useProjectTreeOrganization({
     const mutationVersion = groupMutationVersionsRef.current[key] ?? 0;
     loadingGroupsRef.current.add(key);
     const { scope, root, hostId } = splitOrganizationKey(key);
-    const read = bindings.GetSessionOrganization ? bindings.GetSessionOrganization({ scope, workspaceRoot: root, hostId })
-      : typeof bindings.GetProjectGroups === "function"
-      ? bindings.GetProjectGroups(scope, root)
+    const read = appTargetSupports(bindings, "GetSessionOrganization") ? bindings.GetSessionOrganization!({ scope, workspaceRoot: root, hostId })
+      : appTargetSupports(bindings, "GetProjectGroups")
+      ? bindings.GetProjectGroups!(scope, root)
       : bindings.ListProjectGroups(scope, root).then((groups) => ({ groups, revision: 0, applied: true }));
     void read.then((snapshot) => {
       if (!mountedRef.current || groupLoadSequencesRef.current[key] !== sequence) return;

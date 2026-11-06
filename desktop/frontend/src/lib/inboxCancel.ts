@@ -1,3 +1,4 @@
+import { appTargetSupports } from "./bridge";
 import { isTurnNotRunning } from "./inboxError";
 
 export type InboxCancelReceipt = {
@@ -44,23 +45,23 @@ export async function requestInboxCancel(
   itemIds: string[],
   turnId?: string,
 ): Promise<InboxCancelReceipt> {
-  if (itemIds.length === 0 && typeof app.CancelSessionForTab === "function") {
-    await app.CancelSessionForTab(tabId);
+  if (itemIds.length === 0 && appTargetSupports(app, "CancelSessionForTab")) {
+    await app.CancelSessionForTab!(tabId);
     return { discardedItemIds: [] };
   }
-  if (turnId && itemIds.length > 0 && typeof app.InterruptTurnWithInboxItemsForTab === "function") {
-    const receipt = await app.InterruptTurnWithInboxItemsForTab(tabId, turnId, itemIds);
+  if (turnId && itemIds.length > 0 && appTargetSupports(app, "InterruptTurnWithInboxItemsForTab")) {
+    const receipt = await app.InterruptTurnWithInboxItemsForTab!(tabId, turnId, itemIds);
     return {
       discardedItemIds: Array.isArray(receipt?.discardedItemIds) ? receipt.discardedItemIds.map(String) : [],
       warning: receipt?.warning?.trim() || undefined,
     };
   }
-  if (turnId && itemIds.length === 0 && typeof app.InterruptTurnForTab === "function") {
-    await app.InterruptTurnForTab(tabId, turnId);
+  if (turnId && itemIds.length === 0 && appTargetSupports(app, "InterruptTurnForTab")) {
+    await app.InterruptTurnForTab!(tabId, turnId);
     return { discardedItemIds: [] };
   }
-  if (itemIds.length > 0 && typeof app.CancelTabWithInboxItemsResult === "function") {
-    const receipt = await app.CancelTabWithInboxItemsResult(tabId, itemIds);
+  if (itemIds.length > 0 && appTargetSupports(app, "CancelTabWithInboxItemsResult")) {
+    const receipt = await app.CancelTabWithInboxItemsResult!(tabId, itemIds);
     return {
       discardedItemIds: Array.isArray(receipt?.discardedItemIds) ? receipt.discardedItemIds.map(String) : [],
       warning: receipt?.warning?.trim() || undefined,

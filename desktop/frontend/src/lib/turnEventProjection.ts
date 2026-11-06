@@ -1,5 +1,5 @@
 import { asArray } from "./array";
-import { app } from "./bridge";
+import { app, appCommandAvailable } from "./bridge";
 import { recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
 import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types";
 
@@ -232,7 +232,7 @@ export class TurnEventProjector {
   }
 
   private requestReplay(tabId: string, afterSeq: number, runtimeEpoch?: string) {
-    if (!this.transport && typeof app.TurnEventsForTab !== "function" && typeof app.TranscriptReplayForTab !== "function") return;
+    if (!this.transport && !appCommandAvailable("TurnEventsForTab") && !appCommandAvailable("TranscriptReplayForTab")) return;
     if (this.repairByTab.has(tabId)) {
       this.pendingRepairByTab.set(tabId, { afterSeq, runtimeEpoch });
       return;

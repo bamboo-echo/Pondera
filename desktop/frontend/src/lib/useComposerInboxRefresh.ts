@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { InboxSnapshotLike } from "./composerInboxQueue";
-import { app } from "./bridge";
+import { app, appCommandAvailable } from "./bridge";
 import {
   guidanceFromInboxSnapshot,
   hydrateEmptyGuidancePreviews,
@@ -57,7 +57,7 @@ export function useComposerInboxRefresh(
     if (guidanceDraftKey !== draftKey) return;
     let live = true;
     const fallback = localGuidanceFallback(previewKey);
-    if (typeof app.InboxSnapshot !== "function") {
+    if (!appCommandAvailable("InboxSnapshot")) {
       applyQueue(fallback);
       return;
     }

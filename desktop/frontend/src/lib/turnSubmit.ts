@@ -1,3 +1,4 @@
+import { appTargetSupports } from "./bridge";
 import type { AppBindings } from "./bridge";
 import type { StructuredInvocationSubmit } from "./invocationDisplay";
 import type { CollaborationMode, ToolApprovalMode } from "./types";
@@ -30,8 +31,8 @@ export async function submitTurn(
   }
   // Management commands have no durable user row to edit. Preserve the actual
   // instructions (including expanded paste blocks) through the typed admission.
-  if (isCompactSubmission(submit, structured, initialGoal)) receipt = typeof app.StartTurnForTab === "function"
-    ? await app.StartTurnForTab(tabId, submit, submissionId)
+  if (isCompactSubmission(submit, structured, initialGoal)) receipt = appTargetSupports(app, "StartTurnForTab")
+    ? await app.StartTurnForTab!(tabId, submit, submissionId)
     : await app.SubmitToTabWithID(tabId, submit, submissionId);
   else if (structured?.attachments?.length) receipt = await submitAttachmentTurn(app, submissionId, structured, original, initialGoal);
   else if (initialGoal) {
