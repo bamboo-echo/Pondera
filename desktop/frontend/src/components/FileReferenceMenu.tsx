@@ -73,6 +73,7 @@ export function useFileReferenceMenu(text: string, cwd?: string, tabId?: string,
   const atRaw = token?.raw ?? null;
   const atDir = token?.dir ?? "";
   const atFrag = token?.frag ?? "";
+  const atDisabled = atRaw === null;
   const [entries, setEntries] = useState<DirEntry[]>([]);
   const [searchEntries, setSearchEntries] = useState<DirEntry[]>([]);
   const [active, setActive] = useState(0);
@@ -100,7 +101,7 @@ export function useFileReferenceMenu(text: string, cwd?: string, tabId?: string,
   }, [atRaw]);
 
   useEffect(() => {
-    if (atRaw === null) return;
+    if (atDisabled) return;
     const cached = dirCache.current[atDir];
     if (cached) {
       setEntries(cached);
@@ -120,10 +121,10 @@ export function useFileReferenceMenu(text: string, cwd?: string, tabId?: string,
     return () => {
       live = false;
     };
-  }, [atRaw === null, atDir, fileRefScopeKey, fileRefTabId]);
+  }, [atDisabled, atDir, fileRefScopeKey, fileRefTabId]);
 
   useEffect(() => {
-    if (atRaw === null || atDir !== "" || atFrag === "") {
+    if (atDisabled || atDir !== "" || atFrag === "") {
       setSearchEntries([]);
       return;
     }
@@ -147,7 +148,7 @@ export function useFileReferenceMenu(text: string, cwd?: string, tabId?: string,
     return () => {
       live = false;
     };
-  }, [atRaw === null, atDir, atFrag, fileRefScopeKey, fileRefTabId]);
+  }, [atDisabled, atDir, atFrag, fileRefScopeKey, fileRefTabId]);
 
   const items = useMemo(() => {
     if (atRaw === null) return [];

@@ -1,5 +1,5 @@
 import { isShellToolName } from "../lib/shellToolIdentity";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useT, type Translator } from "../lib/i18n";
 import { normalizeToolApprovalMode, type DirEntry } from "../lib/types";
@@ -275,7 +275,7 @@ function InteractiveApprovalModal({
   const closingRef = useRef(false);
   const fileMenu = useFileReferenceMenu(revisionText, cwd, tabId, workspaceScopeKey);
 
-  const answerWithExit = (fn: () => void | Promise<void>) => {
+  const answerWithExit = useCallback((fn: () => void | Promise<void>) => {
     if (closingRef.current || submitting) return;
     closingRef.current = true;
     setSubmitting(true);
@@ -296,7 +296,7 @@ function InteractiveApprovalModal({
     });
     const el = shelfRef.current;
     if (el) animateElementExit(el, { opacity: 0, y: 8, duration: DUR_FAST, onComplete: () => undefined });
-  };
+  }, [submitting]);
 
   const resolveRecovery = useCallback(
     (action: "continue" | "continue_task" | "revise", feedback?: string) => {
@@ -310,7 +310,8 @@ function InteractiveApprovalModal({
     [onResolveRecovery, onAnswer],
   );
 
-  const toolActions: DecisionAction[] = isRecoveryPlanChange
+  const canGrantTask = Boolean(recovery?.can_grant_task);
+  const toolActions = useMemo<DecisionAction[]>(() => (isRecoveryPlanChange
     ? [
         {
           key: "1",
@@ -345,7 +346,7 @@ function InteractiveApprovalModal({
             ? t("approval.recoveryContinueTaskDesc")
             : t("approval.recoveryContinueDesc"),
           kind: "direct",
-          run: () => resolveRecovery(grantSimilarForTask && recovery?.can_grant_task ? "continue_task" : "continue"),
+          run: () => resolveRecovery(grantSimilarForTask && canGrantTask ? "continue_task" : "continue"),
         },
       ]
     : isWriteAccessApproval
@@ -430,7 +431,7 @@ function InteractiveApprovalModal({
                 run: () => onAnswer(false, false, false),
               },
             ]),
-      ];
+      ]), [approval.tool, canGrantTask, grantSimilarForTask, hasFreshSessionGrant, isFreshHumanApproval, isPlanApproval, isRecoveryApproval, isRecoveryPlanChange, isWriteAccessApproval, onAnswer, onExitPlan, resolveRecovery, t]);
 
   const actionCount = toolActions.length;
   const selectedIndexRef = useRef(selectedIndex);
@@ -467,7 +468,7 @@ function InteractiveApprovalModal({
       return;
     }
     if (action.run) answerWithExit(action.run);
-  }, [submitting, toolActions, isPlanApproval, isRecoveryApproval]);
+  }, [answerWithExit, submitting, toolActions, isPlanApproval, isRecoveryApproval]);
 
   const activateAction = useCallback((action: DecisionAction, index: number) => {
     if (submitting) return;
@@ -485,7 +486,7 @@ function InteractiveApprovalModal({
       return;
     }
     setSelectedIndex(index);
-  }, [submitting]);
+  }, [answerWithExit, submitting]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -569,14 +570,14 @@ function InteractiveApprovalModal({
     if (revisionActiveRef.current) onRevisionActiveChangeRef.current?.(false);
   }, []);
 
-  const focusRevisionInput = (caret = revisionText.length) => {
+  const focusRevisionInput = useCallback((caret = revisionText.length) => {
     requestAnimationFrame(() => {
       const input = inputRef.current;
       if (!input) return;
       input.focus();
       input.setSelectionRange(caret, caret);
     });
-  };
+  }, [revisionText.length]);
 
   const insertRevisionText = useCallback((text: string) => {
     const input = inputRef.current;
@@ -585,7 +586,7 @@ function InteractiveApprovalModal({
     const next = insertTextAtSelection(revisionText, text, start, end);
     setRevisionText(next.value);
     focusRevisionInput(next.caret);
-  }, [revisionText]);
+  }, [focusRevisionInput, revisionText]);
 
   useEffect(() => {
     if (!insertRequest || insertRequest.id === consumedInsertIdRef.current) return;
