@@ -44,25 +44,27 @@ export function ComposerInboxQueue({ scope, tabId, sessionPath, items, snapshot,
   const accepted = items.filter(item => item.state === "steer_accepted");
   const ids = pending.map(item => item.id);
   const draft = editor.open ? editor.drafts.edit : undefined;
+  const draftId = draft?.id;
+  const editing = Boolean(draft);
   // Editing preserves the user's disclosure choice; a restored draft must
   // remain reachable even when it belongs to a normally collapsed row.
-  const visible = expanded ? pending : pending.filter((item, index) => index < 2 || item.id === draft?.id);
+  const visible = expanded ? pending : pending.filter((item, index) => index < 2 || item.id === draftId);
   const locked = disabled || Boolean(snapshot?.readonly) || snapshot?.mutationsSupported !== true || editor.busy;
   const currentItem = draft && snapshot?.items?.find(item => item.id === draft.id);
   const departed = Boolean(draft && snapshot && (!currentItem || !queuePending(currentItem.state)));
   const reason = draft?.reason || (departed ? "item_not_pending" : "");
   const notice = dragError ? "order_changed" : editor.notice === reason ? "" : editor.notice;
   const message = (key: string) => copy[key as keyof typeof copy] || copy.error;
-  useLayoutEffect(() => { onEditingChange(Boolean(draft)); return () => onEditingChange(false); }, [Boolean(draft), onEditingChange]);
-  useEffect(() => { if (draft && !editor.busy) editInput.current?.focus(); }, [draft?.id, editor.busy, departed]);
+  useLayoutEffect(() => { onEditingChange(editing); return () => onEditingChange(false); }, [editing, onEditingChange]);
+  useEffect(() => { if (editing && !editor.busy) editInput.current?.focus(); }, [draftId, editing, editor.busy, departed]);
   useEffect(() => {
-    const restoreFocus = wasEditing.current && !draft;
-    wasEditing.current = Boolean(draft);
+    const restoreFocus = wasEditing.current && !editing;
+    wasEditing.current = editing;
     if (!restoreFocus) return;
     const composer = queueRoot.current?.closest(".composer-wrap")?.querySelector<HTMLElement>("#composer-input");
     const frame = requestAnimationFrame(() => { if (composer?.isConnected) composer.focus({ preventScroll: true }); });
     return () => cancelAnimationFrame(frame);
-  }, [Boolean(draft)]);
+  }, [editing]);
   const move = (id: string, before: string | null) => {
     setDragError(false);
     void editor.mutate({ kind: "move", itemId: id, beforeItemId: before, queueRevision: snapshot?.revision });
