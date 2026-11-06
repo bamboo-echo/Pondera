@@ -20,7 +20,7 @@
 # Requirements:
 #   - Go toolchain matching desktop/go.mod (>= 1.25; the `toolchain` directive
 #     auto-downloads when GOTOOLCHAIN=auto)
-#   - Node >= 24 and pnpm 10 (the same major versions used by CI and releases)
+#   - Node >= 24 and pnpm 11 (the same major versions used by CI and releases)
 #   - A pnpm-installed desktop workspace (this script runs
 #     `pnpm --dir desktop install --frozen-lockfile` when node_modules is absent)
 set -euo pipefail

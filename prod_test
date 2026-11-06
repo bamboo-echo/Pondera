@@ -140,13 +140,13 @@ install_or_check_tools() {
 			echo "==> installing pnpm"
 			if command -v corepack >/dev/null 2>&1; then
 				corepack enable
-				corepack prepare pnpm@10 --activate
+				corepack prepare pnpm@11 --activate
 			else
 				need_cmd npm
-				npm install -g pnpm@10
+				npm install -g pnpm@11
 			fi
 		else
-			fail "pnpm not found. Install with: corepack enable && corepack prepare pnpm@10 --activate"
+			fail "pnpm not found. Install with: corepack enable && corepack prepare pnpm@11 --activate"
 		fi
 	fi
 

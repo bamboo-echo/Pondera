@@ -111,7 +111,7 @@ Downloads land in the task's scratch directory when one is registered by a
 
 ## Build
 
-Prerequisites: Node 24+, pnpm 10, Go. Install from the workspace root once:
+Prerequisites: Node 24+, pnpm 11, Go. Install from the workspace root once:
 
 ```sh
 cd desktop

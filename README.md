@@ -76,7 +76,8 @@ git clone https://github.com/bamboo-echo/Pondera.git
 cd Pondera
 ```
 
-Requirements: **Go 1.26+**, **Node 24+**, **pnpm 10**, and NSIS 3 for the
+Requirements: **Go 1.27+**, **Node 24+**, **pnpm 11**
+(`npm install -g pnpm@11`), and NSIS 3 for the
 installer. The module pins a `toolchain` directive; keep `GOTOOLCHAIN=auto`
 so Go can fetch it.
 
