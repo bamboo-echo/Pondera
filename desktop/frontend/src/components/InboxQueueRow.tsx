@@ -20,7 +20,7 @@ export function InboxQueueRow({ item, index, ids, locked, editing, children, cop
   const menuAnchor = useRef<HTMLButtonElement>(null);
   const { attributes, listeners, isDragging, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({ id: item.id, disabled: locked || editing });
   return <li ref={setNodeRef} className={`inbox-queue__row${editing ? " inbox-queue__row--editing" : ""}`} data-item-id={item.id}
-    style={{ transform: CSS.Transform.toString(transform ? { ...transform, scaleX: 1, scaleY: 1 } : null), transition, zIndex: isDragging ? 1 : undefined }}>
+    style={{ transform: CSS.Transform.toString(transform ? { ...transform, scaleX: 1, scaleY: 1 } : null), transition, zIndex: isDragging ? "var(--z-local-raised)" : undefined }}>
     <button type="button" ref={setActivatorNodeRef} className="inbox-queue__handle" disabled={locked || editing} aria-label={`${copy.drag} ${index + 1}`} {...attributes} {...listeners}><GripVertical size={16} /></button>
     {editing ? children : <>
     <span className="inbox-queue__ordinal">{index + 1}</span>

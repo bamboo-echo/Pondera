@@ -4,7 +4,7 @@
   position: absolute;
   inset: 0 12px 0 auto;
   width: 28px;
-  z-index: 7;
+  z-index: var(--z-local-handle);
   pointer-events: none;
 }
 .dsh-TurnNavigator-frame {

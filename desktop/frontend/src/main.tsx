@@ -109,6 +109,7 @@ function loadAppShellStylesheet(): Promise<void> {
 function showBootNotice(message: string) {
   const notice = document.createElement("div");
   notice.setAttribute("role", "alert");
+  // z-index-token-allow: this notice must render even when the app stylesheet is the failure, so no --z-* tokens exist.
   notice.style.cssText =
     "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483647;" +
     "display:flex;align-items:center;gap:12px;max-width:min(560px,90vw);padding:10px 14px;" +

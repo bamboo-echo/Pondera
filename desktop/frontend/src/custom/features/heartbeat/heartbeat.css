@@ -48,7 +48,7 @@
   left: 0;
   right: 0;
   height: 32px;
-  z-index: 3;
+  z-index: var(--z-local-handle);
   --pondera-draggable: drag;
   user-select: none;
 }
@@ -205,7 +205,7 @@
   bottom: 0;
   width: 6px;
   pointer-events: none;
-  z-index: 2;
+  z-index: var(--z-local-raised);
   /* 滚动时显示，停止滚动 1.2s 后自动淡出。
      淡出时同时关闭交互：opacity:0 的元素仍会捕获鼠标（thumb 是 pointer-events:auto），
      若不清除命中会挡住左栏右缘的点击；用 visibility 彻底移除命中。 */
@@ -248,7 +248,7 @@
   cursor: col-resize;
   position: relative;
   background: transparent;
-  z-index: 5;
+  z-index: var(--z-local-handle-active);
 }
 
 /* 视觉 1px 细竖线（与页面整体分割风格一致），紧贴边缘 */
@@ -1611,7 +1611,7 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 10;
+  z-index: var(--z-local-popover);
   min-width: 220px;
   max-height: 240px;
   overflow-y: auto;
