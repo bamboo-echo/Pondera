@@ -338,7 +338,8 @@ func runParallel(ctx context.Context, start, end int, run func(int)) (int, []boo
 	const maxParallel = 8
 	sem := make(chan struct{}, maxParallel)
 	var wg sync.WaitGroup
-	completed := make(chan int, end-start)
+	finished := make([]bool, end)
+	var mu sync.Mutex
 	ranUntil := start
 launch:
 	for i := start; i < end; i++ {
@@ -361,7 +362,13 @@ launch:
 			defer wg.Done()
 			defer func() { <-sem }()
 			run(i)
-			completed <- i
+			// Mark completion before the wait group releases. A cancellation
+			// drain only observes the goroutine after wg.Wait or a grace
+			// timeout, and a call whose run() already returned must not be
+			// reported as a straggler because its wake-up was not scheduled yet.
+			mu.Lock()
+			finished[i] = true
+			mu.Unlock()
 		}()
 	}
 	allDone := make(chan struct{})
@@ -377,15 +384,13 @@ launch:
 		case <-time.After(parallelStragglerGrace):
 		}
 	}
-	finished := make([]bool, end)
-	for {
-		select {
-		case i := <-completed:
-			finished[i] = true
-		default:
-			return ranUntil, finished
-		}
-	}
+	// Copy under the lock: a straggler past the grace may still be writing its
+	// slot after this returns, and the caller must not race with that writer.
+	mu.Lock()
+	done := make([]bool, end)
+	copy(done, finished)
+	mu.Unlock()
+	return ranUntil, done
 }
 
 // batchSlots is one batch's per-call execution state. Parallel segments run
