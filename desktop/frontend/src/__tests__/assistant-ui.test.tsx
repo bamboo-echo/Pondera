@@ -86,12 +86,14 @@ function probeMode() {
 
 await act(async () => {
   root.render(
-    <Onboarding status={status} saving={false} error={null} onSave={async () => {}} onTest={() => probeMode()} />,
+    <LocaleProvider>
+      <Onboarding status={status} saving={false} error={null} onSave={async () => {}} onTest={() => probeMode()} />
+    </LocaleProvider>,
   );
   await flushPromises();
 });
 
-const testButton = Array.from(rootEl.querySelectorAll("button")).find((button) => button.textContent?.trim() === "测试连接") as HTMLButtonElement | undefined;
+const testButton = Array.from(rootEl.querySelectorAll("button")).find((button) => button.textContent?.trim() === "Test connection") as HTMLButtonElement | undefined;
 if (!testButton) throw new Error("test connection button did not render");
 eq(rootEl.querySelectorAll(".assistant-badge--unverified").length, 1, "a fresh form starts unverified");
 
@@ -99,14 +101,14 @@ await act(async () => {
   testButton.click();
   await flushPromises();
 });
-ok(testButton.textContent?.includes("测试中…") === true, "testing state is visible while the probe is pending");
+ok(testButton.textContent?.includes("Testing…") === true, "testing state is visible while the probe is pending");
 ok(testButton.disabled, "testing state disables the button to prevent duplicate probes");
 
 await act(async () => {
   resolveProbe?.({ ok: true, category: "ok", message: "", latency_ms: 12, provider: "assistant", model: "draft-model" });
   await flushPromises();
 });
-ok(rootEl.textContent?.includes("通过（12 ms）") === true, "passing probe renders the latency");
+ok(rootEl.textContent?.includes("Passed (12 ms)") === true, "passing probe renders the latency");
 eq(rootEl.querySelectorAll(".assistant-badge--unverified").length, 0, "passing probe removes the unverified badge");
 
 const presetButton = Array.from(rootEl.querySelectorAll("button")).find((button) => button.textContent?.trim() === "DeepSeek") as HTMLButtonElement | undefined;
@@ -115,7 +117,7 @@ await act(async () => {
   presetButton.click();
   await flushPromises();
 });
-ok(!rootEl.textContent?.includes("通过（12 ms）"), "editing a field discards the previous probe result");
+ok(!rootEl.textContent?.includes("Passed (12 ms)"), "editing a field discards the previous probe result");
 ok(rootEl.querySelectorAll(".assistant-badge--unverified").length === 1, "editing a field brings the unverified badge back");
 
 failNextProbe = true;
@@ -123,7 +125,7 @@ await act(async () => {
   testButton.click();
   await flushPromises();
 });
-ok(rootEl.textContent?.includes("失败：限流（rate_limit）") === true, "failing probe renders the readable reason and category");
+ok(rootEl.textContent?.includes("Failed: 限流 (rate_limit)") === true, "failing probe renders the readable reason and category");
 eq(rootEl.querySelectorAll(".assistant-badge--unverified").length, 1, "failing probe keeps the unverified badge");
 eq(probeCall, 2, "each test click issues one probe");
 
