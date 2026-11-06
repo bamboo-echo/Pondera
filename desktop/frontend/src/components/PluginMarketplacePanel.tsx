@@ -325,7 +325,9 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
     setErr(null);
     setNotice(null);
     try {
-      await app.InstallPlugin(entry.installSource, { dryRun: false, link: false, replace: entry.installed });
+      // Both install affordances are disabled for installed entries, so a
+      // replace flag here could never be observed; install only new entries.
+      await app.InstallPlugin(entry.installSource, { dryRun: false, link: false });
       setNotice(copy.installedNotice.replace("{name}", entry.name));
       await reload();
       onInstalled?.();
