@@ -34,6 +34,7 @@ type Copy = {
   featured: string;
   noDescription: string;
   empty: string;
+  indexEmpty: string;
   install: string;
   installed: string;
   installing: string;
@@ -70,6 +71,7 @@ const COPY: Record<Locale, Copy> = {
     featured: "Featured",
     noDescription: "No description",
     empty: "No plugins match this filter.",
+    indexEmpty: "This marketplace index lists no plugins.",
     install: "Install",
     installed: "Installed",
     installing: "Installing…",
@@ -124,6 +126,7 @@ const COPY: Record<Locale, Copy> = {
     featured: "精选",
     noDescription: "无描述",
     empty: "没有符合当前筛选的插件。",
+    indexEmpty: "该插件市场索引没有任何插件。",
     install: "安装",
     installed: "已安装",
     installing: "安装中…",
@@ -178,6 +181,7 @@ const COPY: Record<Locale, Copy> = {
     featured: "精選",
     noDescription: "無描述",
     empty: "沒有符合目前篩選的外掛。",
+    indexEmpty: "此外掛市場索引沒有任何外掛。",
     install: "安裝",
     installed: "已安裝",
     installing: "安裝中…",
@@ -466,7 +470,13 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
           )}
 
           {entries.length === 0 ? (
-            <div className="mem-empty">{domain === ALL_DOMAINS ? copy.empty : copy.domainEmpty}</div>
+            <div className="mem-empty">
+              {view && view.entries.length === 0
+                ? copy.indexEmpty
+                : domain === ALL_DOMAINS
+                  ? copy.empty
+                  : copy.domainEmpty}
+            </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
               {entries.map((entry) => (
