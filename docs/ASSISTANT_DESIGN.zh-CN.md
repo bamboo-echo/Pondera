@@ -139,10 +139,10 @@ desktop/frontend/src/assistant/*
 
 助手自身配置独立存放，不并入主配置；助手密钥经 `SetCredential` 写入主凭据库的独立变量名。
 
-### MVP 实现现状（与上方规格的两处有意偏差）
+### 实现现状（与上方规格的一处有意偏差）
 
 1. **加锁范围**：写入器只调用 `config.LockConfigFilesEdits(userConfigPath)`；`.env` 由 `SetCredentialIfRevision` 在自身锁内写入，避免“持锁再调用 `SetCredential`”的死锁。凭据修订号仍参与预览前比对与写入后校验，不一致按 `stale_plan` 回滚。
-2. **不做设置页广播**：MVP 不发送 `assistant:config-changed`（避免与设置页插件页签的并行改动冲突）。设置页在自身保存时仍会以“整份保存”覆盖助手结果，但写入前的修订号比对会阻止助手基于旧快照覆盖新内容。广播留到 v1。
+2. **设置页广播（v1 已实现）**：`ApplyPlan` 成功（含 `AssistantRollback`）后由 `desktop/host_events.go` 发送 `assistant:config-changed`，`SettingsPanel.tsx` 监听并重新加载配置、提示未保存草稿；失败路径不广播，事件只携带 revision/hash 与变更摘要，不含敏感值。此前的“MVP 不广播”说法已作废。
 
 ## 分阶段
 
