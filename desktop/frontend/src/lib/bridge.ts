@@ -1173,7 +1173,7 @@ function elapsedMs(startedAt: number): number {
 // calling it rejects with a clear error instead of throwing a synchronous
 // TypeError at the call site. Feature detection must therefore consult the
 // binding itself (via appCommand) rather than `typeof app.X === "function"`.
-const unavailable = (..._args: unknown[]) => Promise.reject(new Error("desktop command unavailable"));
+const unavailable = async (): Promise<never> => { throw new Error("command unavailable"); };
 
 // The same question for code that receives an app binding as a parameter: tests
 // inject plain objects, while the real binding is the bridge proxy, whose
@@ -1186,7 +1186,7 @@ export function appTargetSupports(target: unknown, method: string): boolean {
 export const app: AppBindings = new Proxy({} as AppBindings, {
   get(_t, prop) {
     const host = desktopHost().app, target = host ?? getMock();
-    let v = (target as unknown as Record<string, unknown>)[String(prop)];
+    let v = (target as unknown as Record<PropertyKey, unknown>)[prop];
     // Inbox commands are optional. A synthesized attachment fallback would
     // make ordinary browser mocks claim support for absent queue methods.
     if (!host && v === undefined && typeof prop === "string" &&
@@ -1194,10 +1194,10 @@ export const app: AppBindings = new Proxy({} as AppBindings, {
       module => module.callMockAttachment(target, prop as keyof AttachmentBindings, args));
     if (typeof v !== "function") {
       // The Electron host proxy yields undefined for any command the live
-      // contract omits; a command name must then fail like a rejected call,
-      // not as a synchronous TypeError at the call site. Only command names
-      // get the stub; symbols and inspection properties keep their real value.
-      if (host && typeof prop === "string" && /^[A-Z][A-Za-z0-9]*$/.test(prop)) return unavailable;
+      // contract omits; a missing command must then fail like a rejected call,
+      // not as a synchronous TypeError at the call site. Symbol keys (well-known
+      // inspection hooks) keep their real value.
+      if (host && typeof prop === "string") return unavailable;
       return v;
     }
     return (...args: unknown[]) => {
