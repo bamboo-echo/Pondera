@@ -52,6 +52,10 @@ export function CapabilitiesPanel({
   const [view, setView] = useState<CapabilitiesView | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // loadErr is separate from err so a failed snapshot read cannot be rendered as
+  // "0 MCP / 0 skill / 0 plugin", and so a later successful reload does not wipe
+  // the message of a failed edit.
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [tab, setTab] = useState<CapTab>(initialTab);
@@ -62,8 +66,13 @@ export function CapabilitiesPanel({
   const [expandedServerTools, setExpandedServerTools] = useState<Set<string>>(() => new Set());
 
   const reload = useCallback(async () => {
-    setView(normalizeCapabilitiesView(await app.Capabilities().catch(() => ({ servers: [], skills: [], skillRoots: [], plugins: [] }))));
-  }, []);
+    try {
+      setView(normalizeCapabilitiesView(await app.Capabilities()));
+      setLoadErr(null);
+    } catch (e) {
+      setLoadErr(activeWorkBusyNoticeText(e, t) ?? String((e as Error)?.message ?? e));
+    }
+  }, [t]);
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -176,10 +185,21 @@ export function CapabilitiesPanel({
         </header>
 
         {!view ? (
-          <div className="empty">{t("caps.loading")}</div>
+          loadErr ? (
+            <div className="drawer__body">
+              <div className="banner banner--error"><ErrorMessage error={loadErr} /></div>
+              <div className="mem-empty">
+                <button className="btn btn--small" onClick={() => void reload()}>
+                  {t("caps.retry")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="empty">{t("caps.loading")}</div>
+          )
         ) : (
           <div className="drawer__body">
-            {err && <div className="banner banner--error"><ErrorMessage error={err} /></div>}
+            {(err ?? loadErr) && <div className="banner banner--error"><ErrorMessage error={err ?? loadErr} /></div>}
 
             <div className="cap-tabs" role="tablist" aria-label={t("caps.title")}>
               <button
