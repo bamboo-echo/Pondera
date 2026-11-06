@@ -112,6 +112,16 @@ export const TerminalView = forwardRef<TerminalViewHandle, {
     onSelectionActionChangeRef.current?.({ text, point });
   };
 
+  // The terminal-creation effect attaches listeners once per session. Reading
+  // these through refs lets those listeners use the current locale/toast/report
+  // implementation without tearing the terminal down on unrelated renders.
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const tRef = useRef(t);
+  tRef.current = t;
+  const reportSelectionRef = useRef(reportSelection);
+  reportSelectionRef.current = reportSelection;
+
   const copySelection = async () => {
     const operation = selectionLifecycleRef.current.captureSelection();
     const text = selectionTextRef.current;
@@ -185,7 +195,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, {
         void writeClipboardText(decision.text).then((copied) => {
           if (!selectionLifecycleRef.current.isCurrentSelection(selectionOperation)) return;
           if (!copied) {
-            showToast(t("diag.copyFailed"), "error");
+            showToastRef.current(tRef.current("diag.copyFailed"), "error");
             return;
           }
           clearSelectionState(terminal);
@@ -206,7 +216,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, {
       if (frame !== null) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         frame = null;
-        reportSelection({ left: event.clientX, top: event.clientY + 8 });
+        reportSelectionRef.current({ left: event.clientX, top: event.clientY + 8 });
       });
     };
     const onContextMenu = (event: MouseEvent) => {
@@ -226,6 +236,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, {
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fitTerminal);
     observer?.observe(host);
     fitTerminal();
+    const selectionLifecycle = selectionLifecycleRef.current;
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
       host.removeEventListener("pointerup", onPointerUp);
@@ -237,7 +248,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, {
       outputResize.dispose();
       terminalSink.dispose();
       if (terminalSinkRef.current === terminalSink) terminalSinkRef.current = null;
-      selectionLifecycleRef.current.deactivate(terminal);
+      selectionLifecycle.deactivate(terminal);
       if (fitRef.current === fit) fitRef.current = null;
       if (terminalRef.current === terminal) terminalRef.current = null;
       terminal.dispose();

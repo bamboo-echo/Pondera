@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import logoSymbol from "../assets/logo-symbol.svg";
 import { useT } from "../lib/i18n";
 import { markSplashShown } from "../lib/startupSplashState";
@@ -15,17 +15,25 @@ export function StartupSplash({ hold, onDone }: { hold: boolean; onDone: () => v
   const finishedRef = useRef(false);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  // The keyboard skip and the click handler read the latest gate values while
+  // the finish identity stays stable, so the one-time listeners never rebind.
+  const minElapsedRef = useRef(minElapsed);
+  minElapsedRef.current = minElapsed;
+  const holdRef = useRef(hold);
+  holdRef.current = hold;
+  const forceReleaseRef = useRef(forceRelease);
+  forceReleaseRef.current = forceRelease;
 
-  const finish = (skipHold = false) => {
+  const finish = useCallback((skipHold = false) => {
     if (finishedRef.current) return;
-    if (!skipHold && (!minElapsed || hold) && !forceRelease) return;
+    if (!skipHold && (!minElapsedRef.current || holdRef.current) && !forceReleaseRef.current) return;
     finishedRef.current = true;
     setLeaving(true);
     window.setTimeout(() => {
       markSplashShown();
       onDoneRef.current();
     }, FADE_OUT_MS);
-  };
+  }, []);
 
   useEffect(() => {
     const minTimer = window.setTimeout(() => setMinElapsed(true), MIN_VISIBLE_MS);
@@ -38,7 +46,7 @@ export function StartupSplash({ hold, onDone }: { hold: boolean; onDone: () => v
 
   useEffect(() => {
     finish();
-  }, [minElapsed, hold, forceRelease]);
+  }, [finish, forceRelease, hold, minElapsed]);
 
   useEffect(() => {
     const skip = (event: KeyboardEvent) => {
@@ -47,7 +55,7 @@ export function StartupSplash({ hold, onDone }: { hold: boolean; onDone: () => v
     };
     window.addEventListener("keydown", skip);
     return () => window.removeEventListener("keydown", skip);
-  }, []);
+  }, [finish]);
 
   return (
     <div className="startup-splash" data-leaving={leaving} onClick={() => finish(true)}>

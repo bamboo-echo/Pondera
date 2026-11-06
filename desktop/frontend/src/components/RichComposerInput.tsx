@@ -588,12 +588,18 @@ export const RichComposerInput = forwardRef<RichComposerInputHandle, {
     });
   };
 
+  // The imperative handle and the caret-restoration effect must call the
+  // current implementation without rebuilding themselves when a parent prop
+  // identity changes; refs keep the call timing unchanged.
+  const latestHandlersRef = useRef({ readSelection, reportSelection, replaceRange, onChange });
+  latestHandlersRef.current = { readSelection, reportSelection, replaceRange, onChange };
+
   useImperativeHandle(ref, () => ({
     focus: () => rootRef.current?.focus(),
     getSelection: () => {
       const root = rootRef.current;
       if (!root) return { start: text.length, end: text.length };
-      return readSelection(root);
+      return latestHandlersRef.current.readSelection(root);
     },
     setSelectionRange: (start, end = start, afterInvocationId) => {
       const target = { start, end, afterInvocationId };
@@ -613,24 +619,24 @@ export const RichComposerInput = forwardRef<RichComposerInputHandle, {
         root.focus();
         setDomSelection(root, target);
         lastValidSelectionRef.current = target;
-        reportSelection();
+        latestHandlersRef.current.reportSelection();
       });
     },
-    replaceRange,
+    replaceRange: latestHandlersRef.current.replaceRange,
     insertInvocation: (command, query) => {
       const next = replaceInvocationTextRange(text, invocations, query.from, query.to, "");
       const id = newComposerInvocationID(invocations);
       const invocation: ComposerInvocation = { id, offset: query.from, command };
       const afterSelection = { start: query.from, end: query.from, afterInvocationId: id };
       pendingSelectionRef.current = afterSelection;
-      onChange(next.text, sortComposerInvocations([...next.invocations, invocation]), {
+      latestHandlersRef.current.onChange(next.text, sortComposerInvocations([...next.invocations, invocation]), {
         source: "programmatic",
         beforeSelection: { start: query.from, end: query.to },
         afterSelection,
       });
     },
     scrollHeight: () => rootRef.current?.scrollHeight ?? 0,
-  }), [invocations, known, text]);
+  }), [invocations, text]);
 
   useLayoutEffect(() => {
     if (composingRef.current) return;
@@ -651,7 +657,7 @@ export const RichComposerInput = forwardRef<RichComposerInputHandle, {
         end: pending.end,
         afterInvocationId: pending.afterInvocationId,
       };
-      reportSelection();
+      latestHandlersRef.current.reportSelection();
     } else {
       lastValidSelectionRef.current = {
         start: pending.start,
