@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { assistantApi } from "./api";
+import { assistantCopy } from "./copy";
+import { useI18n } from "../lib/i18n";
 import type { AssistantHistoryRecord } from "../generated/desktopContract.generated";
 
 // History lists committed changes newest first and offers one-click restore.
 export function History({ refreshKey }: { refreshKey: number }) {
+  const { locale } = useI18n();
+  const copy = assistantCopy(locale);
   const [records, setRecords] = useState<AssistantHistoryRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -39,9 +43,9 @@ export function History({ refreshKey }: { refreshKey: number }) {
 
   return (
     <div className="assistant-card assistant-history">
-      <h3>修改历史</h3>
+      <h3>{copy.historyTitle}</h3>
       {error ? <div className="assistant-error">{error}</div> : null}
-      {records.length === 0 ? <p className="assistant-muted">还没有通过助手写入的修改。</p> : null}
+      {records.length === 0 ? <p className="assistant-muted">{copy.historyEmpty}</p> : null}
       <ul>
         {records.map((record) => (
           <li key={record.id}>
@@ -60,7 +64,7 @@ export function History({ refreshKey }: { refreshKey: number }) {
             ) : null}
             {record.backup_id ? (
               <button type="button" disabled={busyId === record.backup_id} onClick={() => void rollback(record.backup_id)}>
-                {busyId === record.backup_id ? "还原中…" : "还原到此版本"}
+                {busyId === record.backup_id ? copy.restoring : copy.restore}
               </button>
             ) : null}
           </li>

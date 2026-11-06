@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { assistantApi } from "./api";
+import { assistantCopy } from "./copy";
 import { Chat } from "./Chat";
 import { Diagnose } from "./Diagnose";
 import { History } from "./History";
 import { Onboarding } from "./Onboarding";
 import { PatchPreview } from "./PatchPreview";
+import { useI18n } from "../lib/i18n";
 import type {
   AssistantChatResult,
   AssistantPlanView,
@@ -17,6 +19,8 @@ type Tab = "chat" | "diagnose" | "history";
 // AssistantApp is the separate assistant window surface. It talks only to the
 // host RPC; all writes go through internal/assist/writer.
 export default function AssistantApp() {
+  const { locale } = useI18n();
+  const copy = assistantCopy(locale);
   const [status, setStatus] = useState<AssistantStatusView | null>(null);
   const [tab, setTab] = useState<Tab>("chat");
   const [editing, setEditing] = useState(false);
@@ -80,7 +84,7 @@ export default function AssistantApp() {
       const message = err instanceof Error ? err.message : String(err);
       setApplyError(
         message.includes("stale_plan")
-          ? "配置文件在预览后被改动，请重新提问以生成新的预览。"
+          ? copy.stalePlan
           : message,
       );
     } finally {
@@ -94,23 +98,23 @@ export default function AssistantApp() {
     <div className="assistant-shell">
       <header className="assistant-header">
         <div>
-          <h1>Pondera 配置助手</h1>
+          <h1>{copy.title}</h1>
           <p className="assistant-muted">
-            {status?.configured ? `${status.model} · ${status.endpoint}` : "尚未配置助手模型"}
+            {status?.configured ? `${status.model} · ${status.endpoint}` : copy.unconfigured}
           </p>
         </div>
         <div className="assistant-tabs">
           <button type="button" className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>
-            对话
+            {copy.tabChat}
           </button>
           <button type="button" className={tab === "diagnose" ? "active" : ""} onClick={() => setTab("diagnose")}>
-            诊断
+            {copy.tabDiagnose}
           </button>
           <button type="button" className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
-            历史
+            {copy.tabHistory}
           </button>
           <button type="button" onClick={() => setEditing(true)}>
-            设置
+            {copy.tabSettings}
           </button>
         </div>
       </header>
@@ -152,8 +156,8 @@ export default function AssistantApp() {
       {!onboarding && tab === "history" ? <History refreshKey={refreshKey} /> : null}
 
       <footer className="assistant-footer assistant-muted">
-        写入链路：备份 → 加锁 → 严格重读 → 修订号比对 → apply → 原子写 → 回读校验 → 失败自动回滚。
-        密钥不进入模型请求与界面原文。
+        {copy.footerChain}
+        {copy.footerSecret}
       </footer>
     </div>
   );

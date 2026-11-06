@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { assistantApi } from "./api";
+import { assistantCopy, fill } from "./copy";
+import { useI18n } from "../lib/i18n";
 import type { AssistantConnectivity, AssistantDiagnoseResult } from "../generated/desktopContract.generated";
 
 // Diagnose is read-only: it never writes configuration. Connectivity sends one
 // minimal request through the configured adapter.
 export function Diagnose({ refreshKey }: { refreshKey: number }) {
+  const { locale } = useI18n();
+  const copy = assistantCopy(locale);
   const [report, setReport] = useState<AssistantDiagnoseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState("");
@@ -42,9 +46,9 @@ export function Diagnose({ refreshKey }: { refreshKey: number }) {
 
   return (
     <div className="assistant-card assistant-diagnose">
-      <h3>配置诊断</h3>
+      <h3>{copy.diagnoseTitle}</h3>
       {error ? <div className="assistant-error">{error}</div> : null}
-      <p className="assistant-muted">{report ? `已检查 ${report.checked} 项` : "检查中…"}</p>
+      <p className="assistant-muted">{report ? fill(copy.checked, { count: report.checked }) : copy.checking}</p>
       <ul>
         {report?.findings.map((finding, index) => (
           <li key={`${finding.code}-${index}`} className={`assistant-finding assistant-finding-${finding.severity}`}>
@@ -53,32 +57,32 @@ export function Diagnose({ refreshKey }: { refreshKey: number }) {
               <span className="assistant-badge">{finding.code}</span>
             </div>
             <p>{finding.detail}</p>
-            {finding.fix ? <p className="assistant-muted">建议：{finding.fix}</p> : null}
+            {finding.fix ? <p className="assistant-muted">{fill(copy.suggestion, { fix: finding.fix })}</p> : null}
           </li>
         ))}
       </ul>
 
-      <h4>连通测试</h4>
+      <h4>{copy.connectivityTitle}</h4>
       <div className="assistant-probe-form">
         <label>
           provider
           <input value={provider} onChange={(event) => setProvider(event.target.value)} placeholder="deepseek-flash" />
         </label>
         <label>
-          模型（可选）
+          {copy.modelOptional}
           <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="deepseek-chat" />
         </label>
         <label>
-          临时 key（可选）
+          {copy.keyOptional}
           <input type="password" autoComplete="off" value={draftKey} onChange={(event) => setDraftKey(event.target.value)} />
         </label>
         <button type="button" disabled={probing || !provider.trim()} onClick={() => void test()}>
-          {probing ? "测试中…" : "测试连接"}
+          {probing ? copy.testing : copy.testConnection}
         </button>
       </div>
       {probe ? (
         <div className={probe.ok ? "assistant-success" : "assistant-error"}>
-          {probe.category} · {probe.message}（{probe.latency_ms} ms）
+          {fill(copy.probeLine, { category: probe.category, message: probe.message, latency: probe.latency_ms })}
         </div>
       ) : null}
     </div>

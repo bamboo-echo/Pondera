@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { assistantCopy, fill } from "./copy";
+import { useI18n } from "../lib/i18n";
 import type { AssistantConnectivity, AssistantStatusView } from "../generated/desktopContract.generated";
 
 const PRESETS = [
@@ -19,6 +21,8 @@ export interface OnboardingProps {
 // Onboarding collects the assistant's own endpoint + key + model. The key is
 // write-only: it is never echoed back into this form, logged, or emitted.
 export function Onboarding({ status, saving, error, onSave, onTest, onCancel }: OnboardingProps) {
+  const { locale } = useI18n();
+  const copy = assistantCopy(locale);
   const [endpoint, setEndpoint] = useState(status?.endpoint ?? "");
   const [model, setModel] = useState(status?.model ?? "");
   const [kind, setKind] = useState(status?.kind || "openai");
@@ -66,9 +70,9 @@ export function Onboarding({ status, saving, error, onSave, onTest, onCancel }: 
         void onSave(endpoint.trim(), key.trim(), model.trim(), kind);
       }}
     >
-      <h2>先给助手配一个自己的模型</h2>
+      <h2>{copy.onboardTitle}</h2>
       <p className="assistant-muted">
-        这些设置只存在 <code>%AppData%\pondera\assistant</code>，不会并进主配置；密钥走 Pondera 凭据库。
+        {copy.onboardNoteBefore}<code>%AppData%\pondera\assistant</code>{copy.onboardNoteAfter}
       </p>
       <div className="assistant-presets">
         {PRESETS.map((preset) => (
@@ -97,13 +101,13 @@ export function Onboarding({ status, saving, error, onSave, onTest, onCancel }: 
         />
       </label>
       <label>
-        模型
+        {copy.modelLabel}
         <input value={model} onChange={(event) => edit(setModel)(event.target.value)} placeholder="deepseek-chat" />
       </label>
       <label>
-        接口类型
+        {copy.kindLabel}
         <select value={kind} onChange={(event) => edit(setKind)(event.target.value)}>
-          <option value="openai">OpenAI 兼容</option>
+          <option value="openai">{copy.kindOpenAI}</option>
           <option value="anthropic">Anthropic</option>
         </select>
       </label>
@@ -114,7 +118,7 @@ export function Onboarding({ status, saving, error, onSave, onTest, onCancel }: 
           autoComplete="off"
           value={key}
           onChange={(event) => edit(setKey)(event.target.value)}
-          placeholder={status?.key_set ? "已设置，留空表示不修改" : "sk-..."}
+          placeholder={status?.key_set ? copy.keySet : "sk-..."}
         />
       </label>
       {onTest ? (
@@ -124,28 +128,28 @@ export function Onboarding({ status, saving, error, onSave, onTest, onCancel }: 
             onClick={() => void runTest()}
             disabled={testing || saving || !endpoint.trim() || !model.trim()}
           >
-            {testing ? "测试中…" : "测试连接"}
+            {testing ? copy.testing : copy.testConnection}
           </button>
           {probe ? (
             <span className={probe.ok ? "assistant-probe assistant-probe--ok" : "assistant-probe assistant-probe--fail"}>
               {probe.ok
-                ? `通过（${probe.latency_ms} ms）`
-                : `失败：${probe.message}（${probe.category}）`}
+                ? fill(copy.probeOk, { latency: probe.latency_ms })
+                : fill(copy.probeFail, { message: probe.message, category: probe.category })}
             </span>
           ) : (
-            <span className="assistant-muted">用当前草稿测一次，不会保存任何值</span>
+            <span className="assistant-muted">{copy.probeHint}</span>
           )}
         </div>
       ) : null}
       {error ? <div className="assistant-error">{error}</div> : null}
       <div className="assistant-actions">
         <button type="submit" className="assistant-primary" disabled={saving}>
-          {saving ? "保存中…" : "保存"}
+          {saving ? copy.saving : copy.save}
         </button>
-        {!verified ? <span className="assistant-badge assistant-badge--unverified">未验证</span> : null}
+        {!verified ? <span className="assistant-badge assistant-badge--unverified">{copy.unverified}</span> : null}
         {onCancel ? (
           <button type="button" onClick={onCancel} disabled={saving}>
-            返回
+            {copy.back}
           </button>
         ) : null}
       </div>

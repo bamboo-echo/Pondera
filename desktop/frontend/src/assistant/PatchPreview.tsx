@@ -1,3 +1,5 @@
+import { assistantCopy, fill, type AssistantCopy } from "./copy";
+import { useI18n } from "../lib/i18n";
 import type {
   AssistantPlanRow,
   AssistantPlanView,
@@ -12,7 +14,7 @@ export interface PatchPreviewProps {
   onDismiss: () => void;
 }
 
-function Row({ row }: { row: AssistantPlanRow }) {
+function Row({ row, copy }: { row: AssistantPlanRow; copy: AssistantCopy }) {
   return (
     <tr>
       <td className="assistant-path">{row.label}</td>
@@ -20,9 +22,9 @@ function Row({ row }: { row: AssistantPlanRow }) {
       <td className="assistant-after">{row.after}</td>
       <td>
         <span className={`assistant-badge assistant-badge-${row.risk}`}>
-          {row.risk === "benign" ? "低风险" : "需确认"}
+          {row.risk === "benign" ? copy.riskLow : copy.riskConfirm}
         </span>
-        {row.sensitive ? <span className="assistant-badge assistant-badge-sensitive">脱敏</span> : null}
+        {row.sensitive ? <span className="assistant-badge assistant-badge-sensitive">{copy.masked}</span> : null}
       </td>
     </tr>
   );
@@ -31,41 +33,43 @@ function Row({ row }: { row: AssistantPlanRow }) {
 // PatchPreview is the confirmation gate: nothing is written until the user
 // presses 确认写入.
 export function PatchPreview({ plan, applying, error, applied, onApply, onDismiss }: PatchPreviewProps) {
+  const { locale } = useI18n();
+  const copy = assistantCopy(locale);
   return (
     <div className="assistant-card assistant-preview">
       <header className="assistant-preview-head">
-        <h3>{plan.intent || "待确认的修改"}</h3>
-        <span className="assistant-muted">{plan.op_count} 项 · 预览 {plan.expires_at} 过期</span>
+        <h3>{plan.intent || copy.pendingTitle}</h3>
+        <span className="assistant-muted">{fill(copy.opCount, { count: plan.op_count, expires: plan.expires_at })}</span>
       </header>
       <table className="assistant-diff">
         <thead>
           <tr>
-            <th>配置项</th>
-            <th>当前</th>
-            <th>修改后</th>
-            <th>风险</th>
+            <th>{copy.colKey}</th>
+            <th>{copy.colBefore}</th>
+            <th>{copy.colAfter}</th>
+            <th>{copy.colRisk}</th>
           </tr>
         </thead>
         <tbody>
           {plan.diff.map((row, index) => (
-            <Row key={`${row.label}-${index}`} row={row} />
+            <Row key={`${row.label}-${index}`} row={row} copy={copy} />
           ))}
         </tbody>
       </table>
       <div className="assistant-warning">{plan.comment_warning}</div>
       {plan.requires_confirmation ? (
-        <div className="assistant-warning">包含会改变行为或密钥的操作，请确认后再写入。</div>
+        <div className="assistant-warning">{copy.behaviorWarning}</div>
       ) : null}
       {error ? <div className="assistant-error">{error}</div> : null}
-      {applied ? <div className="assistant-success">已写入并完成回读校验。</div> : null}
+      {applied ? <div className="assistant-success">{copy.applied}</div> : null}
       <div className="assistant-actions">
         {!applied ? (
           <button type="button" className="assistant-primary" disabled={applying} onClick={() => void onApply(plan.id)}>
-            {applying ? "写入中…" : "确认写入"}
+            {applying ? copy.writing : copy.confirmWrite}
           </button>
         ) : null}
         <button type="button" onClick={onDismiss} disabled={applying}>
-          {applied ? "完成" : "放弃"}
+          {applied ? copy.done : copy.discard}
         </button>
       </div>
     </div>

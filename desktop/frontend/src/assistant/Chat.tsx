@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { assistantCopy, fill } from "./copy";
+import { useI18n } from "../lib/i18n";
 import type { AssistantChatResult } from "../generated/desktopContract.generated";
 
 export interface ChatProps {
@@ -12,13 +14,15 @@ export interface ChatProps {
 
 // Chat is the natural-language entry: ask, explain, or produce a patch preview.
 export function Chat({ configured, busy, error, last, onAsk, onConfigure }: ChatProps) {
+  const { locale } = useI18n();
+  const copy = assistantCopy(locale);
   const [message, setMessage] = useState("");
   if (!configured) {
     return (
       <div className="assistant-card">
-        <p>还没有配置助手自己的模型。</p>
+        <p>{copy.chatUnconfigured}</p>
         <button type="button" className="assistant-primary" onClick={onConfigure}>
-          去配置
+          {copy.chatConfigure}
         </button>
       </div>
     );
@@ -36,11 +40,11 @@ export function Chat({ configured, busy, error, last, onAsk, onConfigure }: Chat
           value={message}
           rows={4}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder="例如：把默认模型换成 deepseek-v4-pro；或者问 compact_ratio 是干什么的"
+          placeholder={copy.chatPlaceholder}
         />
         <div className="assistant-actions">
           <button type="submit" className="assistant-primary" disabled={busy}>
-            {busy ? "思考中…" : "提问"}
+            {busy ? copy.chatThinking : copy.chatAsk}
           </button>
         </div>
       </form>
@@ -50,7 +54,7 @@ export function Chat({ configured, busy, error, last, onAsk, onConfigure }: Chat
           <p>{last.reply}</p>
           {last.rejection ? (
             <div className="assistant-error">
-              已拒绝（{last.rejection.reason}）：{last.rejection.message}
+              {fill(copy.chatRejected, { reason: last.rejection.reason, message: last.rejection.message })}
             </div>
           ) : null}
         </div>
