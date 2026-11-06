@@ -31,23 +31,23 @@ const (
 // carries classification only: never a response body, request query, or
 // credential. Timing and attempt-budget fields are filled by the caller.
 type AttemptFailure struct {
-	Attempt    int         `json:"attempt"`
-	Max        int         `json:"max"`
-	Kind       FailureKind `json:"kind"`
-	Phase      string      `json:"phase,omitempty"`
-	Status     int         `json:"status,omitempty"`
-	Code       string      `json:"code,omitempty"`
-	Retryable  bool        `json:"retryable"`
-	BackoffMs  int         `json:"backoffMs,omitempty"`
+	Attempt   int         `json:"attempt"`
+	Max       int         `json:"max"`
+	Kind      FailureKind `json:"kind"`
+	Phase     string      `json:"phase,omitempty"`
+	Status    int         `json:"status,omitempty"`
+	Code      string      `json:"code,omitempty"`
+	Retryable bool        `json:"retryable"`
+	BackoffMs int         `json:"backoffMs,omitempty"`
 	// RetryAfterMs is the server's raw Retry-After request. It is kept separate
 	// from BackoffMs so the UI can say what the server asked for even when the
 	// applied delay differs (the schedule was longer, or the cap refused it).
-	RetryAfterMs int   `json:"retryAfterMs,omitempty"`
-	ElapsedMs    int64 `json:"elapsedMs,omitempty"`
-	At         int64       `json:"at,omitempty"`
-	ProviderID string      `json:"providerId,omitempty"`
-	Model      string      `json:"model,omitempty"`
-	TraceID    string      `json:"traceId,omitempty"`
+	RetryAfterMs int    `json:"retryAfterMs,omitempty"`
+	ElapsedMs    int64  `json:"elapsedMs,omitempty"`
+	At           int64  `json:"at,omitempty"`
+	ProviderID   string `json:"providerId,omitempty"`
+	Model        string `json:"model,omitempty"`
+	TraceID      string `json:"traceId,omitempty"`
 }
 
 // ExplainFailure classifies err into a display-safe AttemptFailure. It reuses

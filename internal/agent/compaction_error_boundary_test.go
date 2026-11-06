@@ -24,7 +24,8 @@ func TestCompactionFinishPreservesUnrelatedErrors(t *testing.T) {
 		a := &Agent{}
 		ctx, finish := a.beginCompactionRun(t.Context())
 		unrelated := errors.New("request preparation failed")
-		wrapped := fmt.Errorf("save failed: %w", &compactionPersistenceError{context.DeadlineExceeded})
+		persistence := error(&compactionPersistenceError{context.DeadlineExceeded})
+		wrapped := fmt.Errorf("save failed: %w", persistence)
 		time.Sleep(compactionBudget)
 		synctest.Wait()
 		for _, original := range []error{nil, unrelated, wrapped, context.Canceled, fmt.Errorf("recovery guidance: %w", errSummaryBudget)} {

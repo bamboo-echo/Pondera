@@ -11,7 +11,6 @@ const read = (relativePath) =>
 
 const frontendPackage = JSON.parse(read("desktop/frontend/package.json"));
 const ciWorkflow = read(".github/workflows/ci.yml");
-const releaseWorkflow = read(".github/workflows/release-desktop.yml");
 const readme = read("README.md");
 const desktopReadme = read("desktop/README.md");
 const desktopBuildScript = read("scripts/desktop-build.sh");
@@ -55,17 +54,19 @@ assert.ok(
   "desktop/wails.json must be retired with the Wails shell",
 );
 
-for (const jobName of ["desktop-prepare", "desktop-go", "desktop-frontend", "desktop-browser-group", "desktop-macos", "desktop-windows"]) {
-  assert.deepEqual(nodeVersions(jobBody(ciWorkflow, jobName)), [pinnedNodeVersion]);
+for (const jobName of ["build-and-test", "frontend", "diff-check"]) {
+  assert.notEqual(jobBody(ciWorkflow, jobName), "", `CI must define the ${jobName} job`);
 }
-
-const releaseNodeVersions = nodeVersions(releaseWorkflow);
-assert.ok(releaseNodeVersions.length > 0, "release workflow must set up Node");
-assert.deepEqual(new Set(releaseNodeVersions), new Set([pinnedNodeVersion]));
+// This fork tracks only the CI workflow; it must run the front end on the same
+// Node major the frontend pins.
+assert.deepEqual(
+  nodeVersions(jobBody(ciWorkflow, "frontend")),
+  [read("desktop/frontend/.nvmrc").trim()],
+  "the CI frontend job must use the Node major the frontend pins",
+);
 
 for (const [name, workflow] of [
   ["CI", ciWorkflow],
-  ["release", releaseWorkflow],
 ]) {
   const lines = workflow.split("\n");
   const pnpmVersions = lines.flatMap((line, index) => {
@@ -89,8 +90,8 @@ for (const [name, content] of [
   );
 }
 
-assert.match(readme, /#### CLI/);
-assert.match(readme, /#### Desktop/);
+assert.match(readme, /### CLI \/ TUI/);
+assert.match(readme, /### Desktop app/);
 
 // The desktop build is the Electron packaging entrypoint: it must regenerate
 // the shell/service contract and fail on drift before compiling anything.
@@ -152,17 +153,6 @@ assert.match(
   desktopBuildScript,
   /GOOS="\$os" GOARCH="\$arch" go build -trimpath -ldflags="-s -w \$service_ldflags" -o "\$service_out"/,
   "desktop service builds must consume the platform-specific linker flags",
-);
-const windowsJob = jobBody(ciWorkflow, "desktop-windows");
-assert.match(
-  windowsJob,
-  /go build -trimpath -ldflags "-s -w -H windowsgui -X main\.version=v0\.0\.0-ci -X main\.channel=canary" -o build\/bin\/pondera-desktop\.exe \./,
-  "Windows native startup CI must build the service as a GUI-subsystem image",
-);
-assert.match(
-  windowsJob,
-  /node \.\.\/scripts\/verify-windows-gui-subsystem\.mjs build\/bin\/pondera-desktop\.exe/,
-  "Windows native startup CI must verify the service PE subsystem",
 );
 // The shell is packaged through the Electron packaging script, never wails build.
 assert.match(
