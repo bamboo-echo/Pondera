@@ -62,7 +62,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="toast-container" role="status" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast toast--${t.level}`} onClick={() => dismissToast(t.id)}>
+          <div key={t.id} className={`toast toast--${t.level}`}>
             {t.level === "warn" && <span className="toast__icon">⚠️</span>}
             {t.level === "error" && <span className="toast__icon">❌</span>}
             <span className="toast__text">{t.level === "info" ? t.text : <ErrorMessage error={t.text} summary={t.summary} onInspect={() => {
@@ -73,8 +73,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 className="toast__action"
-                onClick={(event) => {
-                  event.stopPropagation();
+                onClick={() => {
                   dismissToast(t.id);
                   t.onAction?.();
                 }}
@@ -83,7 +82,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               </button>
             )}
             <button type="button" className="toast__action" aria-label={translate("error.dismiss")}
-              onClick={(event) => { event.stopPropagation(); dismissToast(t.id); }}>×</button>
+              onClick={() => dismissToast(t.id)}>×</button>
           </div>
         ))}
       </div>
