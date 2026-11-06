@@ -8,7 +8,6 @@ import {
   workspaceSplitTreeWidthFromPointer,
 } from "../lib/workspaceSplit";
 import { resolveWorkspacePanelWidth } from "../lib/workspaceLayout";
-import { closeWorkspacePreviewTab } from "../lib/workspacePreviewTabs";
 import { shouldScrollWorkspaceTreeSelection } from "../lib/workspaceTreeReveal";
 import { mergeWorkspaceSearchResults } from "../lib/workspaceTreeSearch";
 
@@ -167,10 +166,6 @@ eq(
   true,
   "file tree stays visible until the measured panel width is known",
 );
-
-const closedRecentPreview = closeWorkspacePreviewTab(["a.ts", "b.ts", "c.ts"], "c.ts");
-eq(closedRecentPreview.selectedPath, "b.ts", "closing the current preview falls back to the previous recent file");
-eq(closedRecentPreview.openTabs.join(","), "a.ts,b.ts", "closing one preview preserves the other recent files");
 
 eq(
   shouldInitializeWorkspaceSplitOnFileSelect({ previewVisible: false, treeVisible: true }),

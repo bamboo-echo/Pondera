@@ -128,9 +128,6 @@
     "desktop/frontend/src/components/ThemeGallery.tsx": {
       "file-size": 490
     },
-    "desktop/frontend/src/components/ThemeLibrary.tsx": {
-      "file-size": 159
-    },
     "desktop/frontend/src/components/UsageStatsPanel.tsx": {
       "file-size": 277
     },

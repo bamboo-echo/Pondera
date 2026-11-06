@@ -11,7 +11,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ToolCard } from "../components/ToolCard";
 import { LocaleProvider } from "../lib/i18n";
-import { setReasoningSummaryEnabled } from "../lib/reasoningSummaryPreference";
+import { setReasoningSummaryEnabled } from "../lib/reasoningDisplayPreference";
 import { hydrateSessionExperience } from "../lib/sessionExperience";
 import type { Item, SubagentProgress } from "../lib/useController";
 

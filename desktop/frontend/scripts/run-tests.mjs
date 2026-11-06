@@ -35,7 +35,6 @@ const OWNED_ELSEWHERE = new Map(Object.entries({
   "raf-batch.test.ts": "test:stream",
   "stream-delta-batch.test.ts": "test:stream",
   "use-controller-stream-progress.test.ts": "test:stream",
-  "nested-scroll-handoff.test.ts": "test:transcript",
   "typography-overflow-contract.test.ts": "test:transcript",
   "composer-menu-viewport.test.ts": "test:composer-menu-viewport",
   "virtual-menu-identity.test.tsx": "test:composer-menu-viewport",

@@ -46,7 +46,6 @@ const stylesSource = readFileSync(resolve(testDir, "../styles.css"), "utf8");
 const appViewSource = readFileSync(resolve(testDir, "../app-shell/AppRuntimeView.tsx"), "utf8");
 const exportOwnerSource = readFileSync(resolve(testDir, "../app-runtime/useSessionExportCommands.ts"), "utf8");
 const composerRouterSource = readFileSync(resolve(testDir, "../app-runtime/useComposerRouter.ts"), "utf8");
-const librarySource = readFileSync(resolve(testDir, "../components/ThemeLibrary.tsx"), "utf8");
 const gallerySource = readFileSync(resolve(testDir, "../components/ThemeGallery.tsx"), "utf8");
 const previewSurfaceSource = readFileSync(resolve(testDir, "../components/ThemePreviewSurface.tsx"), "utf8");
 const confirmDialogSource = readFileSync(resolve(testDir, "../components/ConfirmDialog.tsx"), "utf8");
@@ -492,21 +491,10 @@ ok(stylesSource.includes("var(--theme-pane-task-card-pct, 88%)"), "task cards co
 ok(stylesSource.includes("var(--tp-pane-card-pct, 88%)"), "preview cards consume the same pane opacity tier");
 ok(stylesSource.includes(':root[data-theme-has-bg="true"] .theme-bg'), "background layer only displays for packs with backgrounds");
 
-// Unmount must cancel preview.
-ok(librarySource.includes("cancelThemePreview()"), "ThemeLibrary cleanup cancels preview");
-
-// Import confirm reuses staged import (replace=true empty path).
-ok(
-  librarySource.includes("ImportThemePack(\"\", true)") || librarySource.includes("ImportThemePack('', true)"),
-  "import confirm reuses staged path without re-picking",
-);
-ok(librarySource.includes("needsReplace"), "import handles needsReplace result");
-
 // Theme confirmations stay inside the Pondera UI instead of opening native
 // browser/system prompts.
 ok(!gallerySource.includes("window.confirm"), "ThemeGallery does not use native confirm dialogs");
-ok(!librarySource.includes("window.confirm"), "ThemeLibrary does not use native confirm dialogs");
-ok(gallerySource.includes("useConfirmDialog") && librarySource.includes("useConfirmDialog"), "theme flows share the Pondera confirm dialog");
+ok(gallerySource.includes("useConfirmDialog"), "theme flows share the Pondera confirm dialog");
 ok(confirmDialogSource.includes('role="dialog"') && confirmDialogSource.includes('aria-modal="true"'), "confirm dialog exposes accessible modal semantics");
 ok(confirmDialogSource.includes('request.tone === "danger"') && confirmDialogSource.includes("btn--danger"), "destructive confirmations use danger styling");
 ok(confirmDialogSource.includes('event.key === "Escape"') && confirmDialogSource.includes("restoreFocusRef"), "confirm dialog supports Escape and focus restoration");
@@ -730,9 +718,6 @@ ok(localeZh.includes('"settings.themeEditor.safeArea": "界面内容区域"') &&
 // selectors must keep winning in their subtree (theme never overrides them).
 ok(!packSource.includes(".app--"), "pack overlay never targets layout-scoped selectors");
 ok(packSource.includes("prefers-color-scheme: light"), "auto mode follows system light/dark");
-
-// Keep ThemeLibrary available for any residual editor helpers.
-ok(librarySource.includes("ThemeLibrary") || librarySource.includes("ThemeEditor"), "ThemeLibrary module retained for editor/helpers");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

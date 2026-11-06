@@ -29,7 +29,6 @@ const ALLOWED_WRITERS = new Set([
 // Raw `.scrollTop` writes bypass the controller entirely. The allowed
 // set is deliberate: the Transcript writer is the sole fenced gateway; all
 // remaining entries are non-transcript (or natively paired with the arbiter):
-// - lib/useReasoningScrollFollow.ts: an inner reasoning pane, not Transcript.
 // - components/SettingsPanel.tsx: the settings overlay's own scroller.
 // - components/WorkspacePanel.tsx: the project tree's own scroller.
 // - components/editors/LineNumberCode.tsx: the file viewer's own scroller —
@@ -38,7 +37,6 @@ const ALLOWED_WRITERS = new Set([
 //   scrollbar thumb drag, mapped to its own scroller.
 const ALLOWED_RAW_SCROLLTOP = new Set([
   "lib/transcriptViewportWriter.ts",
-  "lib/useReasoningScrollFollow.ts",
   "components/SettingsPanel.tsx",
   "components/RemoteConnectWizard.tsx",
   "components/WorkspacePanel.tsx",

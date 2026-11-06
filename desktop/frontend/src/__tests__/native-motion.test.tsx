@@ -6,7 +6,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { CSS_EASE_OUT } from "../lib/motion";
 import { useCollapseAnimation } from "../lib/useCollapseAnimation";
-import { transcriptEntranceResetKey, useEntranceAnimation } from "../lib/useEntranceAnimation";
 import { useMountTransition } from "../lib/useMountTransition";
 
 let passed = 0;
@@ -121,51 +120,12 @@ async function renderCollapse(root: Root, open: boolean, onOpen?: () => void, on
   });
 }
 
-function EntranceHarness({ resetKey, ids }: { resetKey: string; ids: string[] }) {
-  const ref = useEntranceAnimation<HTMLDivElement>(resetKey, ids.length, "[data-entrance]", ids);
-  return (
-    <div ref={ref}>
-      {ids.map((id) => <div key={id} id={`entry-${id}`} data-entrance={id} />)}
-    </div>
-  );
-}
-
-function DeferredEntranceHarness({
-  resetKey,
-  seedIds,
-  visibleIds,
-}: {
-  resetKey: string;
-  seedIds: string[];
-  visibleIds: string[];
-}) {
-  const ref = useEntranceAnimation<HTMLDivElement>(resetKey, visibleIds.length, "[data-entrance]", seedIds);
-  return (
-    <div ref={ref}>
-      {visibleIds.map((id) => <div key={id} id={`entry-${id}`} data-entrance={id} />)}
-    </div>
-  );
-}
-
 function MountHarness({ open, duration }: { open: boolean; duration: number }) {
   const { mounted } = useMountTransition(open, duration);
   return mounted ? <div id="mounted" /> : null;
 }
 
 console.log("\nnative motion fallbacks");
-
-// Transcript tail appends keep one entrance generation; real surface changes
-// and history prepends reset it before virtual rows mount.
-{
-  const base = [{ id: "u1" }, { id: "a1" }];
-  const appended = [...base, { id: "u2" }];
-  const prepended = [{ id: "old-u" }, ...base];
-  const initialKey = transcriptEntranceResetKey("tab-a", 0, base);
-  eq(transcriptEntranceResetKey("tab-a", 0, appended), initialKey, "tail append preserves transcript entrance reset key");
-  ok(transcriptEntranceResetKey("tab-a", 0, prepended) !== initialKey, "history prepend changes transcript entrance reset key");
-  ok(transcriptEntranceResetKey("tab-b", 0, base) !== initialKey, "tab switch changes transcript entrance reset key");
-  ok(transcriptEntranceResetKey("tab-a", 1, base) !== initialKey, "reveal signal changes transcript entrance reset key");
-}
 
 // Valid native motion waits for completion and settles exactly once.
 {
@@ -229,73 +189,6 @@ console.log("\nnative motion fallbacks");
   await act(async () => animations[1].oncancel?.());
   eq(closed, 1, "unexpected cancellation settles the active direction");
   eq((document.getElementById("collapse") as HTMLElement).style.height, "0px", "cancelled close reaches zero height");
-  await cleanup(root, dom);
-}
-
-// A stable reset key animates appends; a real reset pre-seeds restored rows.
-{
-  const dom = installDom();
-  const calls: { options: KeyframeAnimationOptions; animation: ControllableAnimation }[] = [];
-  mockNativeAnimate(dom, (_frames, options) => {
-    const animation = controllableAnimation();
-    calls.push({ options, animation });
-    return animation;
-  });
-  const root = createRoot(document.getElementById("root")!);
-  await act(async () => root.render(<EntranceHarness resetKey="tab-a" ids={["a"]} />));
-  await act(async () => root.render(<EntranceHarness resetKey="tab-a" ids={["a", "b"]} />));
-  await act(async () => { await flushTimers(25); });
-  eq(calls.length, 1, "stable entrance reset key animates an appended row");
-  eq(calls[0].options.easing, CSS_EASE_OUT, "entrance animation uses the shared CSS easing");
-  await act(async () => calls[0].animation.onfinish?.());
-  eq((document.getElementById("entry-b") as HTMLElement).style.opacity, "1", "finished entrance exposes the row");
-
-  await act(async () => root.render(<EntranceHarness resetKey="tab-b" ids={["a", "b", "c"]} />));
-  await act(async () => { await flushTimers(25); });
-  eq(calls.length, 1, "changed reset key pre-seeds restored rows without animation");
-  await act(async () => root.render(<EntranceHarness resetKey="tab-b" ids={["a", "b", "c", "d"]} />));
-  await act(async () => { await flushTimers(25); });
-  eq(calls.length, 2, "append after a reset animates normally");
-  await cleanup(root, dom);
-}
-
-// Virtual rows can mount after the initial scan. Model-backed seed IDs keep
-// restored rows inert while still allowing a genuinely appended row to enter.
-{
-  const dom = installDom();
-  const calls: string[] = [];
-  mockNativeAnimate(dom, function () {
-    calls.push((this as unknown as Element).getAttribute?.("data-entrance") ?? "");
-    return controllableAnimation();
-  });
-  const root = createRoot(document.getElementById("root")!);
-  await act(async () => root.render(
-    <DeferredEntranceHarness resetKey="tab-a" seedIds={["history"]} visibleIds={[]} />,
-  ));
-  await act(async () => root.render(
-    <DeferredEntranceHarness resetKey="tab-a" seedIds={["history", "new"]} visibleIds={["history", "new"]} />,
-  ));
-  await act(async () => { await flushTimers(25); });
-  eq(calls.length, 1, "deferred virtual history does not animate with a new append");
-  eq(calls[0], "new", "only the genuinely appended virtual row animates");
-  await cleanup(root, dom);
-}
-
-// One rejected entrance must fail open without aborting the timer callback.
-{
-  const dom = installDom();
-  let attempts = 0;
-  mockNativeAnimate(dom, () => {
-    attempts += 1;
-    throw new TypeError("WebView rejected entrance animation");
-  });
-  const root = createRoot(document.getElementById("root")!);
-  await act(async () => root.render(<EntranceHarness resetKey="tab-a" ids={["a"]} />));
-  await act(async () => root.render(<EntranceHarness resetKey="tab-a" ids={["a", "b", "c"]} />));
-  await act(async () => { await flushTimers(25); });
-  eq(attempts, 2, "a rejected entrance does not prevent later entries from attempting motion");
-  eq((document.getElementById("entry-b") as HTMLElement).style.opacity, "1", "rejected entrance exposes the first row");
-  eq((document.getElementById("entry-c") as HTMLElement).style.opacity, "1", "rejected entrance exposes later rows");
   await cleanup(root, dom);
 }
 

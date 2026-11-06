@@ -11,7 +11,6 @@ import { creationHeroVisible } from "../app-shell/draftPresentation";
 
 register(new URL("../../scripts/svg-loader.mjs", import.meta.url));
 const { ChatPaneRegion } = await import("../app-shell/ChatPaneRegion");
-const { DraftTopicbarActions } = await import("../app-shell/DraftTopicbarActions");
 
 const dom = new JSDOM("<div id='root'></div>", { url: "http://localhost" });
 Object.assign(globalThis, {
@@ -111,37 +110,6 @@ try {
   assert.ok(!document.body.textContent?.includes("draft.retrySave"), "runtime recovery does not offer a save retry");
   await act(async () => document.querySelector<HTMLButtonElement>(".session-draft-attention button")!.click());
   assert.equal(resumed, 1, "runtime recovery retries the original submission");
-
-  let discarded = 0;
-  const mcpSelections: boolean[] = [];
-  const server = {
-    name: "fixture-mcp", transport: "stdio", status: "deferred", enabled: true, installed: true,
-    autoStart: true, tools: 0, toolCount: 0, prompts: 0, resources: 0, toolList: [],
-  };
-  await act(async () => root.render(<LocaleProvider><DraftTopicbarActions
-    t={((key: string) => key) as Translator}
-    draft={{ ...surface, servers: [server] }}
-    onSetMCPEnabled={(_server, enabled) => mcpSelections.push(enabled)}
-    onDiscard={() => { discarded++; }}
-  /></LocaleProvider>));
-  assert.equal(document.querySelector(".draft-topicbar-mcp summary")?.textContent, "1/1", "the compact control preserves MCP visibility");
-  await act(async () => document.querySelector<HTMLInputElement>(".draft-topicbar-mcp input")!.click());
-  await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="draft.discard"]')!.click());
-  assert.deepEqual(mcpSelections, [false], "the compact control preserves per-draft MCP selection");
-  assert.equal(discarded, 1, "the compact control preserves draft discard");
-
-  for (const phase of ["submitting", "discarding"]) {
-    await act(async () => root.render(<LocaleProvider><DraftTopicbarActions
-      t={((key: string) => key) as Translator}
-      draft={{ ...surface, preparingSubmission: true, discarding: phase === "discarding" }}
-      onSetMCPEnabled={() => {}} onDiscard={() => { discarded++; }}
-    /></LocaleProvider>));
-    const button = document.querySelector<HTMLButtonElement>(".draft-topicbar-actions button")!;
-    assert.equal(button.disabled, true);
-    assert.equal(button.getAttribute("aria-label"), phase === "discarding" ? "draft.discarding" : "draft.discardBlocked");
-    await act(async () => button.click());
-    assert.equal(discarded, 1, "locked button cannot dispatch another discard");
-  }
 
   await act(async () => root.unmount());
   console.log("PASS session draft presentation: clean landing and exceptional recovery controls");

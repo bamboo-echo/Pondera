@@ -4,7 +4,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
-const common = new Set(["useCommittedSlot.ts", "useCommittedCommand.ts", "useCommittedAsyncCommand.ts", "commandOutcome.ts", "composeDomRef.ts", "subscriptionScope.ts"]);
+const common = new Set(["useCommittedSlot.ts", "useCommittedCommand.ts", "useCommittedAsyncCommand.ts", "commandOutcome.ts", "subscriptionScope.ts"]);
 const domNames = new Set(["window", "document", "HTMLElement", "HTMLDivElement", "ReactNode", "SyntheticEvent"]);
 
 function sourceFiles(root) {
