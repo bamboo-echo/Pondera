@@ -419,7 +419,10 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
                   tabIndex={0}
                   style={cardStyle(false)}
                   onClick={() => setSelected(entry.name)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(entry.name); } }}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(entry.name); }
+                  }}
                 >
                   <div style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
                     <PluginIcon entry={entry} size={38} />
