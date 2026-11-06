@@ -216,7 +216,27 @@ func (s *Server) costStatus(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.syncActiveJobs(l)
 	writeJSON(w, l.Status())
+}
+
+// activeJobCount is the server's own view of in-flight work. The client cannot
+// raise or lower it: a desktop turn (and any background jobs it owns) is what
+// counts, which is why POST /cost/active is gone.
+func (s *Server) activeJobCount() int {
+	ctrl := s.ctl()
+	if ctrl == nil {
+		return 0
+	}
+	n := ctrl.RuntimeStatus().BackgroundJobs
+	if ctrl.Running() {
+		n++
+	}
+	return n
+}
+
+func (s *Server) syncActiveJobs(l *costgate.Ledger) {
+	l.SetActiveJobs(s.activeJobCount())
 }
 
 func (s *Server) costCheck(w http.ResponseWriter, r *http.Request) {
@@ -225,6 +245,7 @@ func (s *Server) costCheck(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.syncActiveJobs(l)
 	elapsed, _ := strconv.Atoi(r.URL.Query().Get("elapsed"))
 	d, err := l.Check(r.URL.Query().Get("session"), r.URL.Query().Get("task"), elapsed)
 	if err != nil {
@@ -270,21 +291,17 @@ func (s *Server) costLimits(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "limits": l.Limits()})
 }
 
-func (s *Server) costActive(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Active int `json:"active"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&body); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
-		return
-	}
-	l, err := costLedger()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	l.SetActiveJobs(body.Active)
-	writeJSON(w, map[string]any{"ok": true, "active": body.Active})
+// costActive used to let a client publish its own concurrency count. That made
+// the "hard" concurrency gate trivially bypassable (or falsely triggered), so
+// the count now comes from activeJobCount() and this route is retired.
+func (s *Server) costActive(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusGone)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":     false,
+		"error":  "active jobs are maintained by the server",
+		"active": s.activeJobCount(),
+	})
 }
 
 func (s *Server) costReset(w http.ResponseWriter, _ *http.Request) {
@@ -313,7 +330,11 @@ func (s *Server) costGatedSubmit(next http.HandlerFunc) http.HandlerFunc {
 		if sessionID == "" {
 			sessionID = s.currentSessionID()
 		}
-		d, err := l.Check(sessionID, strings.TrimSpace(r.URL.Query().Get("task")), 0)
+		s.syncActiveJobs(l)
+		// The turn-time cap is only as real as the elapsed the caller reports.
+		// Desktop does not report it, so 0 keeps this limit advisory there.
+		elapsed, _ := strconv.Atoi(r.URL.Query().Get("elapsed"))
+		d, err := l.Check(sessionID, strings.TrimSpace(r.URL.Query().Get("task")), elapsed)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

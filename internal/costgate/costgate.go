@@ -230,12 +230,14 @@ func (l *Ledger) Check(sessionID, taskID string, turnSeconds int) (*Decision, er
 	for _, e := range l.st.Entries {
 		if e.SessionID == sessionID {
 			d.SessionUSD += e.USD
-			if e.At.UTC().Format("2006-01-02") == day {
-				d.DayUSD += e.USD
-			}
 			if taskID != "" && e.TaskID == taskID {
 				d.TaskUSD += e.USD
 			}
+		}
+		// The daily budget is global: every recorded session contributes,
+		// otherwise a client could escape it by spreading work across sessions.
+		if e.At.UTC().Format("2006-01-02") == day {
+			d.DayUSD += e.USD
 		}
 	}
 	remaining := math.Inf(1)

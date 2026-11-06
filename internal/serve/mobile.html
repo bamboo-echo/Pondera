@@ -338,7 +338,7 @@ a.link{color:var(--accent)}
     $('#cToday').textContent = '$' + (c.todayUsd || 0).toFixed(3);
     $('#cWeek').textContent = '$' + (c.weekUsd || 0).toFixed(2);
     $('#cTotal').textContent = '$' + (c.totalUsd || 0).toFixed(2);
-    $('#gateState').textContent = c.limits && c.limits.enabled ? '已启用' : '已关闭';
+    $('#gateState').textContent = c.limits && c.limits.enabled ? '已启用（仅统计已上报用量）' : '已关闭';
   }
   async function recordUsage(payload) {
     try {

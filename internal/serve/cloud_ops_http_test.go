@@ -159,6 +159,24 @@ func TestCostEndpointsAndGate(t *testing.T) {
 	if !called {
 		t.Fatal("submit gate blocked an unrelated session")
 	}
+	// The turn-time cap uses the elapsed the caller reports instead of a
+	// hard-coded 0.
+	lim.MaxUSDPerSession = 0
+	lim.MaxTurnSeconds = 60
+	rr = httptest.NewRecorder()
+	s.costLimits(rr, jsonRequest(http.MethodPost, "/cost/limits", lim))
+	called = false
+	rr = httptest.NewRecorder()
+	gate(rr, httptest.NewRequest(http.MethodPost, "/submit?session=s2&elapsed=61", strings.NewReader(`{}`)))
+	if rr.Code != http.StatusTooManyRequests || called {
+		t.Fatalf("elapsed turn-time gate did not block: %d called=%v", rr.Code, called)
+	}
+	// Clients can no longer publish their own concurrency count.
+	rr = httptest.NewRecorder()
+	s.costActive(rr, jsonRequest(http.MethodPost, "/cost/active", map[string]int{"active": 99}))
+	if rr.Code != http.StatusGone {
+		t.Fatalf("cost/active must be retired, got %d", rr.Code)
+	}
 }
 
 func TestPushEndpoints(t *testing.T) {

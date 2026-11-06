@@ -83,6 +83,35 @@ func TestDailyAndTaskLimits(t *testing.T) {
 	}
 }
 
+func TestDailyLimitSumsAcrossSessions(t *testing.T) {
+	l := newTestLedger(t)
+	l.SetClock(func() time.Time { return time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC) })
+	lim := DefaultLimits()
+	lim.MaxUSDPerSession = 100
+	lim.MaxUSDPerDay = 1
+	if err := l.SetLimits(lim); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []Entry{
+		{SessionID: "s1", USD: 0.6},
+		{SessionID: "s2", USD: 0.6},
+	} {
+		if err := l.Record(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d, err := l.Check("s1", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.SessionUSD < 0.59 || d.SessionUSD > 0.61 {
+		t.Fatalf("session spend must stay scoped to the session: %+v", d)
+	}
+	if d.DayUSD < 1.19 || d.DayUSD > 1.21 || d.Allowed {
+		t.Fatalf("daily spend must aggregate every session (%.2f) and block: %+v", d.DayUSD, d)
+	}
+}
+
 func TestConcurrencyAndTurnLimits(t *testing.T) {
 	l := newTestLedger(t)
 	lim := DefaultLimits()
