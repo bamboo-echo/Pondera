@@ -1521,6 +1521,9 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 		case provider.ChunkServerSearch:
 			search.onChunk(sink, chunk, attemptID)
 		case provider.ChunkUsage:
+			if chunk.Usage == nil {
+				continue
+			}
 			usage, a.turn.lastReasoning = chunk.Usage, chunk.Usage.ReasoningTokens
 			a.storeLatestRequestUsage(chunk.Usage)
 			a.sess.cacheHit.Add(int64(chunk.Usage.CacheHitTokens))

@@ -27,6 +27,23 @@ func (p *cacheDiagProvider) Stream(_ context.Context, _ provider.Request) (<-cha
 	return ch, nil
 }
 
+func TestRunIgnoresUsageChunkWithoutPayload(t *testing.T) {
+	prov := &cacheDiagProvider{chunks: [][]provider.Chunk{{
+		{Type: provider.ChunkText, Text: "hello"},
+		// A provider may emit a usage boundary without a payload; reading its
+		// counters must not panic the turn.
+		{Type: provider.ChunkUsage},
+		{Type: provider.ChunkDone},
+	}}}
+	a := New(prov, tool.NewRegistry(), NewSession(""), Options{}, event.Discard)
+	if err := a.Run(context.Background(), "hi"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := lastAssistantContent(a.sess.conversation); got != "hello" {
+		t.Fatalf("last assistant content = %q", got)
+	}
+}
+
 func TestRunPopulatesCacheDiagnosticsOnUsageEvents(t *testing.T) {
 	prov := &cacheDiagProvider{chunks: [][]provider.Chunk{
 		{
