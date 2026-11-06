@@ -1,8 +1,8 @@
 module pondera/desktop
 
-go 1.26.0
+go 1.27.0
 
-toolchain go1.26.10
+toolchain go1.27.3
 
 // The desktop service is a nested module so its CGO build never touches the
 // CLI's CGO_ENABLED=0 single-static-binary guarantee. The replace lets it import

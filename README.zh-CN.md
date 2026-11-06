@@ -70,7 +70,7 @@ cd Pondera
 ```
 
 需要 **Go 1.27+**、**Node 24+**、**pnpm 11**（`npm install -g pnpm@11`），打安装包还需要 NSIS 3。模块固定了
-`toolchain` 指令，保持 `GOTOOLCHAIN=auto` 让 Go 自动下载对应工具链。
+`toolchain` 指令，保持 `GOTOOLCHAIN=auto` 让 Go 自动下载固定的 1.27 工具链。
 
 ```sh
 # 只构建 CLI / TUI -> bin/pondera.exe

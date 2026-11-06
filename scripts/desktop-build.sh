@@ -18,7 +18,7 @@
 #        scripts/desktop-build.sh darwin/arm64 v1.5.0-preview.42 preview
 #
 # Requirements:
-#   - Go toolchain matching desktop/go.mod (>= 1.25; the `toolchain` directive
+#   - Go toolchain matching desktop/go.mod (>= 1.27; the `toolchain` directive
 #     auto-downloads when GOTOOLCHAIN=auto)
 #   - Node >= 24 and pnpm 11 (the same major versions used by CI and releases)
 #   - A pnpm-installed desktop workspace (this script runs

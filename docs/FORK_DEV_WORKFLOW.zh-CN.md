@@ -7,7 +7,7 @@
 
 | 组件 | 要求 | 本机位置/说明 |
 | --- | --- | --- |
-| Go | 1.26+ | `C:\Program Files\Go\bin` |
+| Go | 1.27+ | `C:\Program Files\Go\bin` |
 | Node | 24+ | `C:\Program Files\nodejs` |
 | pnpm | 11 | `%APPDATA%\npm\pnpm.cmd` |
 | Git Bash | 5.x | `C:\Program Files\Git\usr\bin\bash.exe` |
