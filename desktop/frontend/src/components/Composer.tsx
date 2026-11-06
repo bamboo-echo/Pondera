@@ -678,14 +678,17 @@ export function Composer({
     savedInput.setGoalDraft(mode === "goal");
     setCollaborationMode(mode);
   };
+  const composerModeGateRef = useRef({ collaborationMode, goal });
+  composerModeGateRef.current = { collaborationMode, goal };
   useEffect(() => {
-    if (savedInput.goalDraft === true && !savedInput.blocked && !goal?.trim() && collaborationMode !== "goal") setCollaborationMode("goal");
-  }, [formalSessionRef?.sessionId, savedInput.goalDraft, savedInput.blocked]);
+    const gate = composerModeGateRef.current;
+    if (savedInput.goalDraft === true && !savedInput.blocked && !gate.goal?.trim() && gate.collaborationMode !== "goal") setCollaborationMode("goal");
+  }, [formalSessionRef?.sessionId, savedInput.goalDraft, savedInput.blocked, setCollaborationMode]);
   const draftKey = sessionKey || tabId || DEFAULT_COMPOSER_DRAFT_KEY;
 	const bridgeTarget = useMemo(() => composerTarget?.kind === "draft"
 		? { kind: "draft", draftId: composerTarget.draftId, tabId: "", generation: persistentDraft?.generation ?? composerTarget.generation ?? 0 }
 		: { kind: "session", draftId: "", tabId: composerTarget?.tabId ?? tabId ?? "", session: formalSessionRef },
-	[composerTarget?.kind, composerTarget?.kind === "draft" ? composerTarget.draftId : composerTarget?.tabId, persistentDraft?.generation, tabId, formalSessionRef?.hostId, formalSessionRef?.sessionId]);
+	[composerTarget?.draftId, composerTarget?.generation, composerTarget?.kind, composerTarget?.tabId, formalSessionRef, persistentDraft?.generation, tabId]);
 	const bridgeTargetKey = `${bridgeTarget.kind}:${bridgeTarget.draftId}:${bridgeTarget.tabId}:${bridgeTarget.generation ?? 0}`;
   const runtimeState = useRuntimeSession(tabId, sessionIdentity ?? inboxSessionPath);
   const finishing = runtimeState.finishing;
@@ -1191,6 +1194,10 @@ export function Composer({
       ? pendingPasteRef.current > 0
       : (draftsBySessionRef.current[targetDraftKey]?.pendingPaste ?? 0) > 0;
 
+  // Draft restore depends on live editor state and must not re-run when its
+  // own closure identity changes; the layout effect reads the latest function.
+  const restoreComposerDraftRef = useRef(restoreComposerDraft);
+  restoreComposerDraftRef.current = restoreComposerDraft;
   useLayoutEffect(() => {
     const previousKey = activeDraftKeyRef.current;
     if (previousKey === draftKey) return;
@@ -1198,7 +1205,7 @@ export function Composer({
     draftActivationEpochRef.current += 1;
     activeDraftKeyRef.current = draftKey;
     setGuidanceDraftKey(draftKey);
-    restoreComposerDraft(draftsBySessionRef.current[draftKey] ?? emptyComposerDraft());
+    restoreComposerDraftRef.current(draftsBySessionRef.current[draftKey] ?? emptyComposerDraft());
   }, [draftKey]);
 
   const loadedPersistentDraftIdentityRef = useRef<string | null>(null);
@@ -1227,8 +1234,8 @@ export function Composer({
     const next = persistentComposerDraft(persistentDraft.initial);
     draftsBySessionRef.current[draftKey] = next;
     persistedSnapshotByDraftRef.current[draftKey] = JSON.stringify(persistentSnapshot(next));
-    restoreComposerDraft(next);
-  }, [draftKey, persistentDraft?.draftId, persistentDraft?.generation, persistentDraft?.initial]);
+    restoreComposerDraftRef.current(next);
+  }, [draftKey, persistentDraft, setAttachments, setInvocations, setOpenPastedLabels, setPastedBlocks, setSelectedTextRefs, setSessionRefs, setText, setWorkspaceRefs]);
 
   const persistentSnapshotForDraft = (targetDraftKey: string): PersistentComposerDraft => (
     targetDraftKey === activeDraftKeyRef.current
@@ -1260,8 +1267,9 @@ export function Composer({
   const onQueueEditingChange = useCallback((active: boolean) => setQueueEditingScope(active ? queueScope : null), [queueScope]);
 
   useEffect(() => {
+    const draftsBySession = draftsBySessionRef.current;
     return () => {
-      draftsBySessionRef.current[activeDraftKeyRef.current] = snapshotComposerDraft();
+      draftsBySession[activeDraftKeyRef.current] = snapshotComposerDraft();
     };
   }, []);
 
@@ -1286,7 +1294,11 @@ export function Composer({
       }
     }
     wasRunningByDraftRef.current[draftKey] = running;
-  }, [draftKey, running, text]);
+  }, [draftKey, running, setOpenPastedLabels, setPastedBlocks, text]);
+
+  // sendQueuedGuidance is declared below because it needs the submit helpers;
+  // the effect reads it through a ref so the once-per-id guard stays intact.
+  const sendQueuedGuidanceRef = useRef<(item: PendingGuidance, targetDraftKey?: string) => void>(() => {});
 
   // Legacy/local preview items still need the frontend-owned send path; durable items
   // are dispatched and acknowledged exactly once by the Controller after TurnDone.
@@ -1296,7 +1308,7 @@ export function Composer({
     // the draft must stay intact until the user finishes the decision.
     if (guidanceDraftKey !== draftKey || running || submitDisabled || suspendedByDecision) return;
     const next = pendingGuidance[0];
-    if (next?.id.startsWith("local-")) void sendQueuedGuidance(next, draftKey);
+    if (next?.id.startsWith("local-")) void sendQueuedGuidanceRef.current(next, draftKey);
   }, [draftKey, guidanceDraftKey, guidanceRetryNonce, running, submitDisabled, pendingGuidance, suspendedByDecision]);
 
   useEffect(() => {
@@ -1394,6 +1406,7 @@ export function Composer({
   const atRaw = activeAtToken?.raw ?? null;
   const atDir = activeAtToken?.dir ?? "";
   const atFrag = activeAtToken?.frag ?? "";
+  const atDisabled = atRaw === null;
   const pastChatToken = useMemo(() => activePastChatToken(text), [text]);
   const pastChatTokenQuery = pastChatToken?.query ?? null;
 
@@ -1434,7 +1447,7 @@ export function Composer({
   }, [clearFileRefState, fileRefRefreshKey]);
 
   useEffect(() => {
-    if (atRaw === null) return;
+    if (atDisabled) return;
     const cached = dirCache.current[atDir];
     if (cached) {
       setEntries(cached);
@@ -1456,9 +1469,9 @@ export function Composer({
     };
     // Re-fetch when the menu opens, the directory level changes, or the
     // workspace tree refreshes; cached data is only a fast first paint.
-  }, [atRaw === null, atDir, fileRefRefreshKey, fileRefScopeKey, bridgeTargetKey]);
+  }, [atDisabled, atDir, bridgeTarget, bridgeTargetKey, fileRefRefreshKey, fileRefScopeKey]);
   useEffect(() => {
-    if (atRaw === null || atDir !== "" || atFrag === "") {
+    if (atDisabled || atDir !== "" || atFrag === "") {
       setSearchEntries([]);
       return;
     }
@@ -1482,7 +1495,7 @@ export function Composer({
     return () => {
       live = false;
     };
-  }, [atRaw === null, atDir, atFrag, fileRefRefreshKey, fileRefScopeKey, bridgeTargetKey]);
+  }, [atDisabled, atDir, atFrag, bridgeTarget, fileRefRefreshKey, fileRefScopeKey]);
   const atMatches = useMemo(
     () => {
       if (atRaw === null) return [];
@@ -1597,7 +1610,7 @@ export function Composer({
       setPastChatQuery("");
       setActive(0);
     }
-  }, [menuMode]);
+  }, [menuMode, showPastChats]);
 
   useEffect(() => {
     if (menuMode && menuMode !== "pastChats") setContentMenuOpen(false);
@@ -1805,26 +1818,29 @@ export function Composer({
     requestActiveDraftFrame(focusComposerInput);
   };
 
+  const insertRequestHandlersRef = useRef({ replaceComposerText, setTextCaretEnd, addWorkspaceReference, insertTextAtCaret, attachmentInputEnabled });
+  insertRequestHandlersRef.current = { replaceComposerText, setTextCaretEnd, addWorkspaceReference, insertTextAtCaret, attachmentInputEnabled };
   useEffect(() => {
     if (!insertRequest || insertRequest.id === consumedInsertIdByDraftRef.current[draftKey]) return;
     consumedInsertIdByDraftRef.current[draftKey] = insertRequest.id;
+    const handlers = insertRequestHandlersRef.current;
     if (insertRequest.mode === "replace") {
-      replaceComposerText(insertRequest.text);
+      handlers.replaceComposerText(insertRequest.text);
       return;
     }
     if (insertRequest.mode === "prefix") {
       const prefix = `${insertRequest.text.trimEnd()} `;
       const current = textRef.current;
-      setTextCaretEnd(current ? prefix + current : prefix);
+      handlers.setTextCaretEnd(current ? prefix + current : prefix);
       return;
     }
     const ref = parseWorkspaceReference(insertRequest.text);
     if (ref) {
-      if (!attachmentInputEnabled) return;
-      addWorkspaceReference(ref);
+      if (!handlers.attachmentInputEnabled) return;
+      handlers.addWorkspaceReference(ref);
       return;
     }
-    insertTextAtCaret(insertRequest.text);
+    handlers.insertTextAtCaret(insertRequest.text);
   }, [draftKey, insertRequest]);
 
   useEffect(() => {
@@ -1854,7 +1870,7 @@ export function Composer({
       setSelectedTextRefs(next);
     }
     requestActiveDraftFrame(focusComposerInput);
-  }, [draftKey, selectedTextRequest, showToast, t]);
+  }, [draftKey, selectedTextRequest, setSelectedTextRefs, showToast, t]);
 
   const expandPastedBlocks = (displayText: string, blocks = pastedBlocksRef.current): string => {
     let expanded = displayText;
@@ -2375,6 +2391,7 @@ export function Composer({
       if (current === item.id) updateGuidanceSendingIdForDraft(targetDraftKey, null);
     }
   };
+  sendQueuedGuidanceRef.current = sendQueuedGuidance;
 
   const dismissQueuedGuidance = async (item: PendingGuidance) => {
     const targetDraftKey = activeDraftKeyRef.current;
@@ -2579,9 +2596,11 @@ export function Composer({
 		});
   };
 
+  const attachDroppedPathsRef = useRef(attachDroppedPaths);
+  attachDroppedPathsRef.current = attachDroppedPaths;
   useEffect(() => {
     if (!attachmentInputEnabled) return;
-    return onFilesDropped((paths) => void attachDroppedPaths(paths, activeDraftKeyRef.current));
+    return onFilesDropped((paths) => void attachDroppedPathsRef.current(paths, activeDraftKeyRef.current));
   }, [attachmentInputEnabled, bridgeTargetKey]);
 
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement | HTMLDivElement>) => {
@@ -4001,9 +4020,14 @@ export function Composer({
   // Second-quantized: the run strip has no sub-second resolution, and `now` is
   // a fresh Date.now() every render, so keying the memo on it would never hit.
   const metricsTick = Math.floor(now / 1000);
+  // `now` is a fresh Date.now() every render; the memo keys on the second but
+  // must still read the newest timestamp when it does recompute.
+  const nowRef = useRef(now);
+  nowRef.current = now;
   const runMetrics = useMemo(() => {
+    void metricsTick;
     const metrics = turnMetrics({
-      now, turnStartAt, turnDoneAt, running: running && !maintenanceActive, waitAccumMs, lastTurnWaitAccumMs,
+      now: nowRef.current, turnStartAt, turnDoneAt, running: running && !maintenanceActive, waitAccumMs, lastTurnWaitAccumMs,
       turnTokens, turnOutputTokens, lastTurnOutputTokens, turnOutputCharsAtUsage,
       turnArgChars, turnModelActiveMs, turnModelActiveAt, liveModelActiveAt,
       turnRateOutputQuarters: liveRateOutputQuarters ?? turnRateOutputQuarters,
