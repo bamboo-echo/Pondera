@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Download, RefreshCw, Search, Star, X } from "lucide-react";
 import { app } from "../lib/bridge";
@@ -193,6 +193,20 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
   const [selected, setSelected] = useState<string | null>(null);
   const [sourceDraft, setSourceDraft] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
+  const detailRef = useRef<HTMLElement>(null);
+
+  // The detail drawer is a real modal: focus moves inside on open, Escape closes
+  // it, Tab stays inside, and a pointer press elsewhere dismisses it.
+  useEffect(() => {
+    if (!selected) return;
+    detailRef.current?.focus();
+    const dismissOutside = (event: PointerEvent) => {
+      const root = detailRef.current;
+      if (root && !root.contains(event.target as Node)) setSelected(null);
+    };
+    document.addEventListener("pointerdown", dismissOutside, true);
+    return () => document.removeEventListener("pointerdown", dismissOutside, true);
+  }, [selected]);
 
   const reload = useCallback(async () => {
     const [next, source] = await Promise.all([
@@ -436,8 +450,29 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
 
       {selectedEntry && (
         <aside
+          ref={detailRef}
           role="dialog"
+          aria-modal="true"
           aria-label={copy.detailTitle}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              setSelected(null);
+            }
+            if (event.key === "Tab") {
+              const focusables = Array.from(detailRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), [href], [tabindex='0']") ?? []);
+              const first = focusables[0];
+              const last = focusables[focusables.length - 1];
+              if (event.shiftKey && (document.activeElement === first || document.activeElement === detailRef.current)) {
+                event.preventDefault();
+                last?.focus();
+              } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first?.focus();
+              }
+            }
+          }}
           style={{
             position: "fixed",
             top: 0,
@@ -450,7 +485,7 @@ export function PluginMarketplacePanel({ onInstalled }: { onInstalled?: () => vo
             boxShadow: "var(--shadow-2)",
             padding: 20,
             overflowY: "auto",
-            zIndex: 60,
+            zIndex: "var(--z-popover)",
             display: "flex",
             flexDirection: "column",
             gap: 12,
