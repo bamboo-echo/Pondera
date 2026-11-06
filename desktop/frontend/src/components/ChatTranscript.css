@@ -20,6 +20,13 @@
   --dsw-alias-state-business-primary: var(--accent);
   --dsw-alias-state-success-primary: var(--success, #30a46c);
   --dsw-alias-state-warn-primary: var(--warning, #bd8c3c);
+  /* Bright counterparts for the 16-color ANSI runs replayed by
+     harness-chat/ansi.ts. Mixing toward the label color keeps a bright SGR
+     legible on both surfaces: lighter on dark themes, deeper on light ones. */
+  --dsw-alias-state-error-secondary: color-mix(in oklab, var(--danger, #e5484d) 65%, var(--fg));
+  --dsw-alias-state-success-secondary: color-mix(in oklab, var(--success, #30a46c) 65%, var(--fg));
+  --dsw-alias-state-warn-secondary: color-mix(in oklab, var(--warning, #bd8c3c) 65%, var(--fg));
+  --dsw-static-blue-400: color-mix(in oklab, var(--link, #4b78ff) 65%, var(--fg));
   --dsw-static-deepseek-450: var(--accent);
   --dsw-alias-bg-layer-2: var(--bg-elev);
   --dsw-alias-button-ghost-active-border: var(--border);
