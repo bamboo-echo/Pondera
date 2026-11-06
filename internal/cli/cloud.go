@@ -86,7 +86,7 @@ pack 选项:
   --cloud-host-id <id>  云端主机标识（默认 cloud-host）
   --cloud-session-id <id> 云端将为该任务签发的会话 ID（默认 cloud-<session>）
   --boundary-sequence N 当前持久会话序号（默认 0）
-  --quiesce <mode>      check|drain|force（默认 drain：自动检测并在需要时取消回合）
+  --quiesce <mode>      check|drain|force（默认 check：只检测，发现仍在运行就拒绝打包；drain 需显式选择）
   --serve-url <url>     本地 serve 地址，用于检测 running 状态
   --token <token>       serve token
   --session-root <dir>  自动发现会话目录的 sessions-v4 根
@@ -260,7 +260,7 @@ func cloudPack(args []string) int {
 	cloudSessionID := fs.String("cloud-session-id", "", "云端会话 ID")
 	boundary := fs.Uint64("boundary-sequence", 0, "持久会话序号")
 	legacyQuiesced := fs.Bool("confirm-quiesced", false, "已弃用：等价于 --quiesce force")
-	quiesceMode := fs.String("quiesce", "drain", "check|drain|force")
+	quiesceMode := fs.String("quiesce", "check", "check|drain|force")
 	serveURL := fs.String("serve-url", "", "本地 serve 地址")
 	token := fs.String("token", "", "serve token")
 	sessionRoot := fs.String("session-root", "", "sessions-v4 根目录")

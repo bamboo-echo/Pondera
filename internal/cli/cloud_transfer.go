@@ -181,7 +181,7 @@ func cloudPush(args []string) int {
 	workspaceDir := fs.String("workspace-dir", "", "工作区目录")
 	sessionDir := fs.String("session-dir", "", "会话数据目录（留空自动发现）")
 	outDir := fs.String("out", "", "本地 bundle 输出目录")
-	quiesce := fs.String("quiesce", "drain", "check|drain|force")
+	quiesce := fs.String("quiesce", "check", "check|drain|force")
 	serveURL := fs.String("serve-url", "", "本地 serve 地址（用于检测运行中任务）")
 	token := fs.String("token", "", "serve token")
 	cloudHostID := fs.String("cloud-host-id", "cloud-host", "")
