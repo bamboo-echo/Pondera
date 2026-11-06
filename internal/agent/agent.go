@@ -1597,9 +1597,22 @@ func estimateTokensFromBytes(n int) int {
 	return tokens
 }
 
+// upsertPartialToolCall keeps one partial record per in-flight call. Gateways
+// that stream tool calls by index without an id emit Start, progress ticks and
+// completion for the same call; appending each snapshot would persist N
+// progressively longer copies of one call into an interruption record. The
+// trailing entry is the call that is still streaming, so a chunk without an id
+// merges into it instead of appending.
 func upsertPartialToolCall(calls []provider.ToolCall, call provider.ToolCall) []provider.ToolCall {
+	if call.ID == "" {
+		if n := len(calls); n > 0 && calls[n-1].ID == "" && calls[n-1].Name == call.Name {
+			calls[n-1] = call
+			return calls
+		}
+		return append(calls, call)
+	}
 	for i := range calls {
-		if call.ID != "" && calls[i].ID == call.ID {
+		if calls[i].ID == call.ID {
 			calls[i] = call
 			return calls
 		}
