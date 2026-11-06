@@ -549,6 +549,13 @@ func (c *client) streamWithPrefixContinuation(ctx context.Context, req provider.
 	var fullText, fullReasoning strings.Builder
 	var totalUsage *provider.Usage
 	continuations := 0
+	// The attempt counter is shared by every request of this sampling round, so
+	// each stream reports the cumulative request total. Summing two snapshots
+	// double counts (1+2 = 3, 3+3 = 6); fold each stream as a delta instead.
+	// Without a shared counter every stream reports its own count and the
+	// existing additive merge stays correct.
+	sharedAttempts := provider.RequestAttemptCount(ctx) > 0
+	previousRequests := 0
 
 	for {
 		var currentUsage *provider.Usage
@@ -596,6 +603,12 @@ func (c *client) streamWithPrefixContinuation(ctx context.Context, req provider.
 			}
 		}
 
+		if sharedAttempts && currentUsage != nil {
+			if count := provider.RequestAttemptCount(ctx); count > previousRequests {
+				currentUsage.RequestCount = count - previousRequests
+				previousRequests = count
+			}
+		}
 		totalUsage = mergeUsage(totalUsage, currentUsage, true)
 		if continuations >= maxPrefixContinuations ||
 			currentUsage == nil || currentUsage.FinishReason != "length" ||

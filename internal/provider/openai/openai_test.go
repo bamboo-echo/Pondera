@@ -289,6 +289,30 @@ func TestStreamContinuesDeepSeekLengthWithAssistantPrefix(t *testing.T) {
 		usage.CacheHitTokens != 26 || usage.CacheMissTokens != 4 || usage.ReasoningTokens != 2 || usage.FinishReason != "stop" {
 		t.Fatalf("merged usage = %+v", usage)
 	}
+
+	// The agent wraps the whole sampling round in a request-attempt counter, so
+	// both HTTP requests report cumulative counts (1, then 2). Merging those
+	// snapshots must yield 2 requests, not 1+2=3.
+	sharedCtx := provider.WithRequestAttemptCounter(t.Context())
+	sharedStream, err := c.Stream(sharedCtx, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "write"}}})
+	if err != nil {
+		t.Fatalf("Stream with shared counter: %v", err)
+	}
+	var sharedUsage *provider.Usage
+	for chunk := range sharedStream {
+		switch chunk.Type {
+		case provider.ChunkUsage:
+			sharedUsage = chunk.Usage
+		case provider.ChunkError:
+			t.Fatalf("shared-counter continuation errored: %v", chunk.Err)
+		}
+	}
+	if sharedUsage == nil || sharedUsage.RequestCount != 2 {
+		t.Fatalf("shared-counter usage = %+v, want RequestCount 2", sharedUsage)
+	}
+	if got := provider.RequestAttemptCount(sharedCtx); got != 2 {
+		t.Fatalf("attempt counter = %d, want 2", got)
+	}
 }
 
 func TestStreamContinuesReasoningOnlyDeepSeekLength(t *testing.T) {
