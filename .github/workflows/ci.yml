@@ -436,7 +436,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-frontend-stable-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
-          path: desktop/frontend
+          path: |
+            desktop/frontend/dist
+            desktop/frontend/.pondera-frontend-artifact.json
           overwrite: true
           if-no-files-found: error
 
@@ -449,7 +451,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-frontend-canary-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
-          path: desktop/frontend
+          path: |
+            desktop/frontend/dist
+            desktop/frontend/.pondera-frontend-artifact.json
           overwrite: true
           if-no-files-found: error
 
