@@ -169,7 +169,7 @@ func TestNormalizeLegacyOpenCodeGoRouteCatalogSplitsAggregateModelsAndRetargetsH
 	if !ok || responses.Kind != "responses" || responses.DefaultModel() != "grok-4.5" || !responses.HasModel("grok-4.5") || responses.HasModel("qwen3.7-plus") {
 		t.Fatalf("responses provider after split = %+v", responses)
 	}
-	if c.DefaultModel != "opencode-go-responses/grok-4.5" || c.Agent.PlannerModel != "opencode-go-responses/grok-4.5" || c.Agent.VisionModel != "opencode-go-responses/grok-4.5" || c.Agent.SubagentModel != "opencode-go/qwen3.7-plus" || c.Bot.Model != "opencode-go-responses/grok-4.5" {
+	if c.DefaultModel != "opencode-go-responses/grok-4.5" || c.Agent.PlannerModel != "opencode-go-responses/grok-4.5" || c.Agent.VisionModel != "opencode-go-responses/grok-4.5" || c.Agent.SubagentModel != "opencode-go-anthropic/qwen3.7-plus" || c.Bot.Model != "opencode-go-responses/grok-4.5" {
 		t.Fatalf("historical model refs = default:%q planner:%q vision:%q subagent:%q bot:%q", c.DefaultModel, c.Agent.PlannerModel, c.Agent.VisionModel, c.Agent.SubagentModel, c.Bot.Model)
 	}
 	if len(c.Agent.SubagentModels) != 2 || c.Agent.SubagentModels["review"] != "opencode-go-responses/grok-4.5" || c.Agent.SubagentModels["local"] != "private-model" {
@@ -225,13 +225,16 @@ func TestOpenCodeGoShippedChatPresetMovesMiniMaxM27ToAnthropicSibling(t *testing
 		}
 		chat, _ := c.Provider("opencode-go")
 		anthropic, ok := c.Provider("opencode-go-anthropic")
-		if !ok || anthropic.Kind != "anthropic" || anthropic.BaseURL != "https://opencode.ai/zen/go" || !stringSlicesEqual(anthropic.ModelList(), []string{"minimax-m2.7"}) {
+		if !ok || anthropic.Kind != "anthropic" || anthropic.BaseURL != "https://opencode.ai/zen/go" || !stringSlicesEqual(anthropic.ModelList(), []string{"minimax-m2.7", "qwen3.6-plus", "qwen3.7-max", "qwen3.7-plus", "qwen3.8-max"}) {
 			t.Fatalf("anthropic sibling = %+v, %t", anthropic, ok)
 		}
-		for _, id := range []string{"qwen3.6-plus", "qwen3.7-max", "qwen3.7-plus", "qwen3.8-max", "glm-5.3"} {
-			if !chat.HasModel(id) {
-				t.Errorf("%s left the Chat Completions connection", id)
+		for _, id := range []string{"qwen3.6-plus", "qwen3.7-max", "qwen3.7-plus", "qwen3.8-max"} {
+			if !anthropic.HasModel(id) {
+				t.Errorf("%s left the Anthropic connection", id)
 			}
+		}
+		if !chat.HasModel("glm-5.3") {
+			t.Error("glm-5.3 left the Chat Completions connection")
 		}
 		if chat.HasModel("minimax-m2.7") || c.DefaultModel != "opencode-go-anthropic/minimax-m2.7" {
 			t.Fatalf("chat=%v default=%q", chat.ModelList(), c.DefaultModel)
@@ -242,25 +245,70 @@ func TestOpenCodeGoShippedChatPresetMovesMiniMaxM27ToAnthropicSibling(t *testing
 	}
 }
 
-func TestOpenCodeGoManualConnectionKeepsItsRoute(t *testing.T) {
-	for _, models := range [][]string{{"glm-5.3", "qwen3.7-plus"}, {"qwen3.7-plus"}, {"glm-5.3", "minimax-m2.7"}, {"minimax-m2.7"}} {
+func TestOpenCodeGoManualConnectionFollowsRecommendedRoutes(t *testing.T) {
+	cases := []struct {
+		models      []string
+		wantKinds   []string
+		wantModels  [][]string
+		wantDefault string
+	}{
+		{
+			models:      []string{"glm-5.3", "qwen3.7-plus"},
+			wantKinds:   []string{"openai", "anthropic"},
+			wantModels:  [][]string{{"glm-5.3"}, {"qwen3.7-plus"}},
+			wantDefault: "custom-opencode-ai-anthropic/qwen3.7-plus",
+		},
+		{
+			models:      []string{"qwen3.7-plus"},
+			wantKinds:   []string{"anthropic"},
+			wantModels:  [][]string{{"qwen3.7-plus"}},
+			wantDefault: "custom-opencode-ai/qwen3.7-plus",
+		},
+		{
+			models:      []string{"glm-5.3", "minimax-m2.7"},
+			wantKinds:   []string{"openai"},
+			wantModels:  [][]string{{"glm-5.3", "minimax-m2.7"}},
+			wantDefault: "custom-opencode-ai/minimax-m2.7",
+		},
+		{
+			models:      []string{"minimax-m2.7"},
+			wantKinds:   []string{"openai"},
+			wantModels:  [][]string{{"minimax-m2.7"}},
+			wantDefault: "custom-opencode-ai/minimax-m2.7",
+		},
+	}
+	for _, tc := range cases {
 		manual := ProviderEntry{
 			Name: "custom-opencode-ai", Kind: "openai", BaseURL: "https://opencode.ai/zen/go/v1",
-			Models: append([]string(nil), models...), Default: models[len(models)-1],
+			Models: append([]string(nil), tc.models...), Default: tc.models[len(tc.models)-1],
 		}
 		ref := "custom-opencode-ai/" + manual.Default
 		c := &Config{ConfigVersion: openCodeGoUpgradeVersion, DefaultModel: ref, Providers: []ProviderEntry{manual}}
 		normalizeLegacyOpenCodeGoInstalls(c)
-		got := c.Providers[0]
-		if len(c.Providers) != 1 || got.Kind != "openai" || got.PresetID != "" || !stringSlicesEqual(got.ModelList(), models) || c.DefaultModel != ref {
-			t.Errorf("%v: providers=%d kind=%q preset=%q models=%v default=%q", models, len(c.Providers), got.Kind, got.PresetID, got.ModelList(), c.DefaultModel)
+		if len(c.Providers) != len(tc.wantKinds) {
+			t.Fatalf("%v: providers=%d, want %d", tc.models, len(c.Providers), len(tc.wantKinds))
+		}
+		for i, kind := range tc.wantKinds {
+			got := c.Providers[i]
+			if got.Kind != kind || !stringSlicesEqual(got.ModelList(), tc.wantModels[i]) {
+				t.Errorf("%v: provider[%d] kind=%q models=%v, want %q %v", tc.models, i, got.Kind, got.ModelList(), kind, tc.wantModels[i])
+			}
+		}
+		if c.DefaultModel != tc.wantDefault {
+			t.Errorf("%v: default=%q, want %q", tc.models, c.DefaultModel, tc.wantDefault)
 		}
 
 		legacy := &Config{ConfigVersion: openCodeGoUpgradeVersion - 1, DefaultModel: ref, Providers: []ProviderEntry{manual}}
 		planOpenCodeGoUpgrade(legacy)
+		present := map[string]bool{}
 		for _, p := range legacy.Providers {
-			if p.Name != "custom-opencode-ai" && (p.HasModel("minimax-m2.7") || p.HasModel("qwen3.7-plus")) {
-				t.Errorf("%v: journaled upgrade moved a manual model to %s %v", models, p.Name, p.ModelList())
+			for _, m := range p.ModelList() {
+				present[m] = true
+			}
+		}
+		for _, m := range tc.models {
+			if !present[m] {
+				t.Errorf("%v: journaled upgrade dropped the manual model %q", tc.models, m)
 			}
 		}
 	}
