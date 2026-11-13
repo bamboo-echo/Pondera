@@ -561,9 +561,14 @@ jobs:
       - name: Restore both native-tested Windows payloads
         uses: actions/download-artifact@v4
         with:
-          pattern: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-*
-          path: desktop/build
-          merge-multiple: true
+          name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-amd64
+          path: desktop/build/electron/windows-amd64
+
+      - name: Restore the native-tested arm64 payload
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-arm64
+          path: desktop/build/electron/windows-arm64
 
       - name: Require the Certum signing credentials
         if: ${{ env.HAS_CERTUM != 'true' }}

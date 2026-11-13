@@ -464,7 +464,7 @@ export const zhTW: Record<DictKey, string> = {
   "workspace.pickFile": "從檔案樹中選擇一個檔案",
   "workspace.loading": "正在載入檔案…",
   "workspace.binary": "暫不支援預覽二進位檔案",
-  "workspace.truncated": "預覽已截斷到前 2 MiB",
+  "workspace.truncated": "預覽已截斷到前 2 MiB。",
   "workspace.loadMore": "載入更多",
   "workspace.fullFileLoaded": "已載入全文",
   "workspace.searchPlaceholder": "尋找",

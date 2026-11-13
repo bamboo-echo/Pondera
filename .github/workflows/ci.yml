@@ -669,6 +669,10 @@ jobs:
         with:
           version: 11.8.0
 
+      - name: Install workspace dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
       - name: Download the prepared frontend
         uses: actions/download-artifact@v4
         with:
@@ -716,6 +720,10 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           version: 11.8.0
+
+      - name: Install workspace dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
 
       - name: Download the prepared frontend
         uses: actions/download-artifact@v4
@@ -856,6 +864,10 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           version: 11.8.0
+
+      - name: Install workspace dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
 
       - name: Download the prepared frontend
         uses: actions/download-artifact@v4
