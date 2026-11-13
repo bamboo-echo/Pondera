@@ -101,7 +101,10 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Install bubblewrap
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       - name: Build root module
         run: go build ./...
@@ -190,7 +193,10 @@ jobs:
 
       - name: Install bubblewrap
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       - name: test
         if: env.RUN_STEPS != 'false' && (runner.os == 'Linux' || (runner.os == 'macOS' && github.event_name != 'pull_request'))
@@ -456,9 +462,10 @@ jobs:
           path: desktop/frontend
 
       - name: Verify the prepared artifact
+        shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
 
   desktop-go:
     name: Verify the desktop Go service
@@ -484,9 +491,10 @@ jobs:
           path: desktop/frontend
 
       - name: Verify the prepared artifact
+        shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
 
       - name: Test the desktop module
         working-directory: desktop
@@ -547,9 +555,10 @@ jobs:
           path: desktop/frontend
 
       - name: Verify the prepared artifact
+        shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
 
       - name: Run the browser group
         working-directory: desktop
@@ -624,9 +633,10 @@ jobs:
           path: desktop/frontend
 
       - name: Verify the prepared artifact
+        shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
 
       - name: Package the macOS app
         run: |
@@ -671,9 +681,10 @@ jobs:
           path: desktop/frontend
 
       - name: Verify the prepared artifact
+        shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel canary --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel canary --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
 
       - name: Package the Windows app
         run: |
@@ -719,9 +730,10 @@ jobs:
           path: desktop/frontend
 
       - name: Verify the prepared artifact
+        shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
 
       - name: Run the Windows Go partition
         working-directory: desktop
