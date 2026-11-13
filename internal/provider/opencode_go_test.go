@@ -15,7 +15,7 @@ func TestOpenCodeGoChatModelsMatchPinnedLimits(t *testing.T) {
 		"deepseek-v4-flash-vision-exp": {Context: 1_000_000, MaxOutput: 384_000},
 		"mimo-v2.5-pro":                {Context: 1_048_576, MaxOutput: 128_000},
 		"mimo-v2.5":                    {Context: 1_000_000, MaxOutput: 128_000},
-		"hy3":                          {Context: 256_000, MaxOutput: 64_000},
+		"hy3":                          {Context: 256_000, MaxOutput: 128_000},
 	}
 	got := OpenCodeGoChatModels()
 	for id, lim := range want {
@@ -65,7 +65,7 @@ func TestFilterOfficialOpenCodeGoModelsKeepsOnlyRouteCompatibleModels(t *testing
 		baseURL string
 		want    []string
 	}{
-		{name: "chat", kind: "openai", baseURL: "https://opencode.ai/zen/go/v1", want: []string{"glm-5.3", "glm-5.2", "hy3", "qwen3.8-max", "qwen3.7-plus", "deepseek-flash", "deepseek-v4-flash"}},
+		{name: "chat", kind: "openai", baseURL: "https://opencode.ai/zen/go/v1", want: []string{"glm-5.3", "glm-5.2", "hy3", "deepseek-flash", "deepseek-v4-flash"}},
 		{name: "anthropic", kind: "anthropic", baseURL: "https://opencode.ai/zen/go", want: []string{"qwen3.8-max", "qwen3.7-plus", "deepseek-flash", "deepseek-v4-flash"}},
 		{name: "responses", kind: "responses", baseURL: "https://opencode.ai/zen/go/v1", want: []string{"grok-4.5", "gpt-5.6-luna", "muse-spark-1.2-contributor", "deepseek-flash", "deepseek-v4-flash"}},
 		{name: "custom endpoint is untouched", kind: "anthropic", baseURL: "https://relay.example/zen/go", want: all},
@@ -135,9 +135,9 @@ func TestOpenCodeGoModelInfoUsesExactLocalCatalog(t *testing.T) {
 	if _, ok := OpenCodeGoModelInfo("openai", "https://opencode.ai/zen/go/v1", "omen-alpha"); ok {
 		t.Fatal("uncatalogued model must not be inferred from its endpoint")
 	}
-	kimi, ok := OpenCodeGoModelInfo("openai", "https://opencode.ai/zen/go/v1", "kimi-k2.6")
+	kimi, ok := OpenCodeGoModelInfo("openai", "https://opencode.ai/zen/go/v1", "kimi-k3.1-pro")
 	if !ok || !kimi.SupportsInput(ModalityImage) {
-		t.Fatalf("pi catalog kimi-k2.6 metadata = %+v, ok=%t", kimi, ok)
+		t.Fatalf("pi catalog kimi-k3.1-pro metadata = %+v, ok=%t", kimi, ok)
 	}
 	if kimi.ContextWindow == 0 || kimi.MaxOutputTokens == 0 || kimi.API == "" {
 		t.Fatalf("pi catalog should preserve model metadata, got %+v", kimi)
@@ -153,11 +153,11 @@ func TestPiCatalogModelInfosContainsMultipleProviders(t *testing.T) {
 }
 
 func TestPiCatalogModelInfoForProviderRequiresExactServingRoute(t *testing.T) {
-	model, ok := PiCatalogModelInfoForProvider("opencode-go", "openai", "https://opencode.ai/zen/go/v1", "qwen3.6-plus")
-	if !ok || !model.SupportsInput(ModalityImage) || model.API != "openai-completions" {
+	model, ok := PiCatalogModelInfoForProvider("opencode-go", "anthropic", "https://opencode.ai/zen/go", "qwen3.7-plus")
+	if !ok || !model.SupportsInput(ModalityImage) || model.API != "anthropic-messages" {
 		t.Fatalf("OpenCode catalog model = %+v, ok=%t", model, ok)
 	}
-	if _, ok := PiCatalogModelInfoForProvider("opencode-go", "openai", "https://gateway.example/v1", "qwen3.6-plus"); ok {
+	if _, ok := PiCatalogModelInfoForProvider("opencode-go", "anthropic", "https://gateway.example/v1", "qwen3.7-plus"); ok {
 		t.Fatal("custom endpoint must not inherit pi catalog metadata")
 	}
 }
@@ -169,9 +169,9 @@ func TestPiCatalogContractKeepsKnownCapabilityFacts(t *testing.T) {
 	}{
 		{"openai", "https://opencode.ai/zen/go/v1", "kimi-k3", true},
 		{"openai", "https://opencode.ai/zen/go/v1", "glm-5.2", false},
-		{"openai", "https://opencode.ai/zen/go/v1", "deepseek-v4-flash-vision-exp", true},
+		{"openai", "https://opencode.ai/zen/go/v1", "deepseek-v4.1-flash", true},
 		{"anthropic", "https://opencode.ai/zen/go", "qwen3.8-flash", true},
-		{"responses", "https://opencode.ai/zen/go/v1", "grok-4.6", true},
+		{"responses", "https://opencode.ai/zen/go/v1", "grok-4.7", true},
 	}
 	for _, tc := range cases {
 		info, ok := PiCatalogModelInfo(tc.kind, tc.baseURL, tc.model)
@@ -229,18 +229,18 @@ func TestOpenCodeGoMiniMaxM27ServedOnlyOnAnthropicRoute(t *testing.T) {
 	}
 }
 
-// models.dev serves these Qwen models over the OpenAI-compatible SDK while the
-// docs table lists /v1/messages; both routes stay available.
-func TestOpenCodeGoQwenModelsKeepBothRoutes(t *testing.T) {
+// pi 1.5.x publishes the Qwen models through the Anthropic-compatible route,
+// which is also their recommended wire format.
+func TestOpenCodeGoQwenModelsUseAnthropicRoute(t *testing.T) {
 	for _, id := range []string{"qwen3.6-plus", "qwen3.7-max", "qwen3.7-plus", "qwen3.8-max"} {
-		if route, ok := OpenCodeGoRecommendedRoute(id); !ok || route != OpenCodeGoRouteChat {
+		if route, ok := OpenCodeGoRecommendedRoute(id); !ok || route != OpenCodeGoRouteAnthropic {
 			t.Errorf("%s recommended route = %q, %t", id, route, ok)
-		}
-		if _, ok := LookupOfficialOpenCodeGo("openai", "https://opencode.ai/zen/go/v1", id); !ok {
-			t.Errorf("%s dropped from the Chat Completions route", id)
 		}
 		if _, ok := LookupOfficialOpenCodeGo("anthropic", "https://opencode.ai/zen/go", id); !ok {
 			t.Errorf("%s dropped from the Anthropic route", id)
+		}
+		if _, ok := LookupOfficialOpenCodeGo("openai", "https://opencode.ai/zen/go/v1", id); ok {
+			t.Errorf("%s unexpectedly stays on the Chat Completions route", id)
 		}
 		if OpenCodeGoRouteCorrected(id) {
 			t.Errorf("%s carries a route correction", id)

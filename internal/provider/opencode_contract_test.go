@@ -60,7 +60,7 @@ func TestOpenCodeGoContractUsesExactEffectiveEndpointAndModel(t *testing.T) {
 func TestOpenCodeGoDiscoveryFiltersTheActualRequestRoute(t *testing.T) {
 	models := []string{"deepseek-v4-pro", "qwen3.8-max", "grok-4.5", "user-custom"}
 	got := FilterOpenCodeGoRequestModels("openai", "https://opencode.ai/zen/go/v1", "https://opencode.ai/zen/go/v1/chat/completions", "", models)
-	if !reflect.DeepEqual(got, []string{"deepseek-v4-pro", "qwen3.8-max"}) {
+	if !reflect.DeepEqual(got, []string{"deepseek-v4-pro"}) {
 		t.Fatal(got)
 	}
 	got = FilterOpenCodeGoRequestModels("openai", "https://opencode.ai/zen/go/v1", "https://custom.example/v1/chat/completions", "", models)
