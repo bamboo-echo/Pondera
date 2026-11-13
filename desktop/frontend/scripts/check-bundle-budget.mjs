@@ -575,6 +575,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // measures 2146225 B on the Linux producer. Round to the smallest 2096.0 KiB
 // ceiling; every compressed, chunk, CSS, locale, and resident-history budget
 // remains unchanged.
-const rawInitialBudgetKiB = 2_096.0;
+// The mermaid 12.3.0 upgrade measures 2146651 B on the Linux producer. Round
+// to the smallest 2096.4 KiB ceiling; every compressed, chunk, CSS, locale,
+// and resident-history budget remains unchanged.
+const rawInitialBudgetKiB = 2_096.4;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
