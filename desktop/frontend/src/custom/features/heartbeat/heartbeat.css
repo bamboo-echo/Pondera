@@ -1464,8 +1464,6 @@
 }
 
 .heartbeat-editor__actions {
-  display: flex;
-  gap: 8px;
   padding-top: 6px;
 }
 

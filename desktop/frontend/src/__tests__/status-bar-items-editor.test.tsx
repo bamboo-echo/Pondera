@@ -6,7 +6,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { StatusBarItemsEditor } from "../components/StatusBarItemsEditor";
 import { LocaleProvider } from "../lib/i18n";
-import { DEFAULT_STATUS_BAR_ITEMS, type StatusBarItemId } from "../lib/statusBarItems";
+import { DEFAULT_STATUS_BAR_ITEMS, STATUS_BAR_ITEM_IDS, type StatusBarItemId } from "../lib/statusBarItems";
 
 let passed = 0;
 let failed = 0;
@@ -58,7 +58,7 @@ Object.defineProperty(window, "matchMedia", {
 let latestItems: StatusBarItemId[] = [];
 
 function Harness() {
-  const [items, setItems] = useState<StatusBarItemId[]>([...DEFAULT_STATUS_BAR_ITEMS]);
+  const [items, setItems] = useState<StatusBarItemId[]>([...STATUS_BAR_ITEM_IDS]);
   latestItems = items;
   return (
     <LocaleProvider>
@@ -91,7 +91,7 @@ await act(async () => {
   await flush();
 });
 
-ok(document.body.textContent?.includes(`Shown · ${DEFAULT_STATUS_BAR_ITEMS.length}`) === true, "expanded editor labels the visible zone with its count");
+ok(document.body.textContent?.includes(`Shown · ${STATUS_BAR_ITEM_IDS.length}`) === true, "expanded editor labels the visible zone with its count");
 ok(document.body.textContent?.includes("Hidden · 0") === true, "expanded editor labels the hidden zone with its count");
 ok(document.querySelectorAll('[data-statusbar-drop-zone="hidden"]').length === 1, "hidden zone is an explicit drag target");
 
@@ -102,8 +102,8 @@ await act(async () => {
   await flush();
 });
 
-ok(latestItems.length === DEFAULT_STATUS_BAR_ITEMS.length - 1 && !latestItems.includes("balance"), "clearing a visible item removes it from the persisted order");
-ok(document.body.textContent?.includes(`Shown · ${DEFAULT_STATUS_BAR_ITEMS.length - 1}`) === true, "visible count updates after hiding an item");
+ok(latestItems.length === STATUS_BAR_ITEM_IDS.length - 1 && !latestItems.includes("balance"), "clearing a visible item removes it from the persisted order");
+ok(document.body.textContent?.includes(`Shown · ${STATUS_BAR_ITEM_IDS.length - 1}`) === true, "visible count updates after hiding an item");
 ok(document.body.textContent?.includes("Hidden · 1") === true, "hidden count updates after hiding an item");
 ok(document.querySelector('[data-statusbar-drop-zone="hidden"] [data-statusbar-setting-item="balance"]') != null, "hidden item moves into the hidden zone");
 
@@ -112,7 +112,7 @@ await act(async () => {
   showAll?.click();
   await flush();
 });
-ok(latestItems.length === DEFAULT_STATUS_BAR_ITEMS.length && latestItems.at(-1) === "balance", "show all restores hidden items without discarding the current visible order");
+ok(latestItems.length === STATUS_BAR_ITEM_IDS.length && latestItems.at(-1) === "balance", "show all restores hidden items without discarding the current visible order");
 
 const moveWorkspaceDown = document.querySelector<HTMLButtonElement>('button[aria-label="Move workspace down"]');
 await act(async () => {

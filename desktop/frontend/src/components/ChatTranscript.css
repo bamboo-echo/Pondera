@@ -7,7 +7,10 @@
 .chat-transcript {
   --dsw-alias-label-primary: var(--fg);
   --dsw-alias-label-secondary: var(--fg-dim);
-  --dsw-alias-label-tertiary: var(--fg-faint);
+  /* Flow-row meta text (think summaries, tool summaries) was the faint tier,
+     which sits at ~4.2:1 on the task surface — below AA for 13px. The dim
+     tier keeps it quiet but readable. */
+  --dsw-alias-label-tertiary: var(--fg-dim);
   --dsw-alias-label-caption: var(--fg-faint);
   --dsw-alias-bg-base: var(--chat-bg, var(--bg));
   --dsw-alias-markdown-code-block: var(--bg-soft);
@@ -58,7 +61,7 @@
 }
 .chat-surface { position: relative; isolation: isolate; height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .chat-transcript .chat-surface > .chat-flow-scroll.transcript { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overflow-anchor: none; scrollbar-width: auto; padding: 24px; display: block; }
-.chat-transcript .chat-column { width: 100%; max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 0; padding-bottom: 24px; }
+.chat-transcript .chat-column { width: 100%; max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 0; padding-bottom: 24px; }
 /* Harness ChatView: only nonempty seats contribute the 16px flow rhythm. */
 .chat-column > :not(.chat-node:empty) ~ :not(.chat-node:empty) { margin-top: var(--dsh-chat-flow-gap, 16px); }
 .chat-node[data-turn-process-answer] { --dsh-chat-flow-gap: 8px; }
@@ -69,11 +72,62 @@
 .chat-node[data-chat-kind="assistant"] { color: var(--fg); }
 .chat-node .msg-meta { opacity: 1; }
 .chat-node .msg--user { gap: 6px; }
-.chat-node .msg--user .msg__body { border: 0; border-radius: 22px; box-shadow: none; padding: 10px 16px; }
+.chat-node .msg--user .msg__body { border: 0; border-radius: 12px; box-shadow: none; padding: 9px 14px; }
+/* A user turn is input, not an alert. Accent-tinting the bubble turns it into
+   a warm red block in amber themes and a green one in aurora — the same
+   message reads as a different severity per theme. Neutral surface instead. */
+.chat-transcript .chat-node .msg--user .msg__body {
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-2, var(--bg-elev-2));
+  padding: 9px 14px;
+  box-shadow: none;
+}
 .chat-node .msg--user .msg-meta { margin-top: 0; }
 .chat-tool { width: 100%; min-width: 0; border: 0; padding: 0; background: none; text-align: left; }
+/* Rows are targets: hover is a faint wash, not a border. */
+.chat-tool { border-radius: 6px; }
+.chat-tool:hover { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+/* A failure is content, not a red banner. The dot carries the colour; the
+   message stays neutral and wraps to two lines so the useful part of a long
+   path or exception is readable instead of being cut at "C:\\Users\\...".
+   Tinting the whole row made a log line the loudest thing on the page. */
+.chat-tool[data-state="error"] { background: transparent; }
+.chat-tool[data-state="error"]:hover { background: color-mix(in srgb, var(--danger, #e5484d) 5%, transparent); }
+.chat-tool[data-state="error"] .dsh-DisclosureRow-row { position: relative; align-items: flex-start; flex-wrap: wrap; height: auto; min-height: 26px; padding: 3px 0 4px; }
+.chat-tool[data-state="error"] .dsh-ToolRow-leading { margin-top: 3px; }
+.chat-tool[data-state="error"] .dsh-ToolRow-leading .dsh-StateDot-dot { transform: scale(.72); }
+.chat-tool[data-state="error"] .dsh-ToolRow-title { color: var(--fg); }
+/* The message gets its own line, indented under the title, instead of
+   starting mid-row after three competing weights. */
+.chat-tool[data-state="error"] .dsh-ToolRow-summary {
+  flex: 0 0 100%;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 1px;
+  padding-left: 22px;
+}
+
+.chat-tool[data-state="error"] .dsh-DisclosureRow-trailing {
+  position: absolute;
+  top: 7px;
+  right: 2px;
+}
+
+.chat-tool[data-state="error"] .dsh-ToolRow-errorSummary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fg-dim);
+  text-overflow: clip;
+}
 .chat-notice[data-level="warn"] { color: var(--danger, #d46b54); }
-.chat-reasoning__body { color: var(--fg-faint); white-space: pre-wrap; }
+.chat-reasoning__body { color: var(--fg-dim); white-space: pre-wrap; }
 .chat-reasoning__body .copybtn { margin-left: 8px; }
 .dsh-row-duration { flex: none; margin-left: 8px; font-size: var(--dsh-content-font-size-secondary); color: var(--fg-faint); }
 .dsh-ToolRow-ioText { margin: 0; }
@@ -197,7 +251,7 @@
   .chat-node:focus-within .chat-turn-tail > .chat-actions[data-actions-reveal="hover"] { opacity: 1; }
 }
 .chat-running { color: var(--fg-dim); font-size: 13px; }
-.chat-transcript .chat-to-bottom { position: absolute; bottom: 16px; right: max(24px, calc((100% - 800px) / 2)); display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 0.5px solid var(--border-soft); border-radius: 100px; background: var(--bg-elev); box-shadow: 0 2px 8px #0001; }
+.chat-transcript .chat-to-bottom { position: absolute; bottom: 16px; right: max(24px, calc((100% - 680px) / 2)); display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 0.5px solid var(--border-soft); border-radius: 100px; background: var(--bg-elev); box-shadow: 0 2px 8px #0001; }
 .chat-transcript .chat-to-bottom[hidden] { display: none; }
 .chat-turn-navigation-status { position: absolute; right: 12px; top: 8px; max-width: 240px; font-size: 12px; color: var(--fg-dim); }
 .chat-details { position: absolute; inset: 0 0 0 auto; width: min(560px, 60%); background: var(--bg); border-left: 1px solid var(--border); box-shadow: -8px 0 24px #0002; display: flex; flex-direction: column; z-index: var(--z-local-popover); }

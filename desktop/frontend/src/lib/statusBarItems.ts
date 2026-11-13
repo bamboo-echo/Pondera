@@ -17,7 +17,10 @@ export const STATUS_BAR_ITEM_IDS = [
 
 export type StatusBarItemId = typeof STATUS_BAR_ITEM_IDS[number];
 
-export const DEFAULT_STATUS_BAR_ITEMS: StatusBarItemId[] = [...STATUS_BAR_ITEM_IDS];
+// Three readings by default: where you are, how much context is left, what
+// this session has cost. The rest are diagnostics — available in the editor
+// and the usage panel, not parked in the status bar as a debug strip.
+export const DEFAULT_STATUS_BAR_ITEMS: StatusBarItemId[] = ["workspace", "context", "cost"];
 
 const statusBarItemSet = new Set<string>(STATUS_BAR_ITEM_IDS);
 

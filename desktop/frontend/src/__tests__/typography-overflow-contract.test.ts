@@ -116,7 +116,7 @@ ok(
   "non-transcript markdown still culls offscreen blocks with a 72px placeholder",
 );
 ok(hasDeclaration(".chat-transcript .md > *", "content-visibility", "visible"), "natural chat uses real Markdown geometry");
-eq(finalDeclaration(".chat-transcript .chat-column", "max-width"), "800px", "chat has one readable column");
+eq(finalDeclaration(".chat-transcript .chat-column", "max-width"), "680px", "chat keeps one readable column at 45-50 CJK characters");
 eq(finalDeclaration(".chat-transcript .chat-surface > .chat-flow-scroll.transcript", "overflow-y"), "auto", "chat uses native vertical scrolling");
 ok(hasDeclaration(".chat-transcript .chat-surface > .chat-flow-scroll.transcript", "padding", "24px"), "normal chat inset is 24px");
 ok(hasDeclaration(".chat-transcript .chat-surface > .chat-flow-scroll.transcript", "padding", "24px 16px 16px"), "narrow chat inset is 16px");

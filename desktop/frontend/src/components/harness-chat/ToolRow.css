@@ -121,3 +121,16 @@
   background: var(--dsw-alias-interactive-bg-hover-solid);
   color: var(--dsw-alias-label-primary);
 }
+
+/* Failure marker: one word in red, the message stays neutral. */
+.dsh-ToolRow-stateLabel {
+  flex: none;
+  margin: 0 8px 0 6px;
+  font-size: 11px;
+  letter-spacing: .02em;
+  color: var(--dsw-alias-label-caption);
+}
+
+.dsh-ToolRow-errorLabel {
+  color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 82%, var(--fg));
+}

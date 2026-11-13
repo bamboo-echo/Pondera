@@ -1,7 +1,7 @@
 // Adapted from DeepSeek Harness c291e7961a (MIT).
 import { type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 const clsx = (...values: Array<string | false | undefined>) => values.filter(Boolean).join(' ')
-import { ChevronDown as IconChevronDownOutline14 } from 'lucide-react'
+import { ChevronDown as IconChevronDownOutline14, ChevronRight } from 'lucide-react'
 import css from './DisclosureRow.styles'
 
 /** Shared 24px disclosure chrome for compact flow rows. */
@@ -98,6 +98,16 @@ export function DisclosureRow({
         )}
         <span className={clsx(css.title, titleClassName)}>{title}</span>
         {(keepContentWhenOpen || !open) && collapsedContent}
+        {/* A hover-only chevron is not an affordance: nothing tells the user
+            the row opens until the pointer is already on it. Pin a quiet
+            trailing chevron to every expandable row instead. */}
+        {expandable && (
+          <ChevronRight
+            className={clsx(chevronClassName, css.trailing)}
+            data-open={open || undefined}
+            aria-hidden="true"
+          />
+        )}
       </div>
       {open && children}
     </div>

@@ -16,16 +16,21 @@ export function ToolRow({ icon, title, summary, state, dot, statusLabel, errorSu
 }) {
   const [open, setOpen] = useState(false);
   const t = useT();
-  const failureLine = state === "error" && errorSummary ? presentError(errorSummary, t).summary : undefined;
+  // The raw failure is the content the user needs. The localised summary
+  // ("操作出现问题…") is a neutral fallback for framework noise, not a
+  // replacement for the message: it used to hide the real error one click
+  // behind an affordance that had no visual cue.
+  const failureLine = state === "error" && errorSummary ? presentError(errorSummary, t).detail || undefined : undefined;
   const leading = dot ? <StateDot state={dot} /> : state === "error" || state === "stopped"
     ? <StateDot state={state === "error" ? "error" : "warning"} /> : icon;
   return <div className={`${css.root} chat-tool`} data-state={state}>
-    {state !== "done" && <span className="sr-only">{statusLabel}</span>}
+    {state !== "done" && state !== "error" && <span className="sr-only">{statusLabel}</span>}
     <DisclosureRow icon={leading} title={title} open={open} expandable expandOnRowClick keepContentWhenOpen
       rowClassName={css.row} leadingClassName={css.leading} titleClassName={css.title} chevronClassName={css.chevron}
       onToggle={() => { beforeToggle(); setOpen(value => !value); }}
-      collapsedContent={(failureLine || summary) && <><span className={css.sep} aria-hidden />
-        <span className={`${css.summary}${failureLine ? ` ${css.errorSummary}` : ""}`}>{failureLine || summary}</span></>}>
+      collapsedContent={<>
+        {state === "error" ? <span className={`${css.stateLabel} ${css.errorLabel}`}>{statusLabel}</span> : <span className={css.sep} aria-hidden />}
+        {(failureLine || summary) && <span className={`${css.summary}${failureLine ? ` ${css.errorSummary}` : ""}`} title={failureLine || summary}>{failureLine || summary}</span>}</>}>
       <div className={css.bodyWrap}>
         {children}
         <button className={css.inspectButton} type="button" onClick={event => inspect(event.currentTarget)}><ScanSearch size={12} />{inspectLabel}</button>
