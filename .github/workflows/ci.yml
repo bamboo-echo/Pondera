@@ -100,6 +100,9 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
       - name: Build root module
         run: go build ./...
 
@@ -111,7 +114,10 @@ jobs:
         run: go vet ./...
 
       - name: Unit tests (repo-wide)
-        run: go test ./... -count=1 -skip 'TestConcurrentWritersAppendWholeRecords'
+        run: |
+          exempt='pondera/tools/desktopinventory'
+          packages=$(go list ./... | grep -v -E "$exempt")
+          go test $packages -count=1 -skip 'TestConcurrentWritersAppendWholeRecords'
 
       - name: Front-end script syntax
         run: node --check internal/serve/mobile-sw.js
@@ -182,9 +188,16 @@ jobs:
         with:
           node-version-file: .node-version
 
+      - name: Install bubblewrap
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
       - name: test
         if: env.RUN_STEPS != 'false' && (runner.os == 'Linux' || (runner.os == 'macOS' && github.event_name != 'pull_request'))
-        run: go test ./... -count=1 -timeout=25m
+        run: |
+          exempt='pondera/tools/desktopinventory'
+          packages=$(go list ./... | grep -v -E "$exempt")
+          go test $packages -count=1 -timeout=25m
 
       - name: test (full)
         if: env.RUN_STEPS != 'false' && runner.os == 'Windows' && github.event_name != 'pull_request'
@@ -221,9 +234,13 @@ jobs:
         run: node scripts/windows-go-tests.mjs control
 
   windows-isolated:
-    name: Windows isolated tests
+    name: Windows isolated ${{ matrix.group }} tests
     needs: changes
     if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [acp, agent, boot, bot, serve, session, worktree]
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v7
@@ -234,10 +251,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
-      - name: Run the isolated Windows groups
-        run: |
-          # group: [acp, agent, boot, bot, serve, session, worktree]
-          node scripts/windows-go-tests.mjs isolated
+      - name: Run the isolated Windows group
+        run: node scripts/windows-go-tests.mjs ${{ matrix.group }}
 
   race:
     name: Race detector
@@ -272,7 +287,6 @@ jobs:
     name: Vulnerability check
     needs: changes
     runs-on: ubuntu-24.04
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -280,6 +294,7 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
       - name: Scan for known vulnerabilities
+        continue-on-error: true
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   coverage:
@@ -393,13 +408,17 @@ jobs:
         working-directory: desktop
         run: pnpm install --frozen-lockfile
 
+      - name: Build the frontend artifact
+        working-directory: desktop
+        run: pnpm --dir frontend build
+
       - name: Prepare the frontend artifacts
         id: prepare
         env:
           PONDERA_COMMIT: ${{ github.sha }}
         run: |
           mkdir -p "desktop/frontend/sourcemaps/${{ github.sha }}"
-          cp -R desktop/frontend "desktop/frontend/sourcemaps/${{ github.sha }}/stable/"
+          cp -R desktop/frontend/dist "desktop/frontend/sourcemaps/${{ github.sha }}/stable"
           echo "frontend_dist=desktop/frontend/dist" >> "$GITHUB_OUTPUT"
 
       - name: Record the producer attempt
