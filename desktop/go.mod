@@ -32,9 +32,9 @@ require (
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
-	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.10.2 // indirect
+	github.com/bmatcuk/doublestar/v4 v4.10.4 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
@@ -44,16 +44,16 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
-	github.com/klauspost/compress v1.18.7 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/kr/fs v0.1.0 // indirect
-	github.com/larksuite/oapi-sdk-go/v3 v3.11.0 // indirect
+	github.com/larksuite/oapi-sdk-go/v3 v3.12.2 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.30 // indirect
+	github.com/mattn/go-runewidth v0.0.31 // indirect
 	github.com/modelcontextprotocol/go-sdk v1.8.0 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
-	github.com/pkg/sftp v1.13.11 // indirect
+	github.com/pkg/sftp v1.13.12 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
@@ -67,7 +67,7 @@ require (
 	github.com/tree-sitter/tree-sitter-rust v0.24.2 // indirect
 	github.com/tree-sitter/tree-sitter-typescript v0.23.2 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	github.com/yuin/goldmark v1.8.6 // indirect
+	github.com/yuin/goldmark v1.8.7 // indirect
 	github.com/zalando/go-keyring v0.2.8 // indirect
 	go.etcd.io/bbolt v1.5.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
