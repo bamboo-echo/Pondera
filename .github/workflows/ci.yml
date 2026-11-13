@@ -439,6 +439,7 @@ jobs:
           path: |
             desktop/frontend/dist
             desktop/frontend/.pondera-frontend-artifact.json
+          include-hidden-files: true
           overwrite: true
           if-no-files-found: error
 
@@ -454,6 +455,7 @@ jobs:
           path: |
             desktop/frontend/dist
             desktop/frontend/.pondera-frontend-artifact.json
+          include-hidden-files: true
           overwrite: true
           if-no-files-found: error
 
