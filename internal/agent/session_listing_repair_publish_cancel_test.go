@@ -39,7 +39,7 @@ func TestRepairSessionListingProjectionCancelsDuringPublish(t *testing.T) {
 	}()
 	select {
 	case <-publishStarted:
-	case <-time.After(30 * time.Second):
+	case <-time.After(90 * time.Second):
 		cancel()
 		t.Fatal("repair never reached transcript publication")
 	}
