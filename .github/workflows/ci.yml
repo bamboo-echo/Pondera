@@ -477,7 +477,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
-          path: .
+          path: desktop/frontend
 
       - name: Verify the prepared artifact
         shell: bash
@@ -506,7 +506,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
-          path: .
+          path: desktop/frontend
 
       - name: Verify the prepared artifact
         shell: bash
@@ -570,7 +570,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
-          path: .
+          path: desktop/frontend
 
       - name: Verify the prepared artifact
         shell: bash
@@ -648,7 +648,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
-          path: .
+          path: desktop/frontend
 
       - name: Verify the prepared artifact
         shell: bash
@@ -696,7 +696,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-prepare.outputs.canary_artifact_name }}
-          path: .
+          path: desktop/frontend
 
       - name: Verify the prepared artifact
         shell: bash
@@ -745,7 +745,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
-          path: .
+          path: desktop/frontend
 
       - name: Verify the prepared artifact
         shell: bash
@@ -826,7 +826,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-prepare.outputs.canary_artifact_name }}
-          path: .
+          path: desktop/frontend
 
       - name: Build the desktop service
         working-directory: desktop
