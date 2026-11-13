@@ -708,6 +708,10 @@ jobs:
         with:
           node-version-file: .node-version
 
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
       - name: Download the prepared frontend
         uses: actions/download-artifact@v4
         with:
