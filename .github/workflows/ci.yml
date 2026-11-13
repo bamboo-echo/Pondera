@@ -693,6 +693,9 @@ jobs:
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
           node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       - name: Build and package the macOS desktop
         shell: bash
         run: |
@@ -755,6 +758,12 @@ jobs:
       - name: Build the desktop service
         working-directory: desktop
         run: go build -trimpath -ldflags="-s -w -X main.version=v0.0.0-ci -X main.channel=canary" -o build/bin/pondera-desktop.exe .
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build and package the Windows desktop
         shell: bash
@@ -900,6 +909,12 @@ jobs:
       - name: Build the desktop service
         working-directory: desktop
         run: go build -trimpath -ldflags="-s -w -X main.version=v0.0.0-ci -X main.channel=canary" -o build/bin/pondera-desktop.exe .
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build the Windows installer
         shell: bash
