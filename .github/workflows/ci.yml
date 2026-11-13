@@ -693,6 +693,13 @@ jobs:
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
           node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
+      - name: Build and package the macOS desktop
+        shell: bash
+        run: |
+          PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
+          export PONDERA_FRONTEND_PNPM_VERSION
+          bash scripts/desktop-build.sh darwin/arm64 v0.0.0-ci stable
+
       - name: Package the macOS app
         run: |
           PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
@@ -748,6 +755,13 @@ jobs:
       - name: Build the desktop service
         working-directory: desktop
         run: go build -trimpath -ldflags="-s -w -X main.version=v0.0.0-ci -X main.channel=canary" -o build/bin/pondera-desktop.exe .
+
+      - name: Build and package the Windows desktop
+        shell: bash
+        run: |
+          PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
+          export PONDERA_FRONTEND_PNPM_VERSION
+          bash scripts/desktop-build.sh windows/amd64 v0.0.0-ci canary
 
       - name: Package the Windows app
         working-directory: desktop
@@ -886,6 +900,13 @@ jobs:
       - name: Build the desktop service
         working-directory: desktop
         run: go build -trimpath -ldflags="-s -w -X main.version=v0.0.0-ci -X main.channel=canary" -o build/bin/pondera-desktop.exe .
+
+      - name: Build the Windows installer
+        shell: bash
+        run: |
+          PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
+          export PONDERA_FRONTEND_PNPM_VERSION
+          bash scripts/desktop-build.sh windows/amd64 v0.0.0-ci canary
 
       - name: Package Electron shell for native startup smoke
         working-directory: desktop
