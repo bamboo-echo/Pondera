@@ -43,7 +43,7 @@ assert.doesNotMatch(cwdReset, /setSelected(?:File|Change)Path\(null\)/, "cwd res
 // this effect reconnects.
 assert.doesNotMatch(cwdReset, /setPreviewResource\(emptyKeyedResource\(\)\)/, "cwd reset does not discard the preview a read just started");
 
-const scopeReset = panel.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[fileNavigation, fileScope, open, resetWorkspaceChanges, viewMode, workspaceScopeKey\]\);/)?.[0] ?? "";
+const scopeReset = panel.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[fileNavigation, fileScope, open, resetPreview, resetWorkspaceChanges, viewMode, workspaceScopeKey\]\);/)?.[0] ?? "";
 assert.ok(scopeReset, "workspace scope reset effect is present");
 assert.doesNotMatch(scopeReset, /setSelectedChangePath\(null\)/, "scope reset does not erase the restored change selection");
 

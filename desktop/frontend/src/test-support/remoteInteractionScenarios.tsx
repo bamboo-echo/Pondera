@@ -106,6 +106,11 @@ export async function runLegacyRemoteCapabilityScenario(options: {
     } });
     await options.flush();
   });
+  // The surface projects replayed cards after hydration settles; wait for the
+  // upgrade notice rather than assuming one event turn is enough.
+  for (let attempt = 0; attempt < 100 && container.textContent?.includes("must be upgraded") !== true; attempt += 1) {
+    await act(async () => { await options.flush(); });
+  }
   const approval = container.querySelector<HTMLButtonElement>(".remote-surface__approval .prompt-action");
   const form = container.querySelector(".extension-form")?.closest(".prompt-shelf")?.querySelector<HTMLButtonElement>(".decision-confirm-bar__confirm");
   options.ok(container.textContent?.includes("must be upgraded") === true, "old Serve shows an upgrade notice only for unsafe interactive cards");

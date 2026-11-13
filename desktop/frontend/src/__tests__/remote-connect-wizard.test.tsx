@@ -509,6 +509,9 @@ ok(!document.querySelector(".remote-wizard__mkdir"), "workspace step has no crea
 // ── Finish: pin, open an in-app session tab, then refresh the tree ──
 await act(async () => {
   buttonByText("Connect and open")?.click();
+  // The navigation owner resolves its executor and the registration fence
+  // asynchronously; give that turn a chance to finish before asserting order.
+  await delay(50);
   await flush();
 });
 ok(tape.includes("OpenRemoteProjectTab:gpu-box:/home/dev/projects:true"), "finish opens the selected workspace in a new remote session tab");
@@ -520,7 +523,7 @@ ok(tape.indexOf("OpenRemoteProjectTab:gpu-box:/home/dev/projects:true") < tape.i
 ok(tape.includes("close"), "wizard closes after a successful finish");
 
 mergedWorkspace = "/home/dev";
-await act(async () => { buttonByText("Connect and open")?.click(); await flush(); });
+await act(async () => { buttonByText("Connect and open")?.click(); await delay(50); await flush(); });
 ok(tape.includes("OpenRemoteProjectTab:gpu-box:/home/dev:true"), "a merged finish opens the canonical workspace through the navigation owner");
 mergedWorkspace = "";
 
