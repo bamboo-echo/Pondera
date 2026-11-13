@@ -425,6 +425,7 @@ jobs:
         run: |
           mkdir -p "desktop/frontend/sourcemaps/${{ github.sha }}"
           cp -R desktop/frontend/dist "desktop/frontend/sourcemaps/${{ github.sha }}/stable"
+          node desktop/frontend/scripts/artifact-identity.mjs create --root . --shell electron --channel stable --source-sha "${{ github.sha }}" --run-id "${{ github.run_id }}" --attempt "$GITHUB_RUN_ATTEMPT" --pnpm_version "$(pnpm --version)"
           echo "frontend_dist=desktop/frontend/dist" >> "$GITHUB_OUTPUT"
 
       - name: Record the producer attempt
@@ -435,6 +436,19 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-frontend-stable-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
+          path: desktop/frontend
+          overwrite: true
+          if-no-files-found: error
+
+      - name: Create the canary artifact identity
+        run: |
+          rm -f desktop/frontend/.pondera-frontend-artifact.json
+          node desktop/frontend/scripts/artifact-identity.mjs create --root . --shell electron --channel canary --source-sha "${{ github.sha }}" --run-id "${{ github.run_id }}" --attempt "${{ steps.artifact-identity.outputs.attempt }}" --pnpm_version "$(pnpm --version)"
+
+      - name: Upload the canary frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-frontend-canary-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
           path: desktop/frontend
           overwrite: true
           if-no-files-found: error
@@ -465,7 +479,7 @@ jobs:
         shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
   desktop-go:
     name: Verify the desktop Go service
@@ -494,7 +508,7 @@ jobs:
         shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
       - name: Test the desktop module
         working-directory: desktop
@@ -558,7 +572,7 @@ jobs:
         shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
       - name: Run the browser group
         working-directory: desktop
@@ -636,7 +650,7 @@ jobs:
         shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
       - name: Package the macOS app
         run: |
@@ -684,7 +698,7 @@ jobs:
         shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel canary --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel canary --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
       - name: Package the Windows app
         run: |
@@ -733,7 +747,7 @@ jobs:
         shell: bash
         run: |
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
-          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
       - name: Run the Windows Go partition
         working-directory: desktop
