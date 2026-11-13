@@ -51,6 +51,16 @@ on:
         required: false
         type: string
         default: ""
+      candidate_preparation:
+        description: "Prepare a candidate without activating a release tag"
+        required: false
+        type: boolean
+        default: false
+      candidate_verified:
+        description: "The candidate attestations and assets were verified"
+        required: false
+        type: boolean
+        default: false
       preflight_artifact_prefix:
         description: "Artifact prefix for a Windows preflight build"
         required: false
@@ -114,6 +124,14 @@ on:
         required: false
         type: string
         default: ""
+      candidate_preparation:
+        required: false
+        type: boolean
+        default: false
+      candidate_verified:
+        required: false
+        type: boolean
+        default: false
       reuse_manual_artifacts:
         required: false
         type: boolean
@@ -186,6 +204,7 @@ jobs:
           RELEASE_CHANNEL: ${{ inputs.channel }}
           APPROVED_SHA: ${{ inputs.approved_sha }}
           IN_ORCHESTRATOR: ${{ inputs.orchestrator }}
+          CANDIDATE_PREPARATION: ${{ inputs.candidate_preparation }}
           CONTROL_SHA: ${{ inputs.reuse_manual_artifacts && '09cdab3866d77c6ff0d007ee61b6aca3128ebe54' || inputs.candidate_control_sha || github.workflow_sha }}
         run: |
           if [ "${{ inputs.orchestrated }}" != "true" ]; then
@@ -239,7 +258,7 @@ jobs:
           go run ./cmd/signpath-contract validate
           fingerprint="$(go run ./cmd/signpath-contract fingerprint)"
           if [ -n "$SIGNPATH_RELEASE_SIGNING_ATTESTATION" ] && [ "$SIGNPATH_RELEASE_SIGNING_ATTESTATION" != "$fingerprint" ]; then
-            echo "SIGNPATH_RELEASE_SIGNING_ATTESTATION does not match the checked-in contract: $SIGNPATH_RELEASE_SIGNING_ATTESTATION != $fingerprint" >&2
+            echo "SIGNPATH_RELEASE_SIGNING_ATTESTATION does not match the current protected signing contract: $SIGNPATH_RELEASE_SIGNING_ATTESTATION != $fingerprint" >&2
             exit 1
           fi
           echo "verified=true" >> "$GITHUB_OUTPUT"
@@ -284,7 +303,7 @@ jobs:
         include:
           - name: darwin-arm64
             arch: arm64
-            runner: macos-14
+            runner: macos-15
           - name: darwin-amd64
             arch: amd64
             runner: macos-15-intel
@@ -296,12 +315,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.resolve.outputs.sha }}
-
-      - uses: actions/checkout@v7
-        with:
-          repository: bamboo-echo/Pondera
-          ref: ${{ needs.resolve.outputs.sha }}
-          path: release-control
 
       - uses: actions/setup-go@v7
         with:
@@ -345,6 +358,12 @@ jobs:
           RELEASE_TAG: ${{ inputs.approved_cli_tag }}
         run: bash scripts/desktop-build.sh "darwin/${{ matrix.arch }}" "${{ needs.resolve.outputs.version }}" "${{ needs.resolve.outputs.channel }}"
 
+      - name: Checkout protected release verifier
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: release-control
+
       - name: Smoke-test packaged Electron startup
         run: node desktop/packaging/smoke.mjs "$RUNNER_TEMP/desktop-startup/Pondera.app"
 
@@ -367,7 +386,7 @@ jobs:
     name: Build darwin-universal
     needs: [resolve, signing-contract]
     if: ${{ needs.signing-contract.result == 'success' && !inputs.production_signing_smoke && !inputs.signing_preflight }}
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -505,6 +524,12 @@ jobs:
       - name: Build and package
         run: bash scripts/desktop-build.sh "windows/${{ matrix.arch }}" "${{ needs.resolve.outputs.version }}" "${{ needs.resolve.outputs.channel }}"
 
+      - name: Checkout protected release verifier
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: release-control
+
       - name: Smoke-test packaged Electron startup
         run: node desktop/packaging/smoke.mjs "desktop/build/electron/${{ matrix.name }}/app" --service desktop/build/bin/pondera-desktop.exe
 
@@ -527,33 +552,48 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
 
-      - uses: ./release-control/.github/actions/setup-certum
+      - name: Checkout protected release verifier
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: release-control
+
+      - name: Restore both native-tested Windows payloads
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-*
+          path: desktop/build
+          merge-multiple: true
+
+      - name: Require the Certum signing credentials
+        if: ${{ env.HAS_CERTUM != 'true' }}
+        run: |
+          echo "::error::Certum credentials are required for public Windows releases"
+          exit 1
+
+      - name: Connect to Certum
+        uses: ./release-control/.github/actions/setup-certum
         with:
           thumbprint: ${{ secrets.CERTUM_KEY_ID }}
 
-      - name: Download the amd64 payload
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-amd64
-          path: desktop/build/electron/windows-amd64
-
-      - name: Download the arm64 payload
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-arm64
-          path: desktop/build/electron/windows-arm64
-
       - name: Sign both payloads in the shared Certum session
-        run: FINALIZE_PHASE=sign bash scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-amd64/app amd64
+        run: FINALIZE_PHASE=sign bash release-control/scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-amd64/app amd64
 
       - name: Package both architectures in parallel
-        run: FINALIZE_PHASE=package bash scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-arm64/app arm64
+        run: FINALIZE_PHASE=package bash release-control/scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-arm64/app arm64
 
       - name: Seal amd64 in the shared Certum session
-        run: FINALIZE_PHASE=seal bash scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-amd64/app amd64
+        run: FINALIZE_PHASE=seal bash release-control/scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-amd64/app amd64
 
       - name: Seal arm64 in the shared Certum session
-        run: FINALIZE_PHASE=seal bash scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-arm64/app arm64
+        run: FINALIZE_PHASE=seal bash release-control/scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-arm64/app arm64
+
+      - name: Upload signed package size reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.resolve.outputs.artifact_prefix }}-windows-size-reports
+          path: dist/*.json
+          if-no-files-found: ignore
 
       - name: Upload amd64 signed artifacts
         uses: actions/upload-artifact@v4
@@ -655,7 +695,7 @@ jobs:
   publish:
     name: Publish the desktop release
     needs: [resolve, build, signing-contract, mac-universal-intel, windows-build, windows-sign, windows-runtime-acceptance]
-    if: ${{ always() && !cancelled() && inputs.orchestrated && inputs.signing_preflight_verified && needs.resolve.result == 'success' && needs.signing-contract.result == 'success' && (needs.build.result == 'success' || inputs.preflight_artifact_prefix != '') && needs.build.result != 'failure' && needs.build.result != 'cancelled' && !inputs.production_signing_smoke && !inputs.signing_preflight && needs.windows-sign.result != 'failure' && needs.windows-sign.result != 'cancelled' && needs.windows-runtime-acceptance.result != 'failure' && needs.windows-runtime-acceptance.result != 'cancelled' && needs.mac-universal-intel.result != 'failure' && needs.mac-universal-intel.result != 'cancelled' && needs.windows-build.result != 'failure' && needs.windows-build.result != 'cancelled' && (inputs.preflight_artifact_prefix != '' || (needs.windows-sign.result == 'success' && needs.windows-runtime-acceptance.result == 'success')) }}
+    if: ${{ always() && !cancelled() && inputs.orchestrated && inputs.signing_preflight_verified && needs.resolve.result == 'success' && needs.signing-contract.result == 'success' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && inputs.preflight_artifact_prefix != '' && inputs.orchestrated && inputs.signing_preflight_verified)) && needs.build.result != 'failure' && needs.build.result != 'cancelled' && !inputs.production_signing_smoke && !inputs.signing_preflight && needs.windows-sign.result != 'failure' && needs.windows-sign.result != 'cancelled' && needs.windows-runtime-acceptance.result != 'failure' && needs.windows-runtime-acceptance.result != 'cancelled' && needs.mac-universal-intel.result != 'failure' && needs.mac-universal-intel.result != 'cancelled' && needs.windows-build.result != 'failure' && needs.windows-build.result != 'cancelled' && (inputs.preflight_artifact_prefix != '' || (needs.windows-sign.result == 'success' && needs.windows-runtime-acceptance.result == 'success')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

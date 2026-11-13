@@ -177,7 +177,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14, windows-2025]
+        os: [ubuntu-24.04, macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -204,6 +204,10 @@ jobs:
           exempt='pondera/tools/desktopinventory'
           packages=$(go list ./... | grep -v -E "$exempt")
           go test $packages -count=1 -timeout=25m
+
+      - name: test (macOS platform packages)
+        if: env.RUN_STEPS != 'false' && runner.os == 'macOS' && github.event_name == 'pull_request'
+        run: node scripts/macos-go-tests.mjs darwin
 
       - name: test (full)
         if: env.RUN_STEPS != 'false' && runner.os == 'Windows' && github.event_name != 'pull_request'
@@ -384,6 +388,9 @@ jobs:
       - name: Validate the release control plane
         run: bash scripts/validate-release-control-plane.sh
 
+      - name: Verify the macOS Go partitions
+        run: node --test scripts/macos-go-tests.test.mjs
+
   desktop-prepare:
     name: Prepare the desktop build
     needs: changes
@@ -475,6 +482,14 @@ jobs:
         with:
           version: 11.8.0
 
+      - name: Install workspace dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Run the frontend CI test plan
+        working-directory: desktop
+        run: node frontend/scripts/run-ci-tests.mjs
+
       - name: Download the prepared frontend
         uses: actions/download-artifact@v4
         with:
@@ -503,6 +518,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
 
       - name: Download the prepared frontend
         uses: actions/download-artifact@v4
@@ -568,6 +587,10 @@ jobs:
         with:
           version: 11.8.0
 
+      - name: Install Chromium for the browser gates
+        working-directory: desktop
+        run: PLAYWRIGHT_BROWSERS_PATH=.pw-browsers pnpm --dir frontend exec playwright install chromium
+
       - name: Download the prepared frontend
         uses: actions/download-artifact@v4
         with:
@@ -624,7 +647,7 @@ jobs:
     name: Validate the macOS desktop build
     needs: [changes, desktop-prepare]
     if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.desktop-prepare.result == 'success' }}
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       PONDERA_PACKAGE_REUSE_FRONTEND: "1"
       PONDERA_FRONTEND_PRODUCER_ATTEMPT: ${{ needs.desktop-prepare.outputs.producer_attempt }}
@@ -706,11 +729,21 @@ jobs:
           test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
           node desktop/frontend/scripts/artifact-identity.mjs verify --root . --shell electron --channel canary --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}" --pnpm_version "$(pnpm --version)"
 
+      - name: Build the desktop service
+        working-directory: desktop
+        run: go build -trimpath -ldflags="-s -w -X main.version=v0.0.0-ci -X main.channel=canary" -o build/bin/pondera-desktop.exe .
+
       - name: Package the Windows app
+        working-directory: desktop
+        shell: bash
         run: |
           PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
           export PONDERA_FRONTEND_PNPM_VERSION
-          node desktop/packaging/package.mjs windows/amd64 v0.0.0-ci canary
+          node packaging/package.mjs windows/amd64 v0.0.0-ci canary
+
+      - name: Smoke-test Electron native startup
+        working-directory: desktop
+        run: node packaging/smoke.mjs build/electron/windows-amd64/app --service build/bin/pondera-desktop.exe
 
       - name: Verify the Windows archive
         working-directory: desktop
@@ -836,6 +869,7 @@ jobs:
 
       - name: Package Electron shell for native startup smoke
         working-directory: desktop
+        shell: bash
         run: |
           PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
           export PONDERA_FRONTEND_PNPM_VERSION

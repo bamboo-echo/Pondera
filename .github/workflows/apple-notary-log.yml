@@ -19,7 +19,7 @@ jobs:
     name: Download the notarization log
     if: ${{ github.ref == 'refs/heads/main-v2' && github.ref_protected }}
     environment: release
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Read the submission log
         env:

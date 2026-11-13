@@ -118,4 +118,6 @@ jobs:
       channel: stable
       approved_sha: ${{ needs.resolve.outputs.sha }}
       orchestrated: true
+      orchestrator: candidate
+      candidate_preparation: true
     secrets: inherit

@@ -14,7 +14,7 @@ jobs:
     name: Verify macOS signing
     if: ${{ github.repository == 'bamboo-echo/Pondera' && github.ref == 'refs/heads/main-v2' && github.ref_protected }}
     environment: release
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       HAS_APPLE_CERT: "true"
     steps:

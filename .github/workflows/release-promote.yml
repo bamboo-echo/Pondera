@@ -129,6 +129,8 @@ jobs:
       channel: stable
       approved_sha: ${{ github.sha }}
       orchestrated: true
+      orchestrator: promote
+      candidate_verified: true
     secrets: inherit
 
   publish:
