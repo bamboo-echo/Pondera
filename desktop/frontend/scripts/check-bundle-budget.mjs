@@ -571,6 +571,10 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // Preserve the established 186 B Linux producer difference (2106801 B) and
 // round to the smallest 2057.5 KiB ceiling; compressed, chunk, CSS, locale,
 // and resident-history budgets remain unchanged.
-const rawInitialBudgetKiB = 2_057.5;
+// The dependabot npm-group upgrade (17 packages, including React 19.3.1)
+// measures 2146225 B on the Linux producer. Round to the smallest 2096.0 KiB
+// ceiling; every compressed, chunk, CSS, locale, and resident-history budget
+// remains unchanged.
+const rawInitialBudgetKiB = 2_096.0;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
