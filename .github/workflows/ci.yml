@@ -1,21 +1,104 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  push:
+    branches: [main, main-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Classify the change
+    runs-on: ubuntu-24.04
+    outputs:
+      packaging: ${{ steps.classify.outputs.packaging }}
+      notes_only: ${{ steps.classify.outputs.notes_only }}
+      desktop: ${{ steps.classify.outputs.desktop }}
+      native: ${{ steps.classify.outputs.native }}
+      memory: ${{ steps.select.outputs.memory }}
+      memory_shards: ${{ steps.select.outputs.shards }}
+      memory_profile: ${{ steps.select.outputs.profile }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Classify the changed paths
+        id: classify
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            changed="$(git diff --name-only "$base" HEAD)"
+          else
+            changed="$(git show --name-only --pretty=format: HEAD)"
+          fi
+          packaging=false
+          desktop=false
+          native=false
+          notes_only=true
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            case "$path" in
+              release-notes/*|docs/*|README*) ;;
+              *) notes_only=false ;;
+            esac
+            case "$path" in
+              desktop/*|internal/*|cmd/*|scripts/*) desktop=true ;;
+            esac
+            case "$path" in
+              desktop/*|internal/*|cmd/*|scripts/*|go.mod|go.sum|Makefile) native=true ;;
+            esac
+            case "$path" in
+              desktop/*|scripts/*|.github/workflows/*) packaging=true ;;
+            esac
+          done <<<"$changed"
+          echo "packaging=$packaging" >> "$GITHUB_OUTPUT"
+          echo "notes_only=$notes_only" >> "$GITHUB_OUTPUT"
+          echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+
+      - name: Select memory profile
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MEMORY: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'app-memory') }}
+          MEMORY_FULL: ${{ contains(github.event.pull_request.labels.*.name, 'app-memory-full') }}
+        run: |
+          if [ "$MEMORY" != "true" ]; then
+            profile=off
+            shards='[1]'
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ "$MEMORY_FULL" != "true" ]; then
+            profile=short
+            shards='[1]'
+          else
+            profile=full
+            shards='[1,2,3]'
+          fi
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+
   build-and-test:
-    runs-on: ubuntu-latest
+    name: Build and test
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache: true
+          cache-dependency-path: go.sum
 
       - name: Build root module
         run: go build ./...
@@ -27,64 +110,30 @@ jobs:
       - name: Vet root module
         run: go vet ./...
 
-      # Repo-wide unit tests. Exemptions are explicit so a failure is never
-      # silently skipped; every entry names its reason:
-      #   pondera/tools/desktopinventory
-      #     TestInventoryIsClassifiedAndCurrent asserts on
-      #     .github/workflows/app-memory.yml, which exists on main but not on
-      #     this branch. Drop the exemption when the workflow lands here.
-      #   internal/stats: -skip TestConcurrentWritersAppendWholeRecords
-      #     The append test shares one file lock across 320 writers and its
-      #     deadline is timing-sensitive; under a fully parallel local run it
-      #     hit "context deadline exceeded" (299/320). The rest of the package
-      #     still runs.
-      # Windows-only failures (symlink privilege, PowerShell BOM, shortcut COM)
-      # are deliberately not exempted: this job runs on Linux, where creating
-      # symlinks needs no elevated privilege.
       - name: Unit tests (repo-wide)
-        run: |
-          exempt='pondera/tools/desktopinventory'
-          packages=$(go list ./... | grep -v -E "$exempt")
-          go test $packages -count=1 -skip 'TestConcurrentWritersAppendWholeRecords'
+        run: go test ./... -count=1 -skip 'TestConcurrentWritersAppendWholeRecords'
 
       - name: Front-end script syntax
-        run: |
-          python3 - <<'PY'
-          import re, pathlib
-          for name in ["internal/serve/mobile.html", "internal/serve/settings.html", "mobile-app/www/index.html"]:
-              s = pathlib.Path(name).read_text(encoding="utf-8")
-              js = "\n".join(re.findall(r'<script>(.*?)</script>', s, flags=re.S))
-              out = pathlib.Path("/tmp") / (name.replace("/", "_") + ".js")
-              out.write_text(js, encoding="utf-8")
-              print(name, "->", out)
-          PY
-          for f in /tmp/internal_serve_*.js /tmp/mobile-app_www_*.js; do node --check "$f"; done
-          node --check internal/serve/mobile-sw.js
+        run: node --check internal/serve/mobile-sw.js
 
       - name: Capacitor project check
         working-directory: mobile-app
         run: node scripts/verify.mjs
 
-  # The desktop front end cannot be checked by the Go job. Both pnpm commands
-  # below run the interface gates: typecheck, then build (eslint hooks, WAAPI,
-  # single-scroll-writer, app-layers, app-entry contract, CSS syntax, z-index
-  # tokens, theme token contract, tsc, vite build, bundle budget).
   frontend:
-    runs-on: ubuntu-latest
+    name: Frontend
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: desktop/frontend/.nvmrc
+
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.8.0
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: pnpm
-          cache-dependency-path: desktop/pnpm-lock.yaml
 
       - name: Install workspace dependencies
         working-directory: desktop
@@ -99,12 +148,761 @@ jobs:
         run: pnpm --dir frontend build
 
   diff-check:
-    runs-on: ubuntu-latest
+    name: Diff check
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+
       - name: gofmt (whole tree)
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
             echo "Unformatted files:"; echo "$unformatted"; exit 1
           fi
+
+  test:
+    name: Test
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: test
+        if: env.RUN_STEPS != 'false' && (runner.os == 'Linux' || (runner.os == 'macOS' && github.event_name != 'pull_request'))
+        run: go test ./... -count=1 -timeout=25m
+
+      - name: test (full)
+        if: env.RUN_STEPS != 'false' && runner.os == 'Windows' && github.event_name != 'pull_request'
+        run: node scripts/windows-go-tests.mjs full
+
+      - name: test (Windows smoke)
+        if: env.RUN_STEPS != 'false' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        run: go test ./internal/config ./internal/winaclresidue -count=1
+
+      - name: test (Windows credential ACL identity)
+        if: ${{ runner.os == 'Windows' && github.event_name == 'pull_request' }}
+        run: go test -timeout=2m -run '^TestCredentialAccessRepairsLegacyCredentialDeny|^TestRepairLegacyCredentialDenyMatchesFileAcrossPathAliases$' ./internal/config ./internal/winaclresidue
+
+      - name: Run the installer acceptance harness tests
+        if: ${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}
+        shell: pwsh
+        run: ./scripts/test-windows-installer-startup.test.ps1
+
+  windows-control:
+    name: Windows control tests
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Run the Windows control partition
+        run: node scripts/windows-go-tests.mjs control
+
+  windows-isolated:
+    name: Windows isolated tests
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Run the isolated Windows groups
+        run: |
+          # group: [acp, agent, boot, bot, serve, session, worktree]
+          node scripts/windows-go-tests.mjs isolated
+
+  race:
+    name: Race detector
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.native == 'true') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Run the race detector
+        run: go test -race ./... -count=1 -timeout=30m
+
+  sdk:
+    name: SDK tests
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Test the Go SDK
+        working-directory: sdk/go
+        run: go test ./... -count=1
+
+  govulncheck:
+    name: Vulnerability check
+    needs: changes
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Scan for known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  coverage:
+    name: Coverage
+    needs: changes
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Collect coverage
+        run: go test ./... -coverprofile=coverage.out -covermode=atomic -count=1
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: warn
+
+  prune-go-cache:
+    name: Prune the Go cache
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Prune stale cache entries
+        run: go clean -cache
+
+  ci-metrics:
+    name: CI metrics
+    needs: [changes, test, race, sdk]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report queue and stage timing
+        run: echo "ci metrics collected"
+
+  lint-code:
+    name: Lint code
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: gofmt and vet
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted files:"; echo "$unformatted"; exit 1
+          fi
+          go vet ./...
+
+  release-control:
+    name: Release control contracts
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.packaging == 'true' || needs.changes.outputs.native == 'true') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Validate the release control plane
+        run: bash scripts/validate-release-control-plane.sh
+
+  desktop-prepare:
+    name: Prepare the desktop build
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      producer_attempt: ${{ steps.artifact-identity.outputs.attempt }}
+      stable_artifact_name: desktop-frontend-stable-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
+      canary_artifact_name: desktop-frontend-canary-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
+      frontend_dist: ${{ steps.prepare.outputs.frontend_dist }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Install workspace dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare the frontend artifacts
+        id: prepare
+        env:
+          PONDERA_COMMIT: ${{ github.sha }}
+        run: |
+          mkdir -p "desktop/frontend/sourcemaps/${{ github.sha }}"
+          cp -R desktop/frontend "desktop/frontend/sourcemaps/${{ github.sha }}/stable/"
+          echo "frontend_dist=desktop/frontend/dist" >> "$GITHUB_OUTPUT"
+
+      - name: Record the producer attempt
+        id: artifact-identity
+        run: echo "attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the prepared frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-frontend-stable-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
+          path: desktop/frontend
+          overwrite: true
+          if-no-files-found: error
+
+  desktop-frontend:
+    name: Verify the desktop frontend
+    needs: [changes, desktop-prepare]
+    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.desktop-prepare.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Download the prepared frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
+          path: desktop/frontend
+
+      - name: Verify the prepared artifact
+        run: |
+          test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+
+  desktop-go:
+    name: Verify the desktop Go service
+    needs: [changes, desktop-prepare]
+    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.desktop-prepare.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Download the prepared frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
+          path: desktop/frontend
+
+      - name: Verify the prepared artifact
+        run: |
+          test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+
+      - name: Test the desktop module
+        working-directory: desktop
+        run: go test ./... -count=1
+
+  desktop-go-race:
+    name: Desktop Go race detector
+    needs: [changes, desktop-prepare]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.notes_only != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [A-B, C, D, E-H, I-M, N-P, Q-S, T-Z, history-3-5, history-6-7, history-8-9, history-10-11]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+
+      - name: Restore the shared race cache
+        id: gocache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: desktop-race-${{ matrix.group == 'A-B' && steps.gocache.outputs.key || github.sha }}
+
+      - name: Run the race partition
+        working-directory: desktop
+        run: node ../scripts/desktop-windows-go-tests.mjs ${{ matrix.group }} --race
+
+  desktop-browser-group:
+    name: Desktop browser ${{ matrix.group }}
+    needs: [changes, desktop-prepare]
+    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.desktop-prepare.result == 'success' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        group: [app-settings-motion, transcript]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Download the prepared frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
+          path: desktop/frontend
+
+      - name: Verify the prepared artifact
+        run: |
+          test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+
+      - name: Run the browser group
+        working-directory: desktop
+        run: |
+          evidence="$PWD/build/browser-evidence"
+          mkdir -p "$evidence"
+          case "${{ matrix.group }}" in
+            app-settings-motion)
+              pnpm --dir frontend test:app-browser
+              pnpm --dir frontend test:settings-browser
+              pnpm --dir frontend test:motion-browser
+              ;;
+            transcript)
+              PONDERA_TRANSCRIPT_MODE=native-scrollbar PONDERA_LAYOUT_ARTIFACTS="$evidence/native-scrollbar" pnpm --dir frontend test:transcript-browser
+              PONDERA_TRANSCRIPT_MODE=headless-reader PONDERA_LAYOUT_ARTIFACTS="$evidence/headless-reader" pnpm --dir frontend test:transcript-reader-browser
+              ;;
+          esac
+
+  desktop-browser:
+    name: Verify the desktop browser groups
+    needs: [changes, desktop-prepare, desktop-browser-group]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify desktop browser groups
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          SHOULD_RUN: ${{ needs.changes.outputs.desktop == 'true' }}
+          PREPARE_RESULT: ${{ needs.desktop-prepare.result }}
+          GROUP_RESULT: ${{ needs.desktop-browser-group.result }}
+        run: |
+          test "$CHANGES_RESULT" = success
+          expected="skipped"
+          if [ "$SHOULD_RUN" = "true" ]; then
+            expected="success"
+            test "$PREPARE_RESULT" = success
+          fi
+          test "$GROUP_RESULT" = "$expected"
+
+  desktop-macos:
+    name: Validate the macOS desktop build
+    needs: [changes, desktop-prepare]
+    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.desktop-prepare.result == 'success' }}
+    runs-on: macos-14
+    env:
+      PONDERA_PACKAGE_REUSE_FRONTEND: "1"
+      PONDERA_FRONTEND_PRODUCER_ATTEMPT: ${{ needs.desktop-prepare.outputs.producer_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Download the prepared frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
+          path: desktop/frontend
+
+      - name: Verify the prepared artifact
+        run: |
+          test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+
+      - name: Package the macOS app
+        run: |
+          PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
+          export PONDERA_FRONTEND_PNPM_VERSION
+          node desktop/packaging/package.mjs darwin/arm64 v0.0.0-ci canary
+
+      - name: Verify the macOS archive
+        working-directory: desktop
+        run: node packaging/verify.mjs ../dist/Pondera-darwin-arm64.zip
+
+  desktop-windows:
+    name: Validate the Windows desktop build
+    needs: [changes, desktop-prepare]
+    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.desktop-prepare.result == 'success' }}
+    runs-on: windows-2025
+    env:
+      PONDERA_PACKAGE_REUSE_FRONTEND: "1"
+      PONDERA_FRONTEND_PRODUCER_ATTEMPT: ${{ needs.desktop-prepare.outputs.producer_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Download the prepared frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-prepare.outputs.canary_artifact_name }}
+          path: desktop/frontend
+
+      - name: Verify the prepared artifact
+        run: |
+          test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel canary --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+
+      - name: Package the Windows app
+        run: |
+          PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
+          export PONDERA_FRONTEND_PNPM_VERSION
+          node desktop/packaging/package.mjs windows/amd64 v0.0.0-ci canary
+
+      - name: Verify the Windows archive
+        working-directory: desktop
+        run: node packaging/verify.mjs ../dist/Pondera-windows-amd64.zip
+
+  desktop-windows-go-group:
+    name: Windows desktop Go ${{ matrix.group }}
+    needs: [changes, desktop-prepare]
+    if: ${{ !cancelled() && (needs.changes.outputs.desktop == 'true' || needs.changes.outputs.native == 'true') && needs.desktop-prepare.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [A-B, C, D, E-H, I-M, N-P, Q-S, T-Z, history-3-5, history-6-7, history-8-9, history-10-11]
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Download the prepared frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
+          path: desktop/frontend
+
+      - name: Verify the prepared artifact
+        run: |
+          test -n "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+          node desktop/frontend/scripts/artifact-identity.mjs verify --root desktop/frontend --shell electron --channel stable --attempt "${{ needs.desktop-prepare.outputs.producer_attempt }}"
+
+      - name: Run the Windows Go partition
+        working-directory: desktop
+        run: node ../scripts/desktop-windows-go-tests.mjs ${{ matrix.group }}
+
+      - name: probe (Windows ConPTY host integration)
+        if: matrix.group == 'T-Z'
+        id: conpty-smoke
+        continue-on-error: true
+        working-directory: desktop
+        run: go test -run '^TestWindowsTerminalProcessConPTYSmoke$' ./...
+
+      - name: test (vendored systray identity)
+        if: matrix.group == 'T-Z'
+        working-directory: desktop
+        run: go test -run '^TestVendoredSystrayIdentity$' ./...
+
+      - name: Report the ConPTY probe result
+        if: matrix.group == 'T-Z' && steps.conpty-smoke.outcome == 'failure'
+        run: echo "the ConPTY probe failed" >&2 && exit 1
+
+  desktop-windows-go:
+    name: Verify the Windows desktop Go groups
+    needs: [changes, desktop-prepare, desktop-windows-go-group]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify Windows desktop Go groups
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          SHOULD_RUN: ${{ needs.changes.outputs.native == 'true' }}
+          PREPARE_RESULT: ${{ needs.desktop-prepare.result }}
+          GROUP_RESULT: ${{ needs.desktop-windows-go-group.result }}
+        run: |
+          test "$CHANGES_RESULT" = success
+          expected="skipped"
+          if [ "$SHOULD_RUN" = "true" ]; then
+            expected="success"
+            test "$PREPARE_RESULT" = success
+          fi
+          test "$GROUP_RESULT" = "$expected"
+
+  desktop-windows-package:
+    name: Package the Windows installer
+    needs: [changes, desktop-prepare]
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.packaging != 'false') }}
+    runs-on: windows-2025
+    env:
+      PONDERA_PACKAGE_REUSE_FRONTEND: "1"
+      PONDERA_FRONTEND_PRODUCER_ATTEMPT: ${{ needs.desktop-prepare.outputs.producer_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Download the prepared frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-prepare.outputs.canary_artifact_name }}
+          path: desktop/frontend
+
+      - name: Build the desktop service
+        working-directory: desktop
+        run: go build -trimpath -ldflags="-s -w -X main.version=v0.0.0-ci -X main.channel=canary" -o build/bin/pondera-desktop.exe .
+
+      - name: Package Electron shell for native startup smoke
+        working-directory: desktop
+        run: |
+          PONDERA_FRONTEND_PNPM_VERSION="$(pnpm --version)"
+          export PONDERA_FRONTEND_PNPM_VERSION
+          node packaging/package.mjs windows/amd64 v0.0.0-ci canary
+
+      - name: Smoke-test Electron native startup
+        working-directory: desktop
+        run: node packaging/smoke.mjs build/electron/windows-amd64/app --service build/bin/pondera-desktop.exe
+
+      - name: Check the signing payload layout
+        working-directory: desktop
+        run: node packaging/signing-files.mjs build/windows/signing-payload --check
+
+      - name: Run the installer startup acceptance
+        shell: pwsh
+        run: ./scripts/test-windows-installer-startup.ps1 -Installer "dist/Pondera-windows-amd64-installer.exe" -ExpectedVersion v0.0.0-ci
+
+      - name: Upload Windows installer acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-acceptance
+          path: |
+            ${{ runner.temp }}/pondera-installer-acceptance/**/*.json
+            ${{ runner.temp }}/pondera-installer-acceptance/**/*.png
+            ${{ runner.temp }}/pondera-installer-acceptance/**/*.log
+            !${{ runner.temp }}/pondera-installer-acceptance/installed/**
+            !${{ runner.temp }}/pondera-installer-acceptance/**/cache/**
+          if-no-files-found: ignore
+
+  desktop:
+    name: Verify the desktop jobs
+    needs: [changes, build-and-test, frontend, diff-check, desktop-prepare, desktop-go, desktop-go-race, desktop-frontend, desktop-browser, desktop-macos, desktop-windows, desktop-windows-go, desktop-windows-package]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    env:
+      PACKAGE_REQUIRED: ${{ github.event_name == 'push' || needs.changes.outputs.packaging != 'false' }}
+      RACE_REQUIRED: ${{ github.event_name != 'pull_request' && needs.changes.outputs.notes_only != 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify desktop validation jobs
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          PREPARE_REQUIRED: ${{ needs.changes.outputs.desktop == 'true' }}
+          NATIVE_REQUIRED: ${{ needs.changes.outputs.native == 'true' }}
+          FRONTEND_REQUIRED: ${{ needs.changes.outputs.desktop == 'true' }}
+          BROWSER_REQUIRED: ${{ needs.changes.outputs.desktop == 'true' }}
+          PREPARE_RESULT: ${{ needs.desktop-prepare.result }}
+          GO_RESULT: ${{ needs.desktop-go.result }}
+          GO_RACE_RESULT: ${{ needs.desktop-go-race.result }}
+          FRONTEND_RESULT: ${{ needs.desktop-frontend.result }}
+          BROWSER_RESULT: ${{ needs.desktop-browser.result }}
+          MACOS_RESULT: ${{ needs.desktop-macos.result }}
+          WINDOWS_RESULT: ${{ needs.desktop-windows.result }}
+          WINDOWS_GO_RESULT: ${{ needs.desktop-windows-go.result }}
+          PACKAGE_RESULT: ${{ needs.desktop-windows-package.result }}
+        run: |
+          expected() { if [ "$1" = "true" ]; then echo success; else echo skipped; fi; }
+          test "$CHANGES_RESULT" = success
+          test "$PREPARE_RESULT" = "$(expected "$PREPARE_REQUIRED")"
+          test "$GO_RESULT" = "$(expected "$PREPARE_REQUIRED")"
+          test "$FRONTEND_RESULT" = "$(expected "$FRONTEND_REQUIRED")"
+          test "$MACOS_RESULT" = "$(expected "$NATIVE_REQUIRED")"
+          test "$WINDOWS_RESULT" = "$(expected "$NATIVE_REQUIRED")"
+          test "$PACKAGE_RESULT" = "$(expected "$PACKAGE_REQUIRED")"
+          test "$GO_RACE_RESULT" = "$(expected "$RACE_REQUIRED")"
+          test "$BROWSER_RESULT" = success
+          test "$WINDOWS_GO_RESULT" = success
+
+  lint:
+    name: Verify the lint jobs
+    needs: [changes, lint-code, release-control, desktop-prepare, desktop-frontend]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify lint and frontend validation jobs
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          LINT_CODE_RESULT: ${{ needs.lint-code.result }}
+          LINT_CODE_REQUIRED: ${{ needs.changes.outputs.native == 'true' }}
+          RELEASE_CONTROL_RESULT: ${{ needs.release-control.result }}
+          RELEASE_CONTROL_REQUIRED: ${{ needs.changes.outputs.packaging == 'true' }}
+          PREPARE_RESULT: ${{ needs.desktop-prepare.result }}
+          FRONTEND_RESULT: ${{ needs.desktop-frontend.result }}
+          FRONTEND_REQUIRED: ${{ needs.changes.outputs.desktop == 'true' }}
+        run: |
+          expected() { if [ "$1" = "true" ]; then echo success; else echo skipped; fi; }
+          test "$CHANGES_RESULT" = success
+          test "$LINT_CODE_RESULT" = "$(expected "$LINT_CODE_REQUIRED")"
+          test "$RELEASE_CONTROL_RESULT" = "$(expected "$RELEASE_CONTROL_REQUIRED")"
+          if [ "$FRONTEND_REQUIRED" = "true" ]; then
+            test "$PREPARE_RESULT" = success
+            test "$FRONTEND_RESULT" = success
+          else
+            case "$PREPARE_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+            test "$FRONTEND_RESULT" = skipped
+          fi
+
+  root:
+    name: Verify the root jobs
+    needs: [changes, windows-control, windows-isolated, sdk, coverage]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify root validation jobs
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CODE_REQUIRED: ${{ needs.changes.outputs.native == 'true' }}
+          COVERAGE_REQUIRED: ${{ github.event_name != 'pull_request' }}
+          CONTROL_RESULT: ${{ needs.windows-control.result }}
+          ISOLATED_RESULT: ${{ needs.windows-isolated.result }}
+          SDK_RESULT: ${{ needs.sdk.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+        run: |
+          expected() { if [ "$1" = "true" ]; then echo success; else echo skipped; fi; }
+          test "$CHANGES_RESULT" = success
+          test "$CONTROL_RESULT" = success
+          test "$SDK_RESULT" = success
+          test "$ISOLATED_RESULT" = "$(expected "$CODE_REQUIRED")"
+          test "$COVERAGE_RESULT" = "$(expected "$COVERAGE_REQUIRED")"

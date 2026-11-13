@@ -1,0 +1,35 @@
+name: Verify release candidate rehearsal
+
+# Rehearsal-only verification. It never activates tags or publishes packages.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Candidate version"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify the rehearsal artifacts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve the rehearsal
+        run: node scripts/resolve-release-candidate.mjs resolve-rehearsal "${{ inputs.version }}"
+
+      - name: Verify the rehearsal
+        run: node scripts/release-candidate.mjs verify-rehearsal "${{ inputs.version }}"
+
+      - name: Verify the artifact archive
+        run: node scripts/verify-release-artifact-archive.mjs

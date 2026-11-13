@@ -1,0 +1,33 @@
+name: Verify stable release
+
+# Read-only postflight for an already published stable release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published stable version"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify stable release artifacts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify the stable release
+        env:
+          RELEASE_OPERATION: recover
+          VERIFY_PUBLIC_POINTERS: "true"
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: bash scripts/verify-stable-release-artifacts.sh

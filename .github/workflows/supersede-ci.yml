@@ -1,0 +1,74 @@
+name: Supersede CI
+
+# Cancels earlier CI runs that a new push supersedes. Notes-only pushes keep
+# ancestor code runs so a reviewed release note never discards code coverage.
+
+on:
+  push:
+    branches: [main, main-v2]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-superseded:
+    name: Cancel superseded runs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Cancel CI runs this push supersedes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          active="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?status=in_progress" --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' 2>/dev/null || true)"
+          [ -n "$active" ] || exit 0
+          cancel() {
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/$1/cancel" >/dev/null
+          }
+          changed="$(git diff-tree --no-commit-id --name-only -r --root HEAD 2>/dev/null || true)"
+          notes_only=true
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            case "$path" in
+              release-notes/*) ;;
+              *) notes_only=false ;;
+            esac
+          done <<<"$changed"
+          if [ "$notes_only" != "true" ]; then
+            while read -r id sha; do
+              [ -n "$id" ] || continue
+              [ "$sha" = "$GITHUB_SHA" ] && continue
+              if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+                cancel "$id"
+              fi
+            done <<<"$active"
+            exit 0
+          fi
+          head_set="$(printf '%s\n' "$changed" | sort | tr '\n' ' ')"
+          declare -A newest=()
+          while read -r id sha; do
+            [ -n "$sha" ] || continue
+            [ "$sha" = "$GITHUB_SHA" ] && continue
+            set="$(git diff-tree --no-commit-id --name-only -r --root "$sha" 2>/dev/null | sort | tr '\n' ' ' || true)"
+            if [ "$set" = "$head_set" ]; then
+              continue
+            fi
+            newest[$set]="$sha"
+          done <<<"$active"
+          while read -r id sha; do
+            [ -n "$id" ] || continue
+            [ "$sha" = "$GITHUB_SHA" ] && continue
+            set="$(git diff-tree --no-commit-id --name-only -r --root "$sha" 2>/dev/null | sort | tr '\n' ' ' || true)"
+            if [ "$set" = "$head_set" ]; then
+              continue
+            fi
+            if [ "${newest[$set]:-}" != "$sha" ]; then
+              cancel "$id"
+            fi
+          done <<<"$active"

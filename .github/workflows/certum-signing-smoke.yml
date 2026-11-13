@@ -1,0 +1,28 @@
+name: Certum signing smoke
+
+# Exercises the protected Certum signing action without publishing anything.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Sign a disposable payload
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-certum
+        with:
+          thumbprint: ${{ secrets.CERTUM_KEY_ID }}
+
+      - name: Sign and verify a disposable payload
+        shell: pwsh
+        env:
+          CERTUM_KEY_ID: ${{ secrets.CERTUM_KEY_ID }}
+        run: |
+          "pondera signing smoke" | Set-Content sign-smoke.txt
+          ./scripts/sign-certum.ps1 -FilePath sign-smoke.txt -ExpectedThumbprint $env:CERTUM_KEY_ID

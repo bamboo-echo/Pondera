@@ -1,0 +1,30 @@
+name: Setup Certum
+
+# Imports the Certum code-signing certificate into the Windows certificate
+# store. The thumbprint selects the exact certificate; no other certificate is
+# accepted by the signing steps.
+
+inputs:
+  thumbprint:
+    description: "SHA-1 thumbprint of the Certum signing certificate"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Import the Certum certificate
+      shell: pwsh
+      env:
+        CERTUM_THUMBPRINT: ${{ inputs.thumbprint }}
+        CERTUM_PFX_BASE64: ${{ env.CERTUM_PFX_BASE64 }}
+        CERTUM_PFX_PASSWORD: ${{ env.CERTUM_PFX_PASSWORD }}
+      run: |
+        if (-not $env:CERTUM_THUMBPRINT) { throw "CERTUM_THUMBPRINT is required" }
+        if (-not $env:CERTUM_PFX_BASE64) { throw "CERTUM_PFX_BASE64 is required" }
+        $pfx = Join-Path $env:RUNNER_TEMP "certum.pfx"
+        [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERTUM_PFX_BASE64))
+        $secure = ConvertTo-SecureString -String $env:CERTUM_PFX_PASSWORD -AsPlainText -Force
+        Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure | Out-Null
+        Remove-Item -Force $pfx
+        $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:CERTUM_THUMBPRINT }
+        if (-not $cert) { throw "the requested Certum certificate is not installed" }

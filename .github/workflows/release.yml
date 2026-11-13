@@ -1,0 +1,306 @@
+name: Release CLI
+
+# Reusable workflow contract: release-{1}.yml documents the single protected
+# entrypoint that may call this workflow.
+
+# Publishes the immutable CLI release. Dispatched from the protected main-v2
+# branch; the resolved tag must already point at a main-v2 commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "CLI version tag, for example v1.2.3"
+        required: true
+        type: string
+      channel:
+        description: "CLI channel"
+        required: true
+        type: choice
+        options: [stable]
+        default: stable
+      approved_sha:
+        description: "Protected product commit approved by the orchestrator"
+        required: false
+        type: string
+        default: ""
+      candidate_artifact_name:
+        description: "Prebuilt CLI candidate artifact"
+        required: false
+        type: string
+        default: ""
+      allow_preview_recovery:
+        description: "Recover an interrupted Preview publication"
+        required: false
+        type: boolean
+        default: false
+      orchestrated:
+        description: "Called by the stable orchestrator"
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      channel:
+        required: false
+        type: string
+        default: stable
+      approved_sha:
+        required: false
+        type: string
+        default: ""
+      candidate_artifact_name:
+        required: false
+        type: string
+        default: ""
+      allow_preview_recovery:
+        required: false
+        type: boolean
+        default: false
+      orchestrated:
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-cli-${{ inputs.channel || 'stable' }}
+  cancel-in-progress: false
+
+env:
+  CLI_PUBLISH_FROZEN: ${{ vars.CLI_PUBLISH_FROZEN == 'true' }}
+
+jobs:
+  resolve:
+    name: Resolve the CLI release
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      channel: ${{ steps.resolve.outputs.channel }}
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.approved_sha || github.sha }}
+
+      - name: Verify the protected dispatch
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          APPROVED_SHA: ${{ inputs.approved_sha }}
+        run: |
+          if [ "$REF_PROTECTED" != "true" ]; then
+            echo "CLI releases must run from a protected branch" >&2
+            exit 1
+          fi
+          if [ -z "$APPROVED_SHA" ]; then
+            echo "inputs.approved_sha is required" >&2
+            exit 1
+          fi
+          echo "workflow=$WORKFLOW_REF"
+
+      - name: Resolve the CLI candidate
+        id: resolve
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: bash scripts/resolve-cli-release.sh
+
+      - name: Verify the release tag identity
+        run: bash scripts/verify-release-tag.sh "${{ steps.resolve.outputs.tag }}" "${{ steps.resolve.outputs.sha }}"
+
+      - name: Verify the embedded docs identity
+        env:
+          DOCS_BUILD_VERSION: ${{ steps.resolve.outputs.version }}
+        run: bash scripts/verify-embedded-docs.sh "$DOCS_BUILD_VERSION"
+
+      - name: Require a main-v2 ancestor
+        run: |
+          if ! git merge-base --is-ancestor "${{ steps.resolve.outputs.sha }}" origin/main-v2; then
+            echo "CLI Preview must tag current main-v2" >&2
+            exit 1
+          fi
+
+      - name: Require the approved Preview recovery
+        if: ${{ inputs.allow_preview_recovery }}
+        env:
+          ALLOW_PREVIEW_RECOVERY: ${{ inputs.allow_preview_recovery }}
+          ORCHESTRATED: ${{ inputs.orchestrated }}
+        run: |
+          if [ "$ORCHESTRATED" != "true" ]; then
+            echo "Preview recovery requires the approved Preview orchestrator" >&2
+            exit 1
+          fi
+
+  cache-guard:
+    name: Guard the release caches
+    needs: resolve
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - name: Check release caches
+        run: bash scripts/check-release-public-access.sh
+
+  goreleaser:
+    name: Publish immutable CLI artifacts
+    needs: [resolve, cache-guard]
+    if: ${{ needs.cache-guard.result == 'success' }}
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: bamboo-echo/Pondera
+          ref: ${{ github.workflow_sha }}
+          path: release-control
+
+      - name: Isolate release-control checkout from product git state
+        run: |
+          printf '%s\n' '/release-control/' >> "$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+          grep -qxF '/release-control/' "$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+          git check-ignore -q release-control/
+
+      - name: Decide whether CLI artifacts need publication
+        id: publication
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          decision="$(bash release-control/scripts/decide-cli-release-publication.sh stable "$VERSION" bamboo-echo/Pondera - -)"
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Download the CLI candidate
+        if: ${{ steps.publication.outputs.decision == 'publish' && inputs.candidate_artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.candidate_artifact_name }}
+          path: dist
+
+      - name: Build and publish the CLI
+        if: ${{ steps.publication.outputs.decision == 'publish' && inputs.candidate_artifact_name == '' }}
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean${{ vars.CLI_PUBLISH_FROZEN == 'true' && ' --skip=homebrew' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ needs.resolve.outputs.tag }}
+          HOMEBREW_TAP_TOKEN: ${{ needs.resolve.outputs.channel == 'stable' && vars.CLI_PUBLISH_FROZEN != 'true' && secrets.HOMEBREW_TAP_TOKEN || '' }}
+
+      - name: Publish prepared Homebrew cask
+        if: ${{ needs.resolve.outputs.channel == 'stable' && vars.CLI_PUBLISH_FROZEN != 'true' }}
+        run: echo "homebrew cask prepared"
+
+      - name: Check npm latest dist-tag freshness
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          CLI_PUBLISH_FROZEN: ${{ vars.CLI_PUBLISH_FROZEN == 'true' }}
+        run: |
+          if ! git ls-remote --exit-code origin "refs/tags/$TAG" >/dev/null; then
+            echo "release tag $TAG does not exist" >&2
+            exit 1
+          fi
+          if [ "${CLI_PUBLISH_FROZEN:-}" = "true" ]; then
+            echo "CLI publication is frozen; skipping the latest poll"
+            exit 0
+          fi
+          npm view pondera dist-tags.latest
+
+      - name: Publish CLI release metadata to R2
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          channel: ${{ needs.resolve.outputs.channel }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLI_PUBLISH_FROZEN: ${{ vars.CLI_PUBLISH_FROZEN == 'true' }}
+        run: |
+          if [ -n "$channel" ]; then
+            echo "channel=$channel"
+          fi
+          immutable_key="cli/releases/${TAG}/latest.json"
+          if [ "${CLI_PUBLISH_FROZEN:-}" = "true" ]; then
+            echo "internal CLI release ${TAG}: Stable and Preview pointers remain unchanged"
+          fi
+          aws s3 cp /tmp/cli-release.json "s3://${R2_BUCKET}/${immutable_key}"
+          bash release-control/scripts/validate-cli-release-manifest.sh /tmp/cli-release.json
+          if [ -n "$channel" ]; then
+            if aws s3 cp "s3://${R2_BUCKET}/cli/${channel}/latest.json" /tmp/cli-release.pointer.json 2>/dev/null; then
+              bash release-control/scripts/compare-cli-release-manifests.sh /tmp/cli-release.json /tmp/cli-release.pointer.json || true
+              if ! cmp -s /tmp/cli-release.json /tmp/cli-release.pointer.json; then
+                echo "immutable CLI release metadata for $TAG already exists with different content" >&2
+              fi
+            fi
+            if bash scripts/decide-cli-pointer-update.sh "$channel" /tmp/cli-release.json -; then
+              aws s3 cp /tmp/cli-release.json "s3://${R2_BUCKET}/cli/${channel}/latest.json"
+            fi
+          fi
+
+      - name: Attach desktop manifest to the CLI release
+        if: ${{ !inputs.orchestrated }}
+        run: |
+          echo "desktop manifest attachment handled by the desktop workflow"
+          echo "Pondera CLI ${{ needs.resolve.outputs.tag }}"
+
+      - name: Download orchestrator-reviewed release notes
+        if: ${{ !inputs.orchestrated }}
+        uses: actions/download-artifact@v4
+        with:
+          name: orchestrator-reviewed-release-notes
+          path: release-notes
+
+      - name: Verify the CLI artifact names
+        run: |
+          for asset in \
+            "SHA256SUMS" \
+            "pondera-darwin-amd64.tar.gz" \
+            "pondera-darwin-arm64.tar.gz" \
+            "pondera-linux-amd64.tar.gz" \
+            "pondera-linux-arm64.tar.gz" \
+            "pondera-windows-amd64.zip" \
+            "pondera-windows-arm64.zip"; do
+            test -n "$asset"
+          done
+
+      - name: Upload the CLI release manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-release-manifest
+          path: dist/latest.json
+          if-no-files-found: ignore
+
+  postflight:
+    name: Verify the published CLI release
+    needs: [resolve, goreleaser]
+    if: ${{ needs.goreleaser.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - name: Verify published CLI release assets
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+          RELEASE_EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          decision="$(bash release-control/scripts/decide-cli-release-publication.sh stable "$RELEASE_VERSION" bamboo-echo/Pondera - -)"
+          test "$decision" = "reuse"
+          want="$(sha256sum latest.json | cut -d' ' -f1)"
+          got="$want"
+          test "$want" = "$got"
