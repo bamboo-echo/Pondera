@@ -1,20 +1,25 @@
 .presented-files { display: grid; gap: 8px; margin-top: 2px; }
 .presented-files__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
-.turn-files { display: grid; overflow: hidden; margin-top: 8px; border: 1px solid var(--border-soft); border-radius: 12px; background: color-mix(in srgb, var(--bg-elev) 92%, transparent); box-shadow: 0 1px 2px #00000008; }
-.turn-files__head { display: flex; align-items: center; gap: 11px; width: 100%; padding: 12px 14px; border: 0; background: color-mix(in srgb, var(--bg-soft) 84%, transparent); color: inherit; text-align: left; cursor: pointer; }
-.turn-files__head:hover { background: var(--bg-soft); }
-.turn-files__icon { display: grid; flex: none; place-items: center; width: 38px; height: 38px; border-radius: 9px; background: var(--accent); color: var(--accent-contrast, #fff); }
-.turn-files__summary { display: grid; min-width: 0; gap: 3px; }
-.turn-files__summary strong { font-size: 14px; font-weight: 650; }
-.turn-files__summary > span { font-family: var(--font-mono); font-size: 12px; }
+/* Quiet aside, not a card: a faint fill, a hairline of nothing, and one
+   neutral glyph. The old version stacked a bordered box, a tinted icon
+   square and two rows of the same numbers inside 60px. */
+.turn-files { display: grid; overflow: hidden; margin-top: 10px; border-radius: 8px; background: color-mix(in srgb, var(--fg) 3.5%, transparent); }
+.turn-files__head { display: flex; align-items: center; gap: 7px; width: 100%; padding: 8px 12px 4px; color: inherit; }
+.turn-files__icon { display: inline-flex; flex: none; color: var(--fg-dim); }
+.turn-files__summary { display: flex; flex: 1 1 auto; align-items: baseline; gap: 8px; min-width: 0; }
+.turn-files__summary strong { color: var(--fg); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.turn-files__summary small { color: var(--fg-faint); font-size: 11px; }
+.turn-files__stats { display: inline-flex; align-items: baseline; gap: 6px; margin-left: auto; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.turn-files__unknown { color: var(--fg-faint); }
 .turn-files__added { color: var(--ok); }
 .turn-files__removed { color: var(--danger); }
-.turn-files__list { display: grid; margin: 0; padding: 5px 10px; list-style: none; }
+.turn-files__list { display: grid; margin: 2px 0 0; padding: 0 6px 6px; list-style: none; }
 .turn-files__list li { min-width: 0; }
-.turn-files__list button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; width: 100%; min-height: 30px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-dim); font-family: var(--font-mono); font-size: 12px; text-align: left; cursor: pointer; }
-.turn-files__list button:hover { background: var(--bg-soft); color: var(--fg); }
-.turn-files__list button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-files__list button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 24px; padding: 3px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--fg-dim); font-family: var(--font-mono); font-size: 12px; text-align: left; cursor: pointer; }
+.turn-files__list button:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); color: var(--fg); }
+.turn-files__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-files__rowstat { display: inline-flex; gap: 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .turn-files__error { margin: 0; padding: 0 14px 10px; color: var(--danger); font-size: 12px; }
 
 .presented-file { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; min-width: 0; border: 1px solid var(--border-soft); border-radius: 12px; background: color-mix(in srgb, var(--bg-elev) 92%, transparent); box-shadow: 0 1px 2px #00000008; }

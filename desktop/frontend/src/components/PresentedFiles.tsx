@@ -80,21 +80,27 @@ export const ModifiedFiles = memo(function ModifiedFiles({ files, summary, onOpe
       setError(t("completion.diffUnavailable"));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };
-  return <section className="turn-files" aria-label={t("present.modifiedFiles")}>
-    <button type="button" className="turn-files__head" onClick={() => void openReview(rows[0]!.path)}
-      aria-label={t("present.openReview")}>
-      <span className="turn-files__icon"><Code2 size={18} /></span>
+  return <section className="turn-files" data-count={rows.length} aria-label={t("present.modifiedFiles")}>
+    {/* A label, not a button: nothing expands here (the rows below are
+        already open, and >4 files get a real toggle at the bottom), so a
+        chevron here was an affordance that lied. */}
+    <div className="turn-files__head">
+      <span className="turn-files__icon"><Code2 size={14} /></span>
       <span className="turn-files__summary">
         <strong>{t("present.editedCount", { count: rows.length })}</strong>
-        <span>{countsUnknown ? t("present.linesUnknown") : <><span className="turn-files__added">+{added}</span> <span className="turn-files__removed">−{removed}</span></>}</span>
         {recorded?.coverage === "partial" && <small>{t("completion.partialStats")}</small>}
       </span>
-    </button>
+      {rows.length > 1 && <span className="turn-files__stats">
+        {countsUnknown ? <span className="turn-files__unknown">{t("present.linesUnknown")}</span> : <>
+          <span className="turn-files__added">+{added}</span>{" "}<span className="turn-files__removed">−{removed}</span>
+        </>}
+      </span>}
+    </div>
     <ul className="turn-files__list">
       {shown.map(file => <li key={file.path}>
         <button type="button" title={file.path} aria-label={t("present.openFileReview", { name: file.path })} onClick={() => void openReview(file.path)}>
-          <span>{file.path}</span>
-          <span>{file.binary ? t("present.binary") : file.modeOnly ? t("completion.modeOnly") : file.uncounted ? t("present.linesUnknown") : <>
+          <span className="turn-files__path">{file.path}</span>
+          <span className="turn-files__rowstat">{file.binary ? t("present.binary") : file.modeOnly ? t("completion.modeOnly") : file.uncounted ? null : <>
             <span className="turn-files__added">+{file.added ?? 0}</span>{" "}<span className="turn-files__removed">−{file.removed ?? 0}</span>
           </>}</span>
         </button>
