@@ -5,6 +5,7 @@ package desktoplauncher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,6 +38,7 @@ func TestLauncherMaintenanceRepairsWithoutStartingDesktop(t *testing.T) {
 	script := filepath.Join(root, "shortcut.ps1")
 	const source = `param($Link, $Target, $Action)
 $ErrorActionPreference = 'Stop'
+try { $null = New-Object -ComObject WScript.Shell; $null = New-Object -ComObject Shell.Application } catch { exit 3 }
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($Link)
 if ($Action -eq 'create') {
   $shortcut.TargetPath = $Target
@@ -44,6 +46,7 @@ if ($Action -eq 'create') {
   $shortcut.Save()
 } else {
   $item = (New-Object -ComObject Shell.Application).NameSpace((Split-Path $Link)).ParseName((Split-Path $Link -Leaf))
+  if ($null -eq $item) { throw "shell item missing: $Link" }
   @{ Target = $shortcut.TargetPath; Arguments = $shortcut.Arguments; ID = $item.ExtendedProperty('System.AppUserModel.ID') } | ConvertTo-Json -Compress
 }
 `
@@ -52,17 +55,32 @@ if ($Action -eq 'create') {
 	}
 	run := func(binary string, args ...string) []byte {
 		t.Helper()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// A first PowerShell + WScript.Shell cold start on a loaded CI runner
+		// takes far longer than a warm one, and a killed process surfaces as a
+		// plain "exit status 1". Keep the budget generous and name the timeout
+		// explicitly when it still trips.
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, binary, args...)
+		cmd.WaitDelay = 5 * time.Second
 		cmd.Env = append(os.Environ(), consoleTestEnv+"="+root)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) && exitErr.ExitCode() == 3 && binary == "powershell.exe" {
+				t.Skip("Windows shell COM automation unavailable on this host")
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("%s: timed out after 120s: %v\n%s", filepath.Base(binary), err, output)
+			}
 			t.Fatalf("%s: %v\n%s", filepath.Base(binary), err, output)
 		}
 		return output
 	}
 	run("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, link, target, "create")
+	if _, err := os.Stat(link); err != nil {
+		t.Fatalf("powershell created no shortcut at %s: %v", link, err)
+	}
 	run(launcher, "--repair-shortcuts", link)
 	output := run("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, link, target, "read")
 	var got struct{ Target, Arguments, ID string }

@@ -34,6 +34,13 @@ context_window = 1000000
 func seed(t *testing.T) (string, *Writer) {
 	t.Helper()
 	home := t.TempDir()
+	// The write path resolves PONDERA_HOME through symlinks before the atomic
+	// write hook sees it (macOS /var -> /private/var, Windows final paths).
+	// Pin the physical form so the helper's crash-point comparison and the
+	// file the test reads back are the same file.
+	if real, err := filepath.EvalSymlinks(home); err == nil {
+		home = real
+	}
 	t.Setenv("PONDERA_HOME", home)
 	path := config.UserConfigPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -237,7 +244,20 @@ func TestMain(m *testing.M) {
 func runCrashHelper() {
 	path := config.UserConfigPath()
 	fileutil.CrashPoint = func(op, target string) {
-		if op == "atomic-write" && target == path {
+		if op != "atomic-write" {
+			return
+		}
+		same := target == path
+		if !same {
+			// The caller hands us its resolved path; compare by file identity
+			// so future path-normalization drift cannot silently skip the crash.
+			if a, err := os.Stat(target); err == nil {
+				if b, err := os.Stat(path); err == nil {
+					same = os.SameFile(a, b)
+				}
+			}
+		}
+		if same {
 			os.Exit(23)
 		}
 	}
@@ -264,8 +284,8 @@ func TestCrashDuringWriteLeavesOriginalIntact(t *testing.T) {
 	cmd.Env = append(os.Environ(), "ASSIST_CRASH_HELPER=1", "PONDERA_HOME="+os.Getenv("PONDERA_HOME"))
 	err = cmd.Run()
 	var exitErr *exec.ExitError
-	if err != nil && !(errors.As(err, &exitErr) && exitErr.ExitCode() == 23) {
-		t.Fatalf("helper failed: %v", err)
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 23 {
+		t.Fatalf("helper exited %v, want the exit-23 crash point: %v", err, err)
 	}
 	after, err := os.ReadFile(path)
 	if err != nil {
