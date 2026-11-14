@@ -407,10 +407,10 @@ try {
         text: row.textContent,
         failure: Boolean(row.querySelector('.dsh-ToolRow-errorSummary')),
       })));
-      // A failed tool keeps its raw message visible while collapsed (two-line
-      // clamp), so it is the one row allowed past the single-line budget;
-      // everything else must stay a compact single line.
-      assert.ok(weatherRows.every(row => row.height <= (row.failure ? 64 : 32)), 'tools use compact rows; only the failure row wraps to its error message');
+      // A failed tool keeps its raw message visible while collapsed (title
+      // line + two-line clamp ≈ 3+24+1+2×19.2+4 = 70.4), so it is the one row
+      // allowed past the single-line budget; everything else stays compact.
+      assert.ok(weatherRows.every(row => row.height <= (row.failure ? 72 : 32)), `tools use compact rows; only the failure row wraps to its error message: ${JSON.stringify(weatherRows)}`);
       assert.ok(weatherRows.some(row => row.failure && row.text.includes('DNS lookup failed')), 'the failure row shows the raw error without expanding');
       assert.ok(weatherRows.some(row => row.text.includes('获取并核对上海天气')), 'description replaces line counts');
       assert.equal(await page.locator('.dsh-ContextInjectionRow-body').count(), 0, 'permission record starts collapsed');
