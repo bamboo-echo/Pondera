@@ -60,6 +60,26 @@ func TestHTTP2StdlibProtocolFailureRecordsNegotiatedTransport(t *testing.T) {
 			if _, err := io.ReadFull(conn, make([]byte, len(http2.ClientPreface))); err != nil {
 				return
 			}
+			// The illegal frame must race an in-flight round trip. Written
+			// straight after the preface it can kill the connection while the
+			// client is still dialling, and the request then surfaces as
+			// "http2: client conn could not be established" instead of the
+			// PROTOCOL_ERROR — nondeterministic under -race. Wait until the
+			// client commits its HEADERS frame, skipping SETTINGS and
+			// WINDOW_UPDATE payloads on the way.
+			header := make([]byte, 9)
+			for {
+				if _, err := io.ReadFull(conn, header); err != nil {
+					return
+				}
+				length := int64(header[0])<<16 | int64(header[1])<<8 | int64(header[2])
+				if _, err := io.CopyN(io.Discard, conn, length); err != nil {
+					return
+				}
+				if header[3] == 1 {
+					break
+				}
+			}
 			// A valid initial SETTINGS frame, followed by an illegal DATA frame on
 			// stream zero, deterministically exercises net/http's private error type.
 			_, _ = conn.Write([]byte{0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})

@@ -396,6 +396,9 @@ func TestGitWorkspaceRoundTrip(t *testing.T) {
 	run("init", "-q")
 	run("config", "user.email", "t@t")
 	run("config", "user.name", "t")
+	// The round-trip must compare exact bytes; a Windows runner's global
+	// core.autocrlf=true would rewrite worktree text on checkout.
+	run("config", "core.autocrlf", "false")
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("committed\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

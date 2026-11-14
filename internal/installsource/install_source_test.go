@@ -176,6 +176,24 @@ func TestIsSkillRootSafe(t *testing.T) {
 	}
 }
 
+// macOS hands out /var/folders temp roots behind the /private/var symlink and
+// Windows shares short 8.3 names: a not-yet-existing skill root must still be
+// compared against the resolved form of its project root, or safe local
+// registrations get rejected on exactly those platforms.
+func TestIsSkillRootSafeMatchesAcrossSymlinkedRoot(t *testing.T) {
+	target := t.TempDir()
+	link := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if !isSkillRootSafe(filepath.Join(link, "skills"), link, link) {
+		t.Fatal("a missing skill root below a symlinked project root must stay safe")
+	}
+	if isSkillRootSafe(filepath.Join(target, "..", "escape"), link, link) {
+		t.Fatal("escaping above the symlinked root must stay rejected")
+	}
+}
+
 func TestApplySkillRootRejectsPathsOutsideHomeAndProject(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()

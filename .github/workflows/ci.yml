@@ -1014,7 +1014,7 @@ jobs:
           LINT_CODE_RESULT: ${{ needs.lint-code.result }}
           LINT_CODE_REQUIRED: ${{ needs.changes.outputs.native == 'true' }}
           RELEASE_CONTROL_RESULT: ${{ needs.release-control.result }}
-          RELEASE_CONTROL_REQUIRED: ${{ needs.changes.outputs.packaging == 'true' }}
+          RELEASE_CONTROL_REQUIRED: ${{ needs.changes.outputs.packaging == 'true' || needs.changes.outputs.native == 'true' }}
           PREPARE_RESULT: ${{ needs.desktop-prepare.result }}
           FRONTEND_RESULT: ${{ needs.desktop-frontend.result }}
           FRONTEND_REQUIRED: ${{ needs.changes.outputs.desktop == 'true' }}
