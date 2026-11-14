@@ -185,7 +185,12 @@ func ApplyWorkspace(workspaceRoot, dest string, info WorkspaceInfo) error {
 	if _, err := os.Stat(bundle); err != nil {
 		return fmt.Errorf("cloudsync: missing git bundle: %w", err)
 	}
-	cmd := proc.Command("git", "clone", "--no-checkout", bundle, dest)
+	// `git clone -c` (the subcommand option, not `git -c clone`) persists into
+	// the new repo's config, pinning checkout and apply to byte-exact content.
+	// A host-global core.autocrlf=true (the Windows runner default) would
+	// otherwise rewrite LF text to CRLF on restore, and an LF patch would not
+	// even match the CRLF worktree.
+	cmd := proc.Command("git", "clone", "-c", "core.autocrlf=false", "-c", "core.safecrlf=false", "--no-checkout", bundle, dest)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("cloudsync: clone from bundle: %w: %s", err, strings.TrimSpace(string(out)))
 	}
