@@ -14,14 +14,14 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/uuid v1.6.0
 	github.com/tc-hib/winres v0.3.1
-	golang.org/x/crypto v0.58.0
-	golang.org/x/image v0.47.0
-	golang.org/x/mod v0.42.0
+	golang.org/x/crypto v0.59.0
+	golang.org/x/image v0.48.0
+	golang.org/x/mod v0.43.0
 	golang.org/x/net v0.62.0
-	golang.org/x/sync v0.24.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/text v0.43.0
-	modernc.org/sqlite v1.61.1
+	golang.org/x/sync v0.25.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/text v0.44.0
+	modernc.org/sqlite v1.62.0
 	// The desktop service is a nested module so its CGO build never touches the
 	// CLI's CGO_ENABLED=0 single-static-binary guarantee. The replace lets it import
 	// the same pondera/internal/* kernel (the import path stays under pondera/, so
@@ -73,7 +73,7 @@ require (
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	modernc.org/libc v1.79.0 // indirect
+	modernc.org/libc v1.80.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 	mvdan.cc/sh/v3 v3.14.1 // indirect
