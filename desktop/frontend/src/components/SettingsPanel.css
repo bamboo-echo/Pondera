@@ -20,7 +20,7 @@
 }
 
 .settings-screen .settings-center__nav { flex: 1; min-height: 0; border-right: 0; }
-.settings-screen .settings-center__content { margin: 0 8px 8px 0; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); }
+.settings-screen .settings-center__content { margin: 0 8px 8px 0; border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent); border-radius: 12px; background: var(--bg); }
 .settings-center {
   grid-template-columns: clamp(220px, 20.5vw, 304px) minmax(0, 1fr);
 }
@@ -37,8 +37,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 3px;
-  min-height: 48px;
-  padding: 7px 10px;
+  min-height: 34px;
+  padding: 6px 9px;
 }
 
 .settings-center__content {
@@ -145,11 +145,12 @@
 }
 
 .settings-center__navgroup-label {
-  padding: 0 10px 3px;
+  padding: 0 9px 4px;
   color: var(--fg-faint);
   font-size: var(--text-2xs);
-  font-weight: 650;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .settings-center__navitems {
@@ -189,8 +190,8 @@
 }
 
 .settings-center__navitem-main > span {
-  font-size: var(--font-control);
-  font-weight: 650;
+  font-size: var(--text-md);
+  font-weight: 500;
 }
 
 .settings-center__navitem small {
@@ -256,10 +257,10 @@
 }
 
 .settings-page--general .settings-field {
-  grid-template-columns: minmax(260px, 1fr) max-content;
-  gap: 32px;
-  min-height: 62px;
-  padding: 14px 0;
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
+  gap: 28px;
+  min-height: 0;
+  padding: 12px 0;
 }
 
 .settings-page--general .settings-field:first-child {
@@ -660,13 +661,13 @@
 .settings-page-content { min-height: 100%; }
 /* Neutral, stable-height selection for the settings navigation in every theme. */
 :root .settings-center .settings-center__navitem {
-  border-radius: 16px;
+  border-radius: 8px;
   align-content: center;
 }
 
 :root .settings-center .settings-center__navitem--active,
 :root .settings-center .settings-center__navitem--active:hover {
-  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
   color: var(--fg);
   box-shadow: none;
 }
@@ -678,6 +679,17 @@
 :root .settings-center .settings-center__navitem:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* The official themes slide the hovered row; a settings list must not jitter. */
+:root[data-theme-style] .settings-center .settings-center__navitem:hover {
+  transform: none;
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+
+:root[data-theme-style] .settings-center .settings-center__navitem--active,
+:root[data-theme-style] .settings-center .settings-center__navitem--active:hover {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
 }
 
 /* Shared settings density: preserve functional groups, remove page chrome. */
@@ -737,18 +749,26 @@
   align-items: center;
   gap: 16px;
   margin: 0;
-  padding: 0 0 16px;
+  padding: 24px 0 10px;
 }
 :root .settings-center .settings-page[data-layout] :is(.settings-section__title, .settings-toolbar > h2, .settings-toolbar > strong, .cap-skills-head__title, .cap-server-section__title, .appearance-overview__section-label) {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 650;
   line-height: 1.5;
+  letter-spacing: -0.004em;
 }
 :where(.settings-center .settings-page[data-layout]) .settings-field {
   grid-template-columns: minmax(160px, .8fr) minmax(0, 1.2fr);
   gap: 24px;
   padding: 16px 0;
+}
+/* A form page pairs a fixed label column with the control column beside it, so a
+   wide pane never strands the control at the far edge. */
+:where(.settings-center .settings-page[data-layout="form"]) .settings-field {
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
+  gap: 28px;
+  padding: 12px 0;
 }
 :where(.settings-center .settings-page[data-layout]) .settings-field--wide-copy { grid-template-columns: minmax(0, 1fr) auto; }
 :root .settings-center .settings-page[data-layout] :is(.settings-field__copy, .settings-field__control) { min-width: 0; }
@@ -763,17 +783,19 @@
   box-sizing: border-box;
   min-height: var(--settings-control-height);
   max-width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
   border-radius: 8px;
   color: var(--fg);
-  background-color: var(--bg);
+  background-color: color-mix(in srgb, var(--fg) 2%, var(--bg));
   font: inherit;
-  padding: 9px 12px;
+  padding: 8px 11px;
 }
 :root .settings-center .settings-page[data-layout] select {
   appearance: none;
-  background-image: none;
-  padding-inline-end: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a919e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-inline-end: 30px;
 }
 
 :root .settings-center .settings-page[data-layout] :is(input, select, textarea, button, summary):focus-visible {
@@ -833,6 +855,56 @@
 :root .settings-center .settings-page[data-layout] .settings-save-bar > [role="status"] { margin-right: auto; align-self: center; color: var(--fg-dim); font-size: var(--font-caption); }
 :root .settings-center .settings-page[data-layout] .settings-path-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
 :root .settings-center .settings-page[data-layout] .settings-path-value input { flex: 1; min-width: 0; }
+
+/* The first section starts at the top of the pane; later ones get breathing room. */
+:root .settings-center .settings-page[data-layout] > .settings-section:first-child > .settings-section__head {
+  padding-top: 0;
+}
+
+/* Native checkboxes keep the platform blue; the settings pane needs the theme accent. */
+:root .settings-center .set-check input[type="checkbox"],
+:root .settings-center .settings-field input[type="checkbox"]:not(.provider-capability-row__switch) {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg) 3%, var(--bg));
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+:root .settings-center .set-check input[type="checkbox"]:hover,
+:root .settings-center .settings-field input[type="checkbox"]:not(.provider-capability-row__switch):hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+:root .settings-center .set-check input[type="checkbox"]:checked,
+:root .settings-center .settings-field input[type="checkbox"]:not(.provider-capability-row__switch):checked {
+  border-color: var(--accent);
+  background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231a0f0a' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+:root .settings-center .set-check input[type="checkbox"]:focus-visible,
+:root .settings-center .settings-field input[type="checkbox"]:not(.provider-capability-row__switch):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Form controls sit beside their label instead of drifting to the pane edge. */
+:root .settings-center .settings-page[data-layout="form"] .settings-field__control {
+  justify-content: flex-start;
+}
+:root .settings-center .settings-page[data-layout="form"] .settings-field__control > :is(input.mem-input, select.mem-select) {
+  max-width: 360px;
+}
+:root .settings-center .settings-page[data-layout="form"] .settings-field {
+  border-top-color: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+:root .settings-center .settings-center__navitem--active .settings-center__navitem-main > span {
+  font-weight: 600;
+}
 
 /* Model preferences owns its nested sections across every theme and layout. */
 .model-preferences { container: model-preferences / inline-size; --model-assignment-columns: minmax(140px, 1fr) minmax(220px, 1.5fr) minmax(120px, .75fr); width: 100%; max-width: 1120px; margin: 0 auto; }
