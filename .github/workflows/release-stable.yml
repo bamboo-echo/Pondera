@@ -151,7 +151,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Upload reviewed release notes
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: orchestrator-reviewed-release-notes
           path: release-notes/notes.md

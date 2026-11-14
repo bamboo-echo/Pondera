@@ -284,7 +284,7 @@ jobs:
           subject-path: .signpath/contracts/release-signing.yml
 
       - name: Upload the verified contract
-        uses: actions/upload-artifact@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: verified-contract
           path: verified-contract.json
@@ -368,7 +368,7 @@ jobs:
         run: node desktop/packaging/smoke.mjs "$RUNNER_TEMP/desktop-startup/Pondera.app"
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-${{ matrix.name }}
           path: dist/*
@@ -376,7 +376,7 @@ jobs:
 
       - name: Upload Apple notarization diagnostics
         if: ${{ always() && runner.os == 'macOS' }}
-        uses: actions/upload-artifact@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: apple-notarization-${{ matrix.name }}
           path: ${{ runner.temp }}/apple-notarization/*.json
@@ -417,7 +417,7 @@ jobs:
         run: node desktop/packaging/smoke.mjs "$RUNNER_TEMP/desktop-startup/Pondera.app"
 
       - name: Upload universal artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-darwin-universal
           path: dist/*
@@ -474,7 +474,7 @@ jobs:
         run: xvfb-run -a node desktop/packaging/smoke.mjs
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-${{ matrix.name }}
           path: dist/*
@@ -534,7 +534,7 @@ jobs:
         run: node desktop/packaging/smoke.mjs "desktop/build/electron/${{ matrix.name }}/app" --service desktop/build/bin/pondera-desktop.exe
 
       - name: Upload Windows signing inputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-${{ matrix.arch }}
           path: |
@@ -559,13 +559,13 @@ jobs:
           path: release-control
 
       - name: Restore both native-tested Windows payloads
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-amd64
           path: desktop/build/electron/windows-amd64
 
       - name: Restore the native-tested arm64 payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-windows-arm64
           path: desktop/build/electron/windows-arm64
@@ -594,21 +594,21 @@ jobs:
         run: FINALIZE_PHASE=seal bash release-control/scripts/finalize-windows-signed-candidate.sh desktop/build/electron/windows-arm64/app arm64
 
       - name: Upload signed package size reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ needs.resolve.outputs.artifact_prefix }}-windows-size-reports
           path: dist/*.json
           if-no-files-found: ignore
 
       - name: Upload amd64 signed artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ needs.resolve.outputs.artifact_prefix }}-windows-amd64
           path: dist/*
           if-no-files-found: error
 
       - name: Upload arm64 signed artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ needs.resolve.outputs.artifact_prefix }}-windows-arm64
           path: dist/*
@@ -636,7 +636,7 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.sha }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-${{ matrix.name }}
           path: dist
@@ -650,7 +650,7 @@ jobs:
 
       - name: Upload signed Windows installer acceptance evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-installer-acceptance-${{ matrix.arch }}
           path: |
@@ -671,7 +671,7 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.sha }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: ${{ inputs.preflight_artifact_prefix || needs.resolve.outputs.artifact_prefix }}-[dlw]*
           path: dist
@@ -691,7 +691,7 @@ jobs:
         run: bash scripts/validate-desktop-release-manifest.sh dist
 
       - name: Upload the assembled desktop release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-release
           path: dist/*
@@ -716,7 +716,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: release-control
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: desktop-release
           path: assets
@@ -748,7 +748,7 @@ jobs:
 
       - name: Download orchestrator-reviewed release notes
         if: ${{ !inputs.orchestrated }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: orchestrator-reviewed-release-notes
           path: release-notes
@@ -800,7 +800,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: release-control
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: desktop-release
           path: assets
@@ -817,7 +817,7 @@ jobs:
         run: bash release-control/scripts/compare-desktop-release-manifests.sh assets/latest.json assets/latest.json
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}

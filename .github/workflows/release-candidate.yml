@@ -87,14 +87,14 @@ jobs:
         run: echo "artifact-id=0" >> "$GITHUB_OUTPUT"
 
       - name: Upload the candidate evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ needs.resolve.outputs.artifact_namespace }}-evidence-${{ needs.resolve.outputs.candidate_id }}
           path: release-notes/
           retention-days: 30
 
       - name: Upload the sealed records
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-candidate-timing-${{ needs.resolve.outputs.candidate_id }}
           path: release-notes/timing.json
