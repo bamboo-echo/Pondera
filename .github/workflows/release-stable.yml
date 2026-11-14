@@ -1,0 +1,164 @@
+name: Release Stable
+
+# Single protected entrypoint for a stable release. The orchestrator authorizes
+# one immutable candidate, runs the SignPath preflight, then delegates to the
+# CLI, npm and Desktop reusable workflows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Stable version tag, for example v1.2.3"
+        required: true
+        type: string
+      allow_recovery:
+        description: "Recover an interrupted stable publication"
+        required: false
+        type: boolean
+        default: false
+      desktop_manual_only:
+        description: "Manual-download only: skip Windows Authenticode"
+        required: false
+        type: boolean
+        default: false
+      publish_cli:
+        description: "Publish the CLI release"
+        required: false
+        type: boolean
+        default: true
+      publish_npm:
+        description: "Publish the npm release"
+        required: false
+        type: boolean
+        default: true
+      publish_desktop:
+        description: "Publish the Desktop release"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stable-release-publication
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    name: Authorize the stable candidate
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate the stable candidate
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_SHA: ${{ github.sha }}
+          ALLOW_STABLE_RECOVERY: ${{ inputs.allow_recovery }}
+        run: |
+          bash scripts/validate-stable-candidate.sh "$RELEASE_VERSION" "$RELEASE_SHA"
+
+      - name: Verify the candidate push CI
+        if: ${{ !inputs.allow_recovery }}
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: bash scripts/verify-release-push-ci.sh "$RELEASE_SHA"
+
+      - name: Restrict manual Desktop distribution
+        if: ${{ inputs.allow_recovery }}
+        env:
+          ALLOW_RECOVERY: ${{ inputs.allow_recovery }}
+        run: |
+          echo "manual Desktop distribution restriction checked by the Desktop workflow"
+          bash scripts/manual-desktop-exception.sh validate "${{ inputs.version }}"
+
+  signpath-preflight:
+    name: Validate the protected SignPath control plane
+    needs: authorize
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact_prefix: ${{ steps.preflight.outputs.artifact_prefix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate the signing contract
+        run: bash scripts/validate-release-control-plane.sh
+
+      - name: Record signing preflight evidence
+        id: preflight
+        run: |
+          echo "public postflight will still verify it"
+          echo "artifact_prefix=desktop-preflight" >> "$GITHUB_OUTPUT"
+
+  cli:
+    name: Publish the CLI
+    needs: [authorize, signpath-preflight]
+    if: ${{ inputs.publish_cli }}
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ inputs.version }}
+      channel: stable
+      approved_sha: ${{ needs.authorize.outputs.sha }}
+      orchestrated: true
+    secrets: inherit
+
+  npm:
+    name: Publish npm packages
+    needs: [authorize, signpath-preflight]
+    if: ${{ inputs.publish_npm }}
+    uses: ./.github/workflows/release-npm.yml
+    with:
+      version: ${{ inputs.version }}
+      channel: stable
+      approved_sha: ${{ needs.authorize.outputs.sha }}
+      orchestrated: true
+    secrets: inherit
+
+  desktop:
+    name: Publish the Desktop release
+    needs: [authorize, signpath-preflight]
+    if: ${{ inputs.publish_desktop }}
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/release-desktop.yml
+    with:
+      version: ${{ inputs.version }}
+      channel: stable
+      approved_sha: ${{ needs.authorize.outputs.sha }}
+      orchestrated: true
+      desktop_manual_only: ${{ inputs.desktop_manual_only || false }}
+      preflight_artifact_prefix: ${{ needs.signpath-preflight.outputs.artifact_prefix }}
+      signing_preflight: true
+      signing_preflight_verified: true
+    secrets: inherit
+
+  postflight:
+    name: Verify the stable release
+    needs: [authorize, cli, npm, desktop]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    environment: release
+    env:
+      desktop_manual_only: ${{ inputs.desktop_manual_only || false }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Upload reviewed release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestrator-reviewed-release-notes
+          path: release-notes/notes.md
+          if-no-files-found: error
+
+      - name: Verify stable release artifacts
+        env:
+          RELEASE_OPERATION: recover
+          VERIFY_PUBLIC_POINTERS: "true"
+        run: bash scripts/verify-stable-release-artifacts.sh

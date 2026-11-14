@@ -1,0 +1,73 @@
+name: E2E bot
+
+# Runs the real-agent end-to-end suite against a disposable home directory.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model to exercise"
+        required: false
+        type: string
+        default: deepseek-v4-pro
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Run the agent scenarios
+    runs-on: ubuntu-24.04
+    env:
+      PONDERA_HOME: ${{ runner.temp }}/pondera-e2e-home
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Fail when the provider secret is missing
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "missing DEEPSEEK_API_KEY secret" >&2
+            exit 1
+          fi
+
+      - name: Prepare the disposable home
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          mkdir -p "$PONDERA_HOME"
+          cp /tmp/pondera-e2e.toml "$PONDERA_HOME/config.toml"
+          printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$PONDERA_HOME/.env"
+
+      - name: Run the agent scenarios
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          go run ./cmd/pondera -task "compaction,fix-add-bug,fizzbuzz,palindrome,subagent-delegation" > report.md
+
+      - name: Evaluate the report
+        run: |
+          node - <<'NODE'
+          const results = JSON.parse(process.env.E2E_RESULTS || "[]");
+          const unsuccessful = results.filter((result) => !result.Passed || result.Skipped);
+          if (unsuccessful.length > 0) {
+            console.error("unsuccessful scenarios", unsuccessful.length);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Upload the report
+        if: always() && hashFiles('report.md') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: report.md
+          if-no-files-found: ignore

@@ -21,6 +21,10 @@ export async function runRemoteToolHistoryCase({ ok, flush }: RemoteProjectionHa
     toolRoot.render(<LocaleProvider><ToolProbe /></LocaleProvider>);
     await flush();
   });
+  // Hydration resolves the follow baseline before the transcript projects it.
+  for (let attempt = 0; attempt < 100 && !toolProbe?.transcript.items.some((item) => item.kind === "tool" && item.id === "remote-tool"); attempt += 1) {
+    await act(async () => { await flush(); });
+  }
   const remoteTool = toolProbe?.transcript.items.find((item) => item.kind === "tool" && item.id === "remote-tool");
   ok(remoteTool?.kind === "tool" && remoteTool.args.includes("go test ./...")
     && remoteTool.output === "remote tool output" && remoteTool.dataArchived !== true,
@@ -38,6 +42,9 @@ export async function runRemotePendingPromptReplayCase({ ok, flush }: RemoteProj
     replayRoot.render(<LocaleProvider><ReplayProbe /></LocaleProvider>);
     await flush();
   });
+  for (let attempt = 0; attempt < 100 && replayProbe?.transcript.approval?.id !== "replayed-approval"; attempt += 1) {
+    await act(async () => { await flush(); });
+  }
   ok(replayProbe?.transcript.approval?.id === "replayed-approval", "snapshot replays a prompt emitted while the remote tab was inactive");
   ok(replayProbe?.transcript.extensionForm?.pluginId === "replayed-plugin" && replayProbe.transcript.extensionForm.surfaceId === "replayed-form", "snapshot replays an extension form emitted while the remote tab was inactive");
   await act(async () => { replayProbe?.drainApprovals(["different-approval"]); await flush(); });

@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"pondera/internal/proc"
 )
 
 // Git bundle staging entry names (inside workspace/ of a TaskBundle).
@@ -55,7 +57,7 @@ func InspectWorkspace(root string) (WorkspaceInfo, error) {
 }
 
 func gitOutput(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := proc.Command("git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -130,7 +132,7 @@ func PrepareWorkspace(root, stagingDir string, excludes []string) (string, Works
 }
 
 func gitOutputBytes(dir string, args ...string) ([]byte, error) {
-	cmd := exec.Command("git", args...)
+	cmd := proc.Command("git", args...)
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -183,7 +185,7 @@ func ApplyWorkspace(workspaceRoot, dest string, info WorkspaceInfo) error {
 	if _, err := os.Stat(bundle); err != nil {
 		return fmt.Errorf("cloudsync: missing git bundle: %w", err)
 	}
-	cmd := exec.Command("git", "clone", "--no-checkout", bundle, dest)
+	cmd := proc.Command("git", "clone", "--no-checkout", bundle, dest)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("cloudsync: clone from bundle: %w: %s", err, strings.TrimSpace(string(out)))
 	}

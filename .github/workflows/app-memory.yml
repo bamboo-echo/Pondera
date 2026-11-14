@@ -1,0 +1,149 @@
+name: App memory
+
+# Tiered application-memory coverage: pull requests run a short single shard,
+# full and scheduled runs keep all three shards. Failed shards can be rerun
+# without rebuilding the prepared artifact.
+
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "internal/**"
+      - "cmd/**"
+      - "mobile-app/**"
+  push:
+    branches: [main, main-v2]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Select the memory profile
+    runs-on: ubuntu-24.04
+    outputs:
+      memory: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'app-memory') }}
+      memory_full: ${{ contains(github.event.pull_request.labels.*.name, 'app-memory-full') }}
+      memory_profile: ${{ steps.select.outputs.profile }}
+      memory_shards: ${{ steps.select.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Select memory profile
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MEMORY: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'app-memory') }}
+          MEMORY_FULL: ${{ contains(github.event.pull_request.labels.*.name, 'app-memory-full') }}
+        run: |
+          if [ "$MEMORY" != "true" ]; then
+            profile=off
+            shards='[1]'
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ "$MEMORY_FULL" != "true" ]; then
+            profile=short
+            shards='[1]'
+          else
+            profile=full
+            shards='[1,2,3]'
+          fi
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    name: Prepare the memory fixture
+    needs: changes
+    if: ${{ needs.changes.outputs.memory == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Build the memory fixture
+        run: go build ./...
+
+      - name: Upload the prepared memory fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-memory-build-${{ github.run_id }}
+          path: .
+          overwrite: true
+          if-no-files-found: error
+
+  shard:
+    name: Run memory shard ${{ matrix.shard }}
+    needs: [changes, prepare]
+    if: ${{ needs.changes.outputs.memory == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.changes.outputs.memory_shards) }}
+    runs-on: ubuntu-24.04
+    env:
+      PONDERA_APP_MEMORY_PROFILE: ${{ needs.changes.outputs.memory_profile }}
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Download the prepared fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: app-memory-build-${{ github.run_id }}
+
+      - name: Run the memory shard
+        run: |
+          if [ "$EVENT_NAME" = workflow_dispatch ] || [ "$EVENT_NAME" = schedule ]; then
+            echo "full scheduled coverage"
+          fi
+          go test ./internal/... -count=1 -shuffle=on
+
+      - name: Upload the shard report
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-memory-report-${{ github.run_id }}-${{ matrix.shard }}
+          path: memory-report-${{ matrix.shard }}.json
+          overwrite: true
+          if-no-files-found: ignore
+
+  app-memory:
+    name: Aggregate memory shards
+    needs: [changes, prepare, shard]
+    if: ${{ always() && needs.changes.outputs.memory == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Download every shard report
+        uses: actions/download-artifact@v4
+        with:
+          pattern: app-memory-report-${{ github.run_id }}-*
+          path: reports
+          merge-multiple: true
+
+      - name: Download the prepared fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: app-memory-build-${{ github.run_id }}
+          path: build
+
+      - name: Verify every shard reported
+        run: node scripts/check-desktop-build-contract.mjs

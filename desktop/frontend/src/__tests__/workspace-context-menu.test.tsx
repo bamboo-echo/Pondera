@@ -75,6 +75,13 @@ function installDom() {
       return this.classList.contains("workspace-tree") ? 300 : this.dataset.index ? 24 : 0;
     },
   });
+  // jsdom never lays out, so the virtualizer needs an explicit viewport.
+  Object.defineProperty(dom.window.HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get: function clientHeight(this: HTMLElement) {
+      return this.classList.contains("workspace-tree") ? 300 : this.dataset.index ? 24 : 0;
+    },
+  });
   Object.defineProperty(dom.window.HTMLElement.prototype, "getBoundingClientRect", {
     configurable: true,
     value: function getBoundingClientRect(this: HTMLElement) {

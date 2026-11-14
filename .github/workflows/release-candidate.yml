@@ -1,0 +1,123 @@
+name: Release candidate
+
+# Seals one immutable release candidate from main-v2 and records its evidence.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Candidate version"
+        required: true
+        type: string
+      rehearsal:
+        description: "Run the verification rehearsal without publication"
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: [main-v2]
+    paths:
+      - release-notes/releases.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ inputs.version || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve the candidate record
+    runs-on: ubuntu-24.04
+    outputs:
+      candidate_id: ${{ steps.resolve.outputs.candidate_id }}
+      artifact_namespace: ${{ steps.resolve.outputs.artifact_namespace }}
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate the release control plane
+        run: bash scripts/validate-release-control-plane.sh
+
+      - name: Verify the candidate push CI
+        env:
+          PUSH_SHA: ${{ github.sha }}
+        run: bash scripts/verify-release-push-ci.sh
+
+      - name: Resolve the active candidate
+        id: resolve
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          candidate_id="${RELEASE_CANDIDATE_ID:-$RELEASE_VERSION}"
+          candidate_id="$(node scripts/resolve-release-candidate.mjs active "$candidate_id")"
+          echo "candidate_id=$candidate_id" >> "$GITHUB_OUTPUT"
+          echo "artifact_namespace=release-candidate" >> "$GITHUB_OUTPUT"
+          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the embedded docs identity
+        env:
+          DOCS_BUILD_VERSION: ${{ inputs.version }}
+        run: bash scripts/verify-embedded-docs.sh "$DOCS_BUILD_VERSION"
+
+  seal:
+    name: Seal the candidate
+    needs: resolve
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare the sealed payload
+        env:
+          RELEASE_REVOKED_CANDIDATES: ${{ vars.RELEASE_REVOKED_CANDIDATES }}
+        run: |
+          echo "The sealed record exists but its payload expired; preparing fresh files."
+          node scripts/release-candidate.mjs seal "${{ needs.resolve.outputs.candidate_id }}"
+
+      - name: Attest the candidate provenance
+        uses: actions/attest-build-provenance@3d3c42e5aac5ba805825da76410c181273ba90b1 # v3
+        with:
+          subject-path: release-notes/releases.json
+
+      - name: Record the evidence artifact id
+        id: evidence
+        run: echo "artifact-id=0" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.resolve.outputs.artifact_namespace }}-evidence-${{ needs.resolve.outputs.candidate_id }}
+          path: release-notes/
+          retention-days: 30
+
+      - name: Upload the sealed records
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-timing-${{ needs.resolve.outputs.candidate_id }}
+          path: release-notes/timing.json
+          retention-days: 90
+
+      - name: Record the evidence artifact identity
+        env:
+          RELEASE_EVIDENCE_ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+        run: echo "evidence artifact $RELEASE_EVIDENCE_ARTIFACT_ID"
+
+  desktop:
+    name: Build the Desktop candidate
+    needs: resolve
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/release-desktop.yml
+    with:
+      version: ${{ inputs.version }}
+      channel: stable
+      approved_sha: ${{ needs.resolve.outputs.sha }}
+      orchestrated: true
+      orchestrator: candidate
+      candidate_preparation: true
+    secrets: inherit

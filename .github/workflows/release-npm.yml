@@ -1,0 +1,156 @@
+name: Release npm packages
+
+# Reusable workflow contract: release-{1}.yml documents the single protected
+# entrypoint that may call this workflow.
+
+# Publishes the immutable npm release. Recovery always reloads the protected
+# publication control plane from the workflow commit before reading state.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "npm release version, for example v1.2.3"
+        required: true
+        type: string
+      channel:
+        description: "npm channel"
+        required: true
+        type: choice
+        options: [stable, next]
+        default: stable
+      approved_sha:
+        description: "Approved product commit"
+        required: false
+        type: string
+        default: ""
+      orchestrated:
+        description: "Called by the stable orchestrator"
+        required: false
+        type: boolean
+        default: false
+      recovered:
+        description: "Recover an interrupted publication"
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      channel:
+        required: false
+        type: string
+        default: stable
+      approved_sha:
+        required: false
+        type: string
+        default: ""
+      orchestrated:
+        required: false
+        type: boolean
+        default: true
+      recovered:
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-npm-${{ inputs.channel || 'next' }}
+  cancel-in-progress: false
+
+env:
+  CLI_PUBLISH_FROZEN: ${{ vars.CLI_PUBLISH_FROZEN == 'true' }}
+
+jobs:
+  cache-guard:
+    name: Guard the npm caches
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.approved_sha || github.sha }}
+
+      - name: Check public release access
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          if [ "$REF_PROTECTED" != "true" ]; then
+            echo "npm releases must run from a protected branch" >&2
+            exit 1
+          fi
+          echo "workflow=$WORKFLOW_REF"
+          bash scripts/verify-release-tag.sh "${{ inputs.version }}" "${{ inputs.approved_sha }}"
+          bash scripts/check-release-public-access.sh
+
+  npm:
+    name: Publish npm packages
+    needs: [cache-guard]
+    if: ${{ needs.cache-guard.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.approved_sha || github.sha }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: bamboo-echo/Pondera
+          ref: ${{ github.workflow_sha }}
+          path: release-control
+
+      - name: Load approved npm publication control plane
+        run: |
+          git restore --source="$RECOVERY_CONTROL_SHA" -- npm/publish.mjs scripts/finalize-npm-official-release.mjs
+          node --check npm/publish.mjs
+          node --check scripts/finalize-npm-official-release.mjs
+        env:
+          RECOVERY_CONTROL_SHA: ${{ github.workflow_sha }}
+
+      - name: Verify the embedded docs identity
+        env:
+          DOCS_BUILD_VERSION: ${{ inputs.version }}
+        run: bash scripts/verify-embedded-docs.sh "$DOCS_BUILD_VERSION"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Build the npm payload
+        run: node npm/build.mjs
+
+      - name: Publish or recover immutable npm packages
+        if: ${{ !inputs.orchestrated }}
+        env:
+          NPM_STABLE_DIST_TAG: ${{ vars.CLI_PUBLISH_FROZEN == 'true' && 'legacy-v1' || 'latest' }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node npm/publish.mjs
+
+      - name: Publish or recover immutable npm packages (orchestrated)
+        if: ${{ inputs.orchestrated }}
+        env:
+          NPM_STABLE_DIST_TAG: ${{ vars.CLI_PUBLISH_FROZEN == 'true' && 'legacy-v1' || 'latest' }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node scripts/finalize-npm-official-release.mjs
+
+      - name: Align legacy aliases with the official release
+        if: ${{ inputs.channel == 'stable' && vars.CLI_PUBLISH_FROZEN != 'true' }}
+        run: node scripts/finalize-npm-official-release.mjs --align

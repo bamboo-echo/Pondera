@@ -83,6 +83,17 @@ Object.defineProperty(dom.window.HTMLElement.prototype, "offsetHeight", {
     return 0;
   },
 });
+// jsdom never lays out, so the virtualizer needs a measured viewport.
+Object.defineProperty(dom.window.HTMLElement.prototype, "clientHeight", {
+  configurable: true,
+  get(this: HTMLElement) {
+    if (this.classList.contains("slashmenu")) return 360;
+    if (this.classList.contains("slashmenu__row")) {
+      return this.firstElementChild?.classList.contains("slashmenu__group") ? 26 : 34;
+    }
+    return 0;
+  },
+});
 
 const initialItems: CommandInfo[] = [
   { name: "documentation", description: "Documentation", kind: "skill" },

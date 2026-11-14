@@ -1,0 +1,53 @@
+name: macOS signing check
+
+# Verifies the Developer ID signing and notarization path on protected main-v2.
+# This workflow cannot publish: it only builds and uploads diagnostics.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify macOS signing
+    if: ${{ github.repository == 'bamboo-echo/Pondera' && github.ref == 'refs/heads/main-v2' && github.ref_protected }}
+    environment: release
+    runs-on: macos-15
+    env:
+      HAS_APPLE_CERT: "true"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Install workspace dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and sign a disposable universal app
+        run: scripts/desktop-build.sh darwin/universal v0.0.0-signing-check stable
+
+      - name: Upload Apple notarization diagnostics
+        if: always()
+        uses: actions/upload-artifact@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          name: signing-check-notarization
+          path: ${{ runner.temp }}/apple-notarization/*.json
+          if-no-files-found: ignore

@@ -6,6 +6,8 @@ import type { AppBindings } from "../lib/bridge";
 import type { TabMeta } from "../lib/types";
 import type { RemoteSessionApi } from "../lib/useRemoteSession";
 import { installDesktopHostStub } from "./desktopHostStub";
+import { publishMockTranscriptEvent } from "../lib/sessionReaderBridge";
+import type { WireEvent } from "../lib/types";
 import { makeExactRemoteInteractionBindings, runLegacyRemoteCapabilityScenario, runRemoteExtensionFormScenarios } from "../test-support/remoteInteractionScenarios";
 import { installRemoteTranscriptFixture } from "./helpers/remoteTranscriptFixture";
 
@@ -246,6 +248,16 @@ async function flush(ticks = 4) {
   await new Promise((resolve) => setTimeout(resolve, 40));
 }
 
+// Hydration chases the follow baseline, the metadata snapshot and any retry
+// backoff, so a fixed tick count cannot know when the hook settles.
+async function waitUntil(label: string, predicate: () => boolean) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await act(async () => { await flush(); });
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
 // The surface takes its session from the hook — the same wiring the app
 // shell uses (the shared Transcript renders the content, the composer lives
 // in the shell).
@@ -482,6 +494,7 @@ let restoredShellProbe: RemoteSessionApi | undefined;
 function RestoredShellProbe() { restoredShellProbe = useRemoteSession("tab-restored-shell", "disconnected"); return null; }
 const restoredShellRoot = createRoot(document.getElementById("root")!);
 await act(async () => { restoredShellRoot.render(<RestoredShellProbe />); await flush(); });
+await waitUntil("restored shell ready", () => restoredShellProbe?.state === "ready" && restoredShellProbe.hydrated === true);
 ok(restoredShellProbe?.state === "ready" && restoredShellProbe.hydrated, "restored shells recover through the authoritative snapshot when the ready event is missed");
 ok(tape.includes("setActive:tab-restored-shell"), "restored disconnected shells trigger backend revival");
 await act(async () => restoredShellRoot.unmount());
@@ -491,6 +504,7 @@ let probe: RemoteSessionApi | undefined;
 function HookProbe({ tabId = "tab-remote-2" }: { tabId?: string }) { probe = useRemoteSession(tabId); return null; }
 const probeRoot = createRoot(document.createElement("div"));
 await act(async () => { probeRoot.render(<LocaleProvider><HookProbe /></LocaleProvider>); await flush(); });
+await waitUntil("remote hook ready", () => probe?.state === "ready");
 ok(probe?.state === "ready", "a successful fenced snapshot recovers a ready event missed before listener mount");
 ok(probe?.composerProfile?.collaborationMode === "plan" && probe?.composerProfile?.toolApprovalMode === "workspace-write" && probe.goalRuntime?.tokensUsed === 321,
   "snapshot status hydrates the authoritative remote composer profile");
@@ -664,6 +678,7 @@ await act(async () => {
   fallbackRoot.render(<LocaleProvider><FallbackProbe /></LocaleProvider>);
   await flush();
 });
+await waitUntil("status fallback hydrated", () => fallbackProbe?.hydrated === true);
 ok(fallbackProbe?.hydrated === true && fallbackProbe.composerProfile?.collaborationMode === "plan"
   && fallbackProbe.composerProfile.toolApprovalMode === "workspace-write"
   && tape.includes("status:tab-status-fallback"),
@@ -704,18 +719,21 @@ function RaceProbe() {
 const raceRoot = createRoot(document.createElement("div"));
 await act(async () => {
 	raceRoot.render(<LocaleProvider><RaceProbe /></LocaleProvider>);
-	await Promise.resolve();
+	// The effect that subscribes to remote events must run before they fire.
+	await flush();
 });
 await act(async () => {
-	__emitMockRemoteTab("tab-race", "event", { kind: "turn_started" });
-	__emitMockRemoteTab("tab-race", "event", { kind: "text", text: "arrived during hydration" });
+	// Follow-stream events delivered while the baseline snapshot is in flight.
+	publishMockTranscriptEvent({ tabId: "tab-race", kind: "turn_started" } as WireEvent);
+	publishMockTranscriptEvent({ tabId: "tab-race", kind: "text", text: "arrived during hydration" } as WireEvent);
 	resolveRaceSnapshot?.({
 		history: [],
 		status: { running: true, label: "Race", plan: false, toolApprovalMode: "ask", goal: "" },
 	});
 	await flush();
 });
-ok(raceProbe?.transcript.live.text === "arrived during hydration", "hydration replays concurrently delivered remote events");
+await waitUntil("hydration race event replayed", () => raceProbe?.transcript.live?.text === "arrived during hydration");
+ok(raceProbe?.transcript.live?.text === "arrived during hydration", "hydration replays concurrently delivered remote events");
 await act(async () => raceRoot.unmount());
 
 let stateRaceProbe: RemoteSessionApi | undefined;
@@ -726,7 +744,7 @@ function StateRaceProbe() {
 const stateRaceRoot = createRoot(document.createElement("div"));
 await act(async () => {
 	stateRaceRoot.render(<LocaleProvider><StateRaceProbe /></LocaleProvider>);
-	await Promise.resolve();
+	await flush();
 });
 await act(async () => {
 	__emitMockRemoteTab("tab-state-race", "state", { state: "reconnecting" });
@@ -767,6 +785,7 @@ await act(async () => {
   __emitMockRemoteTab("tab-reconcile-rotation", "state", { state: "ready" });
   await flush();
 });
+await waitUntil("rotation hydrated", () => rotationProbe?.transcript.items.some((item) => item.kind === "assistant" && item.text === "fresh rotated session") === true);
 ok(rotationProbe?.transcript.items.some((item) => item.kind === "assistant" && item.text === "fresh rotated session") === true,
 	"ready-to-ready rotation hydrates the adopted session while old reconciliation is pending");
 await act(async () => { __emitMockRemoteTab("tab-reconcile-rotation", "event", { kind: "turn_started" }); __emitMockRemoteTab("tab-reconcile-rotation", "event", { kind: "turn_done" }); await Promise.resolve(); });

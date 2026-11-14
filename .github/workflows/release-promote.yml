@@ -1,0 +1,163 @@
+name: Promote release candidate
+
+# Promotes an already verified candidate. Attestations are checked again before
+# any tag is activated and the publication ledger is reconciled.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Candidate version"
+        required: true
+        type: string
+      candidate_id:
+        description: "Candidate identifier"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      candidate_id:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stable-release-publication
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Verify candidate attestations
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    outputs:
+      tag_actor_id: ${{ steps.identity.outputs.tag_actor_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Verify candidate attestations
+        run: |
+          gh attestation verify "release-notes/${{ inputs.version }}.json" --repo bamboo-echo/Pondera
+          bash scripts/release-candidate-tags.sh check "${{ inputs.version }}"
+
+      - name: Identify the release tag actor
+        id: identity
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TAG_TOKEN }}
+        run: node scripts/verify-release-tag-identity.mjs > identity.json
+
+  authorize:
+    name: Authorize the promotion
+    needs: preflight
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require the protected environment approval
+        run: echo "release environment approved"
+
+  activate:
+    name: Activate the release tags
+    needs: [preflight, authorize]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Bind the release tag token
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TAG_TOKEN }}
+          RELEASE_TAG_ACTOR_ID: ${{ needs.preflight.outputs.tag_actor_id }}
+        run: |
+          node scripts/verify-release-tag-identity.mjs
+          gh auth setup-git --hostname github.com
+          bash scripts/release-candidate-tags.sh activate "${{ inputs.version }}"
+
+  cli:
+    name: Promote the CLI candidate
+    needs: [preflight, authorize]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Promote the CLI artifacts
+        run: bash scripts/release-candidate-tags.sh check "${{ inputs.version }}"
+
+  npm:
+    name: Promote the npm candidate
+    needs: preflight
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Promote npm packages
+        run: node scripts/finalize-npm-official-release.mjs
+
+  desktop:
+    name: Promote the Desktop candidate
+    needs: preflight
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Promote Desktop artifacts
+        run: bash scripts/publish-desktop-github-release.sh "${{ inputs.version }}" "${{ inputs.version }}" false release-notes/notes.md dist
+
+  desktop-publish:
+    name: Publish the promoted Desktop release
+    needs: preflight
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/release-desktop.yml
+    with:
+      version: ${{ inputs.version }}
+      channel: stable
+      approved_sha: ${{ github.sha }}
+      orchestrated: true
+      orchestrator: promote
+      candidate_verified: true
+    secrets: inherit
+
+  publish:
+    name: Reconcile release publication
+    needs: [preflight, cli, npm, desktop]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Reconcile publication
+        env:
+          RELEASE_REVOKED_CANDIDATES: ${{ vars.RELEASE_REVOKED_CANDIDATES }}
+          CLI_PUBLISH_FROZEN: ${{ vars.CLI_PUBLISH_FROZEN == 'true' }}
+          VERIFY_PUBLIC_POINTERS: "true"
+        run: bash scripts/reconcile-release-publication.sh
+
+      - name: Upload the publication ledger
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-publication-ledger-${{ inputs.candidate_id }}
+          path: release-notes/publication-ledger.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Upload the publication timing
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-publication-timing-${{ inputs.candidate_id }}
+          path: release-notes/publication-timing.json
+          if-no-files-found: ignore
