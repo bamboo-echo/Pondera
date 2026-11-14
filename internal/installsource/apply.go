@@ -172,6 +172,34 @@ func (t *installSourceTool) applyLinkSkill(req request, act *action) error {
 	return t.verifySkill(act.Scope, act.skill.Name, act)
 }
 
+// resolveContainedPath symlink-resolves a path even when it does not exist
+// yet (install targets are frequently new directories): the nearest existing
+// ancestor is resolved and the missing tail is re-joined. Without this, a
+// raw /var/folders source would never match its resolved /private/var root on
+// macOS, and a Windows 8.3 short path would never match the long path that
+// EvalSymlinks returns for the existing root.
+func resolveContainedPath(path string) string {
+	resolved := filepath.Clean(path)
+	var tail []string
+	for {
+		if real, err := filepath.EvalSymlinks(resolved); err == nil {
+			resolved = filepath.Clean(real)
+			break
+		}
+		parent := filepath.Dir(resolved)
+		if parent == resolved {
+			// Nothing on the path exists; the Clean-ed input is the best answer.
+			return filepath.Clean(path)
+		}
+		tail = append([]string{filepath.Base(resolved)}, tail...)
+		resolved = parent
+	}
+	for _, part := range tail {
+		resolved = filepath.Join(resolved, part)
+	}
+	return resolved
+}
+
 // isSkillRootSafe reports whether a register-mode skill root may be persisted
 // into [skills].paths. Registration makes the skill store scan and load
 // SKILL.md from the root, so it must be an absolute local path inside the
@@ -181,18 +209,12 @@ func isSkillRootSafe(source, home, projectRoot string) bool {
 	if source == "" || strings.Contains(source, "://") || !filepath.IsAbs(source) {
 		return false
 	}
-	clean := filepath.Clean(source)
-	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
-		clean = filepath.Clean(resolved)
-	}
+	clean := resolveContainedPath(source)
 	for _, root := range []string{home, projectRoot} {
 		if root == "" {
 			continue
 		}
-		base := filepath.Clean(root)
-		if resolved, err := filepath.EvalSymlinks(base); err == nil {
-			base = filepath.Clean(resolved)
-		}
+		base := resolveContainedPath(root)
 		if clean == base || strings.HasPrefix(clean, base+string(filepath.Separator)) {
 			return true
 		}
