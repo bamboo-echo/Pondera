@@ -19,8 +19,11 @@ export function ToolRow({ icon, title, summary, state, dot, statusLabel, errorSu
   // The raw failure is the content the user needs. The localised summary
   // ("操作出现问题…") is a neutral fallback for framework noise, not a
   // replacement for the message: it used to hide the real error one click
-  // behind an affordance that had no visual cue.
-  const failureLine = state === "error" && errorSummary ? presentError(errorSummary, t).detail || undefined : undefined;
+  // behind an affordance that had no visual cue. Under the English locale
+  // presentError hoists an unknown English message into `summary` and blanks
+  // `detail`, so fall back to the summary to keep the raw cause visible.
+  const presentation = state === "error" && errorSummary ? presentError(errorSummary, t) : undefined;
+  const failureLine = presentation ? presentation.detail || presentation.summary || undefined : undefined;
   const leading = dot ? <StateDot state={dot} /> : state === "error" || state === "stopped"
     ? <StateDot state={state === "error" ? "error" : "warning"} /> : icon;
   return <div className={`${css.root} chat-tool`} data-state={state}>
