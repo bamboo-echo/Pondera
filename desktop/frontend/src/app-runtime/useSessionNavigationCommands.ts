@@ -37,6 +37,9 @@ export type SessionNavigationCommandsInput = {
   };
 };
 
+/** One creation attempt plus the session the user was already looking at. */
+type CreationAttempt = ManualCreationObservation & { seq: number; onScreenSessionId?: string };
+
 /**
  * Owns explicit local creation and session navigation. Each creation is an
  * independent mutation; only its selection follows the shared navigation
@@ -46,12 +49,12 @@ export type SessionNavigationCommandsInput = {
 export function useSessionNavigationCommands(input: SessionNavigationCommandsInput) {
   const { activeTab, showToast, navigation, ports } = input;
   const lastLocalTarget = useRef(draftLandingTargetForTab(activeTab));
-  const [creation, setCreation] = useState<(ManualCreationObservation & { seq: number }) | null>(null);
+  const [creation, setCreation] = useState<CreationAttempt | null>(null);
   if (activeTab && !activeTab.remote) lastLocalTarget.current = draftLandingTargetForTab(activeTab);
 
   const blankSessionTarget = useCommittedCommand(() => lastLocalTarget.current);
 
-  const observeCreation = useCommittedCommand(async (attempt: ManualCreationObservation & { seq: number }, retry = false) => {
+  const observeCreation = useCommittedCommand(async (attempt: CreationAttempt, retry = false) => {
     const { seq, request } = attempt;
     const current = () => input.isNavigationIntentCurrent(seq) === true;
     setCreation({ ...attempt, pending: true, failed: false });
@@ -62,6 +65,11 @@ export function useSessionNavigationCommands(input: SessionNavigationCommandsInp
         isObservationCurrent: current,
         onProgress: operation => { if (current()) setCreation({ ...attempt, operation, pending: true, failed: false }); },
         onSurfaceReady: async (reserved) => {
+          // The host reuses an untouched conversation instead of reserving a
+          // new identity. When that decides the session already on screen, the
+          // click asked to stay: navigating would only re-mask and re-hydrate
+          // the surface it meant to keep.
+          if (attempt.onScreenSessionId && reserved.ref.sessionId === attempt.onScreenSessionId) return;
           if (current()) await navigation.enqueueNavigationWithIntent({ kind: "canonical-session", ref: reserved.ref }, seq);
         },
       });
@@ -74,7 +82,7 @@ export function useSessionNavigationCommands(input: SessionNavigationCommandsInp
     }
   });
 
-  const openBlankSession = useCommittedCommand(async (scope: string, workspaceRoot: string, options?: { intentSeq?: number }): Promise<void> => {
+  const openBlankSession = useCommittedCommand(async (scope: string, workspaceRoot: string, options?: { intentSeq?: number; onScreenSessionId?: string }): Promise<void> => {
     // A caller that preclaims the intent (the new-tab blank probe) has already
     // begun the surface fence before its first asynchronous bridge call.
     const seq = options?.intentSeq ?? input.noteNavigationIntent();
@@ -87,7 +95,7 @@ export function useSessionNavigationCommands(input: SessionNavigationCommandsInp
     if (options?.intentSeq === undefined) input.beginNavigationSurface(seq);
     // Creation is an explicit mutation, not a coalescible navigation request.
     // Even if another click wins selection, this accepted operation survives.
-    await observeCreation({ seq, request: { operationId, workspaceId: "", scope, workspaceRoot: targetRoot }, pending: true, failed: false });
+    await observeCreation({ seq, request: { operationId, workspaceId: "", scope, workspaceRoot: targetRoot }, pending: true, failed: false, onScreenSessionId: options?.onScreenSessionId });
   });
   const retryCreation = useCommittedCommand(async () => {
     if (creation && !creation.pending && input.isNavigationIntentCurrent(creation.seq)) await observeCreation(creation, true);
@@ -111,7 +119,9 @@ export function useSessionNavigationCommands(input: SessionNavigationCommandsInp
     input.beginNavigationSurface(navigationIntentSeq);
     // The active local tab already provides the empty input surface a "new
     // session" click asks for; allocating another formal identity here piled
-    // up empty conversations. A failed probe falls back to formal creation.
+    // up empty conversations. This probe is only the fast path: the host now
+    // reuses an untouched conversation itself, so a failed or unavailable probe
+    // no longer costs the user another empty session.
     if (activeTab && await input.ports.tabSessionIsBlank(activeTab.id).catch(() => false)) {
       input.enterConversation();
       input.settleNavigationSurface(navigationIntentSeq);
@@ -125,7 +135,10 @@ export function useSessionNavigationCommands(input: SessionNavigationCommandsInp
       return;
     }
     const target = blankSessionTarget();
-    await openBlankSession(target.scope, target.workspaceRoot, { intentSeq: navigationIntentSeq });
+    await openBlankSession(target.scope, target.workspaceRoot, {
+      intentSeq: navigationIntentSeq,
+      onScreenSessionId: activeTab?.session?.sessionId,
+    });
   });
 
   const handleOpenTopic = useCommittedCommand(async (scope: string, workspaceRoot: string, topicId: string, sessionPath?: string): Promise<void> => {
