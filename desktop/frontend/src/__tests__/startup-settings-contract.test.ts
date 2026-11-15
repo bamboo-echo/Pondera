@@ -119,9 +119,10 @@ ok(
   "settings groups read as bordered cards instead of loose text",
 );
 ok(
-  panelStyles.includes('input[type="checkbox"]') &&
+  panelStyles.includes(".settings-checkbox") &&
     panelStyles.includes("appearance: none") &&
-    panelStyles.includes("border-radius: 4px"),
+    panelStyles.includes("border-radius: 4px") &&
+    settingsSource.includes('className="settings-checkbox"'),
   "Settings checkboxes follow the theme instead of the platform default",
 );
 ok(

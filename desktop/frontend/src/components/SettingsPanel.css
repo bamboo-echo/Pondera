@@ -901,8 +901,7 @@
 }
 
 /* Native checkboxes keep the platform blue; the settings pane needs the theme accent. */
-:root .settings-center .set-check input[type="checkbox"],
-:root .settings-center .settings-field input[type="checkbox"]:not(.provider-capability-row__switch) {
+:root .settings-center .settings-checkbox {
   appearance: none;
   width: 16px;
   height: 16px;
@@ -913,20 +912,17 @@
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
 }
-:root .settings-center .set-check input[type="checkbox"]:hover,
-:root .settings-center .settings-field input[type="checkbox"]:not(.provider-capability-row__switch):hover {
+:root .settings-center .settings-checkbox:hover {
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
-:root .settings-center .set-check input[type="checkbox"]:checked,
-:root .settings-center .settings-field input[type="checkbox"]:not(.provider-capability-row__switch):checked {
+:root .settings-center .settings-checkbox:checked {
   border-color: var(--accent);
   background-color: var(--accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231a0f0a' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: center;
 }
-:root .settings-center .set-check input[type="checkbox"]:focus-visible,
-:root .settings-center .settings-field input[type="checkbox"]:not(.provider-capability-row__switch):focus-visible {
+:root .settings-center .settings-checkbox:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
   outline-offset: 2px;
 }

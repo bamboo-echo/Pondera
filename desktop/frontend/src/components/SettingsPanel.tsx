@@ -5738,6 +5738,7 @@ function ProviderModelDraftPicker({
             <div className="provider-model-draft__option" key={model} role="listitem">
               <label className="provider-model-draft__model">
                 <input
+                  className="settings-checkbox"
                   type="checkbox"
                   checked={enabled}
                   disabled={disabled}
@@ -6096,6 +6097,7 @@ export const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker
             <div className="provider-model-draft__option" key={model} role="listitem">
               <label className="provider-model-draft__model">
                 <input
+                  className="settings-checkbox"
                   type="checkbox"
                   checked={enabled}
                   disabled={disabled}
@@ -6516,6 +6518,7 @@ export function ProviderEditor({
         </div>
         <label className="set-check">
           <input
+            className="settings-checkbox"
             type="checkbox"
             checked={authHeader}
             onChange={(e) => setAuthHeader(e.target.checked)}
@@ -6525,6 +6528,7 @@ export function ProviderEditor({
         <div className="mem-hint">{t("settings.providerAuthHeaderHint")}</div>
         <label className="set-check">
           <input
+            className="settings-checkbox"
             type="checkbox"
             checked={noProxy}
             onChange={(e) => setNoProxy(e.target.checked)}
@@ -7059,7 +7063,7 @@ function SandboxSection({ s, busy, apply, windows }: SectionProps & { windows: b
       <SettingsField className="sandbox-network" label={t(windows ? "settings.shellNetworkAccess" : "settings.allowNetwork")}>
         {windows ? <div className="sandbox-network__status"><span>{t("settings.shellNetworkUnrestricted")}</span><p className="sandbox-group__hint">{t("settings.shellNetworkUnrestrictedHint")}</p></div> :
         <label className="set-check set-check--inline">
-          <input type="checkbox" checked={sb.network} disabled={busy} onChange={(e) => void set({ network: e.target.checked })} />
+          <input className="settings-checkbox" type="checkbox" checked={sb.network} disabled={busy} onChange={(e) => void set({ network: e.target.checked })} />
           {t("settings.allowNetwork")}
         </label>}
       </SettingsField>
