@@ -59,10 +59,11 @@ func TestManualCreationReusesUntouchedSessionInSameWorkspace(t *testing.T) {
 	}
 }
 
-// A creation still owned by its own reservation is left alone, so a click that
-// lands mid-build never gets handed a half-built identity. Once that build
-// finishes, the next click reuses it instead of reserving a third time.
-func TestManualCreationLeavesInFlightCreationAlone(t *testing.T) {
+// A click that lands while the first creation is still building must land on
+// that same conversation. It is already a workspace member with no content, so
+// the durable fallback answers the click and no second empty identity is
+// reserved: a click storm produces one conversation, not one per click.
+func TestManualCreationReusesCreationStillBuilding(t *testing.T) {
 	a := newManualSessionTestApp(t)
 	started, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
@@ -79,8 +80,8 @@ func TestManualCreationLeavesInFlightCreationAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	close(release)
-	if during.Ref == first.Ref {
-		t.Fatalf("click during the build took over the in-flight %v", during.Ref)
+	if during.Ref != first.Ref {
+		t.Fatalf("click during the build reserved %v, want the building %v", during.Ref, first.Ref)
 	}
 	a.manualCreationTasks.Wait()
 
@@ -88,11 +89,11 @@ func TestManualCreationLeavesInFlightCreationAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Ref != first.Ref && after.Ref != during.Ref {
-		t.Fatalf("third click reserved %v, want one finished blank", after.Ref)
+	if after.Ref != first.Ref {
+		t.Fatalf("third click reserved %v, want the finished blank %v", after.Ref, first.Ref)
 	}
-	if got := reuseTestDurableSessions(t, a); got != 2 {
-		t.Fatalf("durable sessions = %d, want the two reservations and no third", got)
+	if got := reuseTestDurableSessions(t, a); got != 1 {
+		t.Fatalf("durable sessions = %d, want the single blank a click storm may own", got)
 	}
 }
 
@@ -124,5 +125,40 @@ func TestManualCreationKeepsOneUntouchedSessionPerWorkspace(t *testing.T) {
 	}
 	if got := reuseTestDurableSessions(t, a); got != 2 {
 		t.Fatalf("durable sessions = %d, want one blank per workspace", got)
+	}
+}
+
+// A click that lands after the creation surface was replaced (the tab no longer
+// holds the session) must still land on the untouched conversation the workspace
+// already owns instead of reserving another empty identity. Tabs are
+// presentation; the durable registry is the authority.
+func TestManualCreationReusesUntouchedSessionWithoutItsTab(t *testing.T) {
+	a := newManualSessionTestApp(t)
+	first, err := a.BeginManualSessionCreation(ManualSessionCreationRequest{OperationID: "reuse-detached-first", Scope: "global"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.manualCreationTasks.Wait()
+
+	a.mu.Lock()
+	for id := range a.tabs {
+		delete(a.tabs, id)
+	}
+	a.tabOrder = nil
+	a.activeTabID = ""
+	a.mu.Unlock()
+
+	second, err := a.BeginManualSessionCreation(ManualSessionCreationRequest{OperationID: "reuse-detached-second", Scope: "global"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Ref.SessionID != first.Ref.SessionID {
+		t.Fatalf("second click reserved %s, want the untouched %s", second.Ref.SessionID, first.Ref.SessionID)
+	}
+	if second.Phase != "ready" {
+		t.Fatalf("reused creation phase = %q, want ready", second.Phase)
+	}
+	if got := reuseTestDurableSessions(t, a); got != 1 {
+		t.Fatalf("durable sessions = %d, want the one blank the workspace owns", got)
 	}
 }

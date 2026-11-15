@@ -1916,12 +1916,12 @@ export function ProjectTree({
     onRemoteWorkspace: () => { closeMenu(); openRemoteWorkspaceFlow(); },
   };
   const classicHeaderAddItems = projectTreeHeaderAddItems({
-    localLabel: t("projectTree.addProjectTooltip"), remoteLabel: t("projectTree.remoteConnection"),
+    localLabel: t("projectTree.addProjectTooltip"),
     remoteWorkspaceLabel: t("projectTree.remoteWorkspace"), disabled: addingProject, ...addItemCallbacks,
   });
   const workbenchHeaderAddItems = projectTreeHeaderAddItems({
     blankLabel: t("projectTree.createBlankProject"), localLabel: t("projectTree.useExistingFolder"),
-    remoteLabel: t("projectTree.remoteConnection"), remoteWorkspaceLabel: t("projectTree.remoteWorkspace"),
+    remoteWorkspaceLabel: t("projectTree.remoteWorkspace"),
     disabled: addingProject, ...addItemCallbacks,
   });
 
@@ -2039,7 +2039,6 @@ export function ProjectTree({
           <FolderPlus size={14} />
           <span>{t("projectTree.addProjectTooltip")}</span>
         </button>
-        <ProjectTreeRemoteAction label={t("projectTree.remoteConnection")} disabled={addingProject} onClick={openRemoteConnectFlow} />
         <ProjectTreeRemoteAction label={t("projectTree.remoteWorkspace")} disabled={addingProject} onClick={openRemoteWorkspaceFlow} />
       </div>
     );
