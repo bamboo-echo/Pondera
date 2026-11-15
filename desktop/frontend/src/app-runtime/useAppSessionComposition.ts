@@ -632,7 +632,6 @@ export function useAppSessionComposition(input: AppSessionCompositionInput) {
     tabId: activeTabId, enabled: conversationView.localToolsEnabled, shortcutsEnabled: !managementActive,
   });
 
-  const remoteWorkspaceCommands = useRemoteWorkspaceCommands({ t, showToast });
 
   const layoutStyle = useMemo(
     () =>
@@ -713,6 +712,9 @@ export function useAppSessionComposition(input: AppSessionCompositionInput) {
     noteIntent: noteNavigationIntent, beginSurface: beginNavigationSurface, settleSurface: settleNavigationSurface,
     showChat: enterConversation,
   });
+  // The remote workspace commands open a remote workspace as an in-app tab, so
+  // they need the navigation command that useDesktopNavigation just built.
+  const remoteWorkspaceCommands = useRemoteWorkspaceCommands({ t, showToast, openRemoteProject });
   return {
     insertCommands,
     clearCommands,

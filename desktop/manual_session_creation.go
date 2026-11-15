@@ -95,6 +95,41 @@ func (a *App) BeginManualSessionCreation(req ManualSessionCreationRequest) (resu
 	if scope == "global" {
 		root = ""
 	}
+	// Reuse the untouched conversation this workspace already shows instead of
+	// reserving another empty identity. The frontend probe that normally keeps a
+	// second click from creating is a fast path that fails open, so the decision
+	// is authoritative here.
+	if reused, ok := a.reuseManualCreationTarget(scope, root, workspaceID); ok {
+		view := ManualSessionCreationView{
+			OperationID:   id,
+			WorkspaceID:   workspaceID,
+			Scope:         scope,
+			WorkspaceRoot: root,
+			Ref:           session.SessionRef{HostID: localDesktopHostID, SessionID: reused.sessionID},
+			TopicID:       reusableManualCreationTopic(reused.sessionID, reused.topicID),
+			Phase:         "ready",
+			SurfaceReady:  true,
+			Settings:      reused.settings,
+		}
+		// The click was answered by an identity that already exists, so the
+		// operation is recorded as complete and recovery does not rebuild it.
+		payload, err := json.Marshal(view)
+		if err != nil {
+			return view, err
+		}
+		record, err := store.Save(a.bootContext(), "creation", id, "0", payload)
+		if errors.Is(err, sessionui.ErrConflict) {
+			saved, decodeErr := decodeManualCreation(record)
+			if decodeErr != nil {
+				return saved, decodeErr
+			}
+			return a.replayManualCreation(req, saved)
+		}
+		if err != nil {
+			return view, err
+		}
+		return view, nil
+	}
 	sum := sha256.Sum256([]byte(id))
 	view := ManualSessionCreationView{OperationID: id, WorkspaceID: workspaceID, Scope: scope, WorkspaceRoot: root,
 		Ref:     session.SessionRef{HostID: localDesktopHostID, SessionID: fmt.Sprintf("desktop-manual-%x", sum[:16])},

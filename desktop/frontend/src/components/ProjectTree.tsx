@@ -502,7 +502,7 @@ export function ProjectTree({
   const { openRemoteProject, openRemoteWindow, remoteSessions, setRemoteSessions, remoteServers, remoteGroupBusy, remoteGroupError, ensureRemoteGroupSessions, refreshRemoteSessions } = useRemoteProjectGroups(tree, showToast, expanded, query);
   const treeWithRemoteSessions = useRemoteRuntimeTree(tree, remoteSessions, t);
   const remoteSessionActions = useRemoteSessionActions(remoteSessions, refreshRemoteSessions, (error) => showToast(error instanceof Error ? error.message : String(error), "error"));
-  const { addingProject, handleAddProject, openBlankProjectFlow, blankProjectFlow, openRemoteConnectFlow, remoteConnectFlow } = useProjectCreation({
+  const { addingProject, handleAddProject, openBlankProjectFlow, blankProjectFlow, openRemoteConnectFlow, remoteConnectFlow, openRemoteWorkspaceFlow, remoteWorkspaceFlow } = useProjectCreation({
     onAddProject,
     onRefresh: () => refresh(undefined, true),
     showToast,
@@ -1913,12 +1913,16 @@ export function ProjectTree({
     onBlank: () => { closeMenu(); openBlankProjectFlow(); },
     onLocal: () => { closeMenu(); void handleAddProject(); },
     onRemote: () => { closeMenu(); openRemoteConnectFlow(); },
+    onRemoteWorkspace: () => { closeMenu(); openRemoteWorkspaceFlow(); },
   };
   const classicHeaderAddItems = projectTreeHeaderAddItems({
-    localLabel: t("projectTree.addProjectTooltip"), remoteLabel: t("projectTree.remoteConnection"), disabled: addingProject, ...addItemCallbacks,
+    localLabel: t("projectTree.addProjectTooltip"), remoteLabel: t("projectTree.remoteConnection"),
+    remoteWorkspaceLabel: t("projectTree.remoteWorkspace"), disabled: addingProject, ...addItemCallbacks,
   });
   const workbenchHeaderAddItems = projectTreeHeaderAddItems({
-    blankLabel: t("projectTree.createBlankProject"), localLabel: t("projectTree.useExistingFolder"), remoteLabel: t("projectTree.remoteConnection"), disabled: addingProject, ...addItemCallbacks,
+    blankLabel: t("projectTree.createBlankProject"), localLabel: t("projectTree.useExistingFolder"),
+    remoteLabel: t("projectTree.remoteConnection"), remoteWorkspaceLabel: t("projectTree.remoteWorkspace"),
+    disabled: addingProject, ...addItemCallbacks,
   });
 
   const renderProjectHeader = (mode: "classic" | "workbench") => (
@@ -2036,6 +2040,7 @@ export function ProjectTree({
           <span>{t("projectTree.addProjectTooltip")}</span>
         </button>
         <ProjectTreeRemoteAction label={t("projectTree.remoteConnection")} disabled={addingProject} onClick={openRemoteConnectFlow} />
+        <ProjectTreeRemoteAction label={t("projectTree.remoteWorkspace")} disabled={addingProject} onClick={openRemoteWorkspaceFlow} />
       </div>
     );
   };
@@ -2134,6 +2139,7 @@ export function ProjectTree({
       )}
       {blankProjectFlow}
       {remoteConnectFlow}
+      {remoteWorkspaceFlow}
     </div>
   );
 }

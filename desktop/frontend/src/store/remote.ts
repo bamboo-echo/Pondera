@@ -43,6 +43,9 @@ export type RemoteState = {
   explorerOpen: boolean;
   explorerHostId: string | null;
   explorerTab: RemoteExplorerTab;
+  /** The remote workspace the active session tab is bound to. The remote file
+   *  tree is rooted there, so the panel shows the directory the user picked. */
+  activeWorkspace: { hostId: string; workspace: string } | null;
 
   setHosts: (hosts: RemoteHostView[]) => void;
   applyStatus: (s: RemoteConnectionStatus) => void;
@@ -57,6 +60,7 @@ export type RemoteState = {
   openExplorer: (hostId: string) => void;
   closeExplorer: () => void;
   setExplorerTab: (tab: RemoteExplorerTab) => void;
+  setActiveWorkspace: (value: { hostId: string; workspace: string } | null) => void;
 };
 
 export const useRemoteStore = create<RemoteState>((set) => ({
@@ -70,6 +74,7 @@ export const useRemoteStore = create<RemoteState>((set) => ({
   explorerOpen: false,
   explorerHostId: null,
   explorerTab: "files",
+  activeWorkspace: null,
 
   setHosts: (hosts) => set({ hosts }),
 
@@ -156,6 +161,16 @@ export const useRemoteStore = create<RemoteState>((set) => ({
     )),
 
   openExplorer: (hostId) => set({ explorerOpen: true, explorerHostId: hostId }),
+  // The tab meta object is recreated on every refresh, so an equal
+  // workspace must not publish a new object: that would re-render every
+  // subscriber on every meta tick.
+  setActiveWorkspace: (value) => set((state) => {
+    const current = state.activeWorkspace;
+    if (current === value) return state;
+    if (current && value && current.hostId === value.hostId && current.workspace === value.workspace) return state;
+    if (!current && !value) return state;
+    return { activeWorkspace: value };
+  }),
   closeExplorer: () => set({ explorerOpen: false }),
   setExplorerTab: (tab) => set({ explorerTab: tab }),
 }));

@@ -29,9 +29,10 @@ const bridgeSource = readFileSync(resolve(here, "../lib/bridge.ts"), "utf8");
 const configWarningsSource = readFileSync(resolve(here, "../lib/useConfigLoadWarnings.ts"), "utf8");
 const settingsSource = readFileSync(resolve(here, "../components/SettingsPanel.tsx"), "utf8");
 const settingsNavigationSource = readFileSync(resolve(here, "../components/SettingsNavigation.tsx"), "utf8");
+const panelStyles = readFileSync(resolve(here, "../components/SettingsPanel.css"), "utf8");
 const stylesSource = readFileSync(resolve(here, "../styles.css"), "utf8") +
   readFileSync(resolve(here, "../components/ProviderAccessSettings.css"), "utf8") +
-  readFileSync(resolve(here, "../components/SettingsPanel.css"), "utf8");
+  panelStyles;
 const enLocaleSource = readFileSync(resolve(here, "../locales/en.ts"), "utf8");
 const zhLocaleSource = readFileSync(resolve(here, "../locales/zh.ts"), "utf8");
 const zhTWLocaleSource = readFileSync(resolve(here, "../locales/zh-TW.ts"), "utf8");
@@ -90,12 +91,39 @@ ok(
 );
 ok(
   stylesSource.includes(".settings-page--general .settings-section") &&
-    stylesSource.includes("grid-template-columns: minmax(260px, 1fr) max-content") &&
+    stylesSource.includes("grid-template-columns: minmax(0, 1fr) minmax(200px, 300px)") &&
     stylesSource.includes(".settings-field__copy--icon") &&
     stylesSource.includes("container: settings-general / inline-size") &&
     stylesSource.includes("@container settings-general (max-width: 620px)") &&
     stylesSource.includes("@media (max-width: 980px)"),
   "General controls use the selected flat responsive section layout",
+);
+ok(
+  panelStyles.includes('.settings-page[data-layout="form"] .settings-field') &&
+    panelStyles.includes("grid-template-columns: minmax(0, 1fr) minmax(200px, 300px)") &&
+    panelStyles.includes(".settings-field__control") &&
+    panelStyles.includes("justify-content: flex-end"),
+  "Form pages keep the label on the left and align every value on one edge",
+);
+ok(
+  settingsSource.includes("settings-hero__title") &&
+    settingsSource.includes("settings-hero__subtitle") &&
+    settingsSource.includes("logo-symbol.svg") &&
+    stylesSource.includes(".settings-hero__title") &&
+    stylesSource.includes(".settings-hero__icon"),
+  "settings opens with the product mark, its title and the current page",
+);
+ok(
+  panelStyles.includes("border-radius: 12px") &&
+    panelStyles.includes("color-mix(in srgb, var(--fg) 8%, transparent)"),
+  "settings groups read as bordered cards instead of loose text",
+);
+ok(
+  panelStyles.includes(".settings-checkbox") &&
+    panelStyles.includes("appearance: none") &&
+    panelStyles.includes("border-radius: 4px") &&
+    settingsSource.includes('className="settings-checkbox"'),
+  "Settings checkboxes follow the theme instead of the platform default",
 );
 ok(
   settingsNavigationSource.includes('settings.searchPlaceholder') &&

@@ -1,7 +1,7 @@
 import { ErrorMessage } from "./ErrorMessage";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Cloud, Folder, FolderOpen, GitBranch, GitGraph, MessageCircle, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Check, ChevronDown, Cloud, Folder, FolderInput, FolderOpen, GitBranch, GitGraph, MessageCircle, Plus, RefreshCw, Search, X } from "lucide-react";
 import { asArray } from "../lib/array";
 import { app, onProjectTreeChanged } from "../lib/bridge";
 import { useT } from "../lib/i18n";
@@ -344,6 +344,8 @@ export function ComposerWorkspaceContextBar({ context }: { context: ComposerWork
               <div className="composer-workspace-menu__actions">
                 <button type="button" role="menuitem" disabled={creation.addingProject} onClick={() => { setProjectMenuOpen(false); void creation.handleAddProject(); }}><FolderOpen size={16} /><span>{t("composer.workspace.openFolder")}</span></button>
                 <button type="button" role="menuitem" onClick={() => { setProjectMenuOpen(false); creation.openRemoteConnectFlow(); }}><Cloud size={16} /><span>{t("projectTree.remoteConnection")}</span></button>
+                <button type="button" role="menuitem" onClick={() => { setProjectMenuOpen(false); creation.openRemoteWorkspaceFlow(); }}><FolderInput size={16} /><span>{t("projectTree.remoteWorkspace")}</span></button>
+                <button type="button" role="menuitem" onClick={() => { setProjectMenuOpen(false); creation.openRemoteWorkspaceFlow(); }}><FolderInput size={16} /><span>{t("projectTree.remoteWorkspace")}</span></button>
                 <button type="button" role="menuitem" onClick={() => void workWithoutProject()}><MessageCircle size={16} /><span>{t("composer.workspace.workWithoutProject")}</span>{!projectSelected ? <Check size={15} /> : null}</button>
               </div>
             </div>

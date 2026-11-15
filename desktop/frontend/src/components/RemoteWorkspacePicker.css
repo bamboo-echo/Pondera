@@ -1,0 +1,83 @@
+/* The picker reuses the connect wizard's field, browse and footer classes;
+   only the host/path row and the empty state need their own rules. */
+
+.remote-workspace-picker {
+  width: min(720px, calc(100vw - 48px));
+}
+
+.remote-workspace-picker .remote-wizard__body {
+  gap: 12px;
+}
+
+.remote-workspace-picker .remote-wizard__field-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.remote-workspace-picker .remote-wizard__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.remote-workspace-picker .remote-wizard__browse {
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
+}
+
+.remote-workspace-picker .remote-wizard__dir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.remote-workspace-picker .remote-wizard__dir:last-child {
+  border-bottom: 0;
+}
+
+.remote-workspace-picker .remote-wizard__dir:hover {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+
+.remote-workspace-picker .remote-wizard__dir:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.remote-workspace-picker .remote-wizard__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 16px;
+  color: var(--fg-faint);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  .remote-workspace-picker .remote-wizard__field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

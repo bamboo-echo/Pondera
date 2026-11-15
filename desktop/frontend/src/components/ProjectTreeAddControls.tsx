@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { FolderPlus, Server } from "lucide-react";
+import { FolderInput, FolderPlus, Server } from "lucide-react";
 
 import { ContextMenu, type ContextMenuItem, type ContextMenuPoint } from "./ContextMenu";
 import { Tooltip } from "./Tooltip";
@@ -8,18 +8,22 @@ export function projectTreeHeaderAddItems({
   blankLabel,
   localLabel,
   remoteLabel,
+  remoteWorkspaceLabel,
   disabled,
   onBlank,
   onLocal,
   onRemote,
+  onRemoteWorkspace,
 }: {
   blankLabel?: string;
   localLabel: string;
   remoteLabel: string;
+  remoteWorkspaceLabel?: string;
   disabled: boolean;
   onBlank?: () => void;
   onLocal: () => void;
   onRemote: () => void;
+  onRemoteWorkspace?: () => void;
 }): ContextMenuItem[] {
   const items: ContextMenuItem[] = [];
   if (onBlank && blankLabel) {
@@ -29,6 +33,9 @@ export function projectTreeHeaderAddItems({
     { key: "open-local-folder", icon: <FolderPlus size={13} />, label: localLabel, disabled, onSelect: onLocal },
     { key: "remote-connection", icon: <Server size={13} />, label: remoteLabel, onSelect: onRemote },
   );
+  if (onRemoteWorkspace && remoteWorkspaceLabel) {
+    items.push({ key: "remote-workspace", icon: <FolderInput size={13} />, label: remoteWorkspaceLabel, onSelect: onRemoteWorkspace });
+  }
   return items;
 }
 

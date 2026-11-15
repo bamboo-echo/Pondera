@@ -35,18 +35,23 @@ func newManualSessionTestApp(t *testing.T) *App {
 
 func TestManualCreationUniqueIdempotentAndVisibleBeforeFirstSend(t *testing.T) {
 	a := newManualSessionTestApp(t)
-	for _, id := range []string{"manual-test-one", "manual-test-two", "manual-test-three"} {
-		first, err := a.BeginManualSessionCreation(ManualSessionCreationRequest{OperationID: id, Scope: "global"})
+	// One untouched conversation per workspace is reused on purpose, so these
+	// three reservations target three distinct workspaces.
+	ids := []string{"manual-test-one", "manual-test-two", "manual-test-three"}
+	roots := []string{t.TempDir(), t.TempDir(), t.TempDir()}
+	for i, id := range ids {
+		req := ManualSessionCreationRequest{OperationID: id, Scope: "project", WorkspaceRoot: roots[i]}
+		first, err := a.BeginManualSessionCreation(req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		retry, err := a.BeginManualSessionCreation(ManualSessionCreationRequest{OperationID: id, Scope: "global"})
+		retry, err := a.BeginManualSessionCreation(req)
 		if err != nil || retry.Ref != first.Ref {
 			t.Fatalf("replayed identity=%+v %v", retry, err)
 		}
 	}
 	a.manualCreationTasks.Wait()
-	for _, id := range []string{"manual-test-one", "manual-test-two", "manual-test-three"} {
+	for _, id := range ids {
 		view, err := a.GetManualSessionCreation(id)
 		if err != nil || view.Phase != "ready" {
 			t.Fatalf("runtime did not start: %+v %v", view, err)
@@ -56,10 +61,14 @@ func TestManualCreationUniqueIdempotentAndVisibleBeforeFirstSend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(state.Workspaces["global"].SessionIDs) != 3 {
-		t.Fatalf("session ids=%v", state.Workspaces["global"].SessionIDs)
+	var created []string
+	for _, workspace := range state.Workspaces {
+		created = append(created, workspace.SessionIDs...)
 	}
-	for _, id := range state.Workspaces["global"].SessionIDs {
+	if len(created) != len(ids) {
+		t.Fatalf("session ids=%v", created)
+	}
+	for _, id := range created {
 		snapshot, err := a.desktopSessionService("").Query().Snapshot(t.Context(), session.SessionRef{HostID: "local", SessionID: id})
 		if err != nil {
 			t.Fatal(err)

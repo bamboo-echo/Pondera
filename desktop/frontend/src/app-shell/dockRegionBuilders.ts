@@ -24,6 +24,8 @@ export function buildWorkspaceDockProps(input: {
   surface: { renderable: boolean; overlay: boolean; gridOpen: boolean };
   showContext: boolean;
   remote: boolean;
+  /** The remote workspace of the active session tab, when it has one. */
+  remoteWorkspace?: { hostId: string; workspace: string };
   t: Translator;
   context: ConversationView["context"];
   sessionTurns: number;
@@ -52,6 +54,7 @@ export function buildWorkspaceDockProps(input: {
     overlay: surface.overlay,
     mode: input.mode,
     showContext: input.showContext,
+    remoteWorkspace: input.remoteWorkspace,
     t: input.t,
     onPickEntry: panels.openDockEntry,
     remote: { onClose: panels.closeWorkspacePanel },

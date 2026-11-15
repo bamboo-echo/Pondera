@@ -138,7 +138,7 @@ export function useAppNavigationComposition(input: AppNavigationCompositionInput
       const blank = await desktopBridge.tabSessionIsBlank(activeTab.id).catch(() => false);
       if (blank) return;
     }
-    return openBlankSession(scope, workspaceRoot);
+    return openBlankSession(scope, workspaceRoot, { onScreenSessionId: activeTab?.session?.sessionId });
   };
 
   // Command palette: ⌘K / Ctrl+K opens a fuzzy navigator over commands and

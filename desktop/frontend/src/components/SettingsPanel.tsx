@@ -8,6 +8,7 @@ import { providerProtocolLabel, providerProtocolChoices } from "../lib/providerP
 import { providerSupportsServerWebSearch } from "../lib/providerSearch";
 export { providerSupportsServerWebSearch } from "../lib/providerSearch";
 import { ManagementPageShell } from "./ManagementPageShell";
+import logoSymbol from "../assets/logo-symbol.svg";
 import { useProviderT as useT } from "../lib/providerSettingsLocale";
 import type { ModelDetailsDraft } from "./ProviderModelDialog";
 import { ConnectionTitle } from "./ConnectionTitle";
@@ -435,6 +436,11 @@ export function SettingsPanel({
   return (
     <ManagementPageShell title={t("settings.title")} className="settings-screen" onBack={requestClose} contentRef={settingsContentRef}
       navigation={<SettingsNavigation items={settingsNavigationItems} activeTab={tab} onSelect={selectTab} />}>
+      <div className="settings-hero">
+        <img className="settings-hero__icon" src={logoSymbol} alt="" />
+        <h1 className="settings-hero__title">{t("settings.title")}</h1>
+        <p className="settings-hero__subtitle">{settingsTabPageTitle(tab, t)}</p>
+      </div>
       <div className="settings-page-content">
             {needsSettings && settingsLoadFailed && (
               <div className="banner banner--error settings-load-error" role="alert">
@@ -5732,6 +5738,7 @@ function ProviderModelDraftPicker({
             <div className="provider-model-draft__option" key={model} role="listitem">
               <label className="provider-model-draft__model">
                 <input
+                  className="settings-checkbox"
                   type="checkbox"
                   checked={enabled}
                   disabled={disabled}
@@ -6090,6 +6097,7 @@ export const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker
             <div className="provider-model-draft__option" key={model} role="listitem">
               <label className="provider-model-draft__model">
                 <input
+                  className="settings-checkbox"
                   type="checkbox"
                   checked={enabled}
                   disabled={disabled}
@@ -6510,6 +6518,7 @@ export function ProviderEditor({
         </div>
         <label className="set-check">
           <input
+            className="settings-checkbox"
             type="checkbox"
             checked={authHeader}
             onChange={(e) => setAuthHeader(e.target.checked)}
@@ -6519,6 +6528,7 @@ export function ProviderEditor({
         <div className="mem-hint">{t("settings.providerAuthHeaderHint")}</div>
         <label className="set-check">
           <input
+            className="settings-checkbox"
             type="checkbox"
             checked={noProxy}
             onChange={(e) => setNoProxy(e.target.checked)}
@@ -7053,7 +7063,7 @@ function SandboxSection({ s, busy, apply, windows }: SectionProps & { windows: b
       <SettingsField className="sandbox-network" label={t(windows ? "settings.shellNetworkAccess" : "settings.allowNetwork")}>
         {windows ? <div className="sandbox-network__status"><span>{t("settings.shellNetworkUnrestricted")}</span><p className="sandbox-group__hint">{t("settings.shellNetworkUnrestrictedHint")}</p></div> :
         <label className="set-check set-check--inline">
-          <input type="checkbox" checked={sb.network} disabled={busy} onChange={(e) => void set({ network: e.target.checked })} />
+          <input className="settings-checkbox" type="checkbox" checked={sb.network} disabled={busy} onChange={(e) => void set({ network: e.target.checked })} />
           {t("settings.allowNetwork")}
         </label>}
       </SettingsField>
