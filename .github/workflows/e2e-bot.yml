@@ -20,8 +20,11 @@ jobs:
   e2e:
     name: Run the agent scenarios
     runs-on: ubuntu-24.04
+    # runner.* is not available in a job-level env block (workflow validation
+    # rejects it), so the disposable home is derived from the workspace parent
+    # and handed to each step that needs it.
     env:
-      PONDERA_HOME: ${{ runner.temp }}/pondera-e2e-home
+      PONDERA_HOME: ${{ github.workspace }}/../pondera-e2e-home
     steps:
       - uses: actions/checkout@v7
 

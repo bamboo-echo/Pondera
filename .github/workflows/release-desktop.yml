@@ -310,7 +310,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE_P12 != '' }}
-      APPLE_NOTARIZATION_LOG_DIR: ${{ runner.temp }}/apple-notarization
+      # runner.* is rejected in a job-level env block; the notarization log
+      # directory is derived from the workspace parent instead.
+      APPLE_NOTARIZATION_LOG_DIR: ${{ github.workspace }}/../apple-notarization
     steps:
       - uses: actions/checkout@v7
         with:
