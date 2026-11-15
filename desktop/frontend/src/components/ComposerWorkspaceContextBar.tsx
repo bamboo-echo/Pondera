@@ -343,8 +343,6 @@ export function ComposerWorkspaceContextBar({ context }: { context: ComposerWork
               </div>
               <div className="composer-workspace-menu__actions">
                 <button type="button" role="menuitem" disabled={creation.addingProject} onClick={() => { setProjectMenuOpen(false); void creation.handleAddProject(); }}><FolderOpen size={16} /><span>{t("composer.workspace.openFolder")}</span></button>
-                <button type="button" role="menuitem" onClick={() => { setProjectMenuOpen(false); creation.openRemoteConnectFlow(); }}><Cloud size={16} /><span>{t("projectTree.remoteConnection")}</span></button>
-                <button type="button" role="menuitem" onClick={() => { setProjectMenuOpen(false); creation.openRemoteWorkspaceFlow(); }}><FolderInput size={16} /><span>{t("projectTree.remoteWorkspace")}</span></button>
                 <button type="button" role="menuitem" onClick={() => { setProjectMenuOpen(false); creation.openRemoteWorkspaceFlow(); }}><FolderInput size={16} /><span>{t("projectTree.remoteWorkspace")}</span></button>
                 <button type="button" role="menuitem" onClick={() => void workWithoutProject()}><MessageCircle size={16} /><span>{t("composer.workspace.workWithoutProject")}</span>{!projectSelected ? <Check size={15} /> : null}</button>
               </div>
@@ -426,6 +424,7 @@ export function ComposerWorkspaceContextBar({ context }: { context: ComposerWork
         ) : null}
       </div>
       {creation.remoteConnectFlow}
+      {creation.remoteWorkspaceFlow}
       {gitGraphOpen && context.tabId ? (
         <ComposerGitGraphDialog
           tabId={context.tabId}

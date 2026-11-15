@@ -51,11 +51,15 @@ ok(
   "classic/creation + menu is the two-item local/remote list",
 );
 
-// Empty state: primary local + secondary remote.
+// Empty state: primary local + exactly one remote entry. The legacy
+// "remote connection" wizard entry was removed; opening a directory on an SSH
+// server is the single remote path and it configures hosts from inside the
+// picker, so the empty state must not offer the wizard a second time.
 ok(
-  /project-tree__empty-primary[\s\S]*?ProjectTreeRemoteAction[\s\S]*?openRemoteConnectFlow/.test(treeSource) &&
+  /project-tree__empty-primary[\s\S]*?ProjectTreeRemoteAction label=\{t\("projectTree\.remoteWorkspace"\)\}[\s\S]*?openRemoteWorkspaceFlow/.test(treeSource) &&
+    !/ProjectTreeRemoteAction label=\{t\("projectTree\.remoteConnection"\)\}/.test(treeSource) &&
     /project-tree__empty-secondary/.test(addControlsSource),
-  "empty state pairs the local action with a remote connection action",
+  "empty state offers the single SSH-workspace entry and no legacy wizard entry",
 );
 
 // The wizard mounts through the creation hook, outside the startup bundle.

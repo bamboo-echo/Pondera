@@ -1,6 +1,10 @@
 package main
 
-import "strings"
+import (
+	"strings"
+
+	"pondera/desktop/internal/workspacestate"
+)
 
 // A "new session" click must never allocate a second untouched conversation in
 // the same workspace. The desktop frontend probes the active tab first
@@ -19,9 +23,21 @@ type manualCreationTarget struct {
 	settings  SessionDraftSettings
 }
 
-// reuseManualCreationTarget prefers the active tab, then tab order, so a click
-// keeps landing on the surface the user already has instead of moving them.
+// reuseManualCreationTarget answers a "new session" click with the untouched
+// conversation the workspace already holds. Tabs are consulted first because
+// they carry live settings, but they are only presentation: a click that lands
+// while the surface is being rebuilt, or after the creation tab was replaced by
+// its canonical one, must still land on the same empty conversation instead of
+// reserving another identity. The durable registry therefore answers whenever
+// no tab does.
 func (a *App) reuseManualCreationTarget(scope, workspaceRoot, workspaceID string) (manualCreationTarget, bool) {
+	if target, ok := a.reuseManualCreationTab(scope, workspaceRoot, workspaceID); ok {
+		return target, true
+	}
+	return a.reuseManualCreationSession(scope, workspaceRoot, workspaceID)
+}
+
+func (a *App) reuseManualCreationTab(scope, workspaceRoot, workspaceID string) (manualCreationTarget, bool) {
 	a.mu.RLock()
 	candidates := make([]manualCreationTarget, 0, len(a.tabs))
 	seen := make(map[string]struct{}, len(a.tabs))
@@ -103,6 +119,41 @@ func (a *App) manualCreationTargetLocked(tab *WorkspaceTab, scope, workspaceRoot
 		target.settings.Effort = *tab.effort
 	}
 	return target, true
+}
+
+// reuseManualCreationSession walks the workspace's durable members newest
+// first and returns the first one that still holds no conversation. A session
+// the store cannot answer for, or one that is archived or trashed, stays out.
+func (a *App) reuseManualCreationSession(scope, workspaceRoot, workspaceID string) (manualCreationTarget, bool) {
+	state, err := a.workspaceRegistry().Load(a.bootContext())
+	if err != nil {
+		return manualCreationTarget{}, false
+	}
+	workspace, ok := state.Workspaces[workspaceID]
+	if !ok {
+		return manualCreationTarget{}, false
+	}
+	for i := len(workspace.SessionIDs) - 1; i >= 0; i-- {
+		sessionID := strings.TrimSpace(workspace.SessionIDs[i])
+		if sessionID == "" {
+			continue
+		}
+		if lifecycle, known := state.SessionStates[sessionID]; known && lifecycle.Lifecycle != workspacestate.Active {
+			continue
+		}
+		blank, known := a.sessionHasNoConversationContent(sessionID)
+		if !known || !blank {
+			continue
+		}
+		target := manualCreationTarget{
+			sessionID: sessionID,
+			topicID:   reusableManualCreationTopic(sessionID, ""),
+			settings:  a.defaultDraftSettings(scope, workspaceRoot),
+		}
+		target.settings.ModelSource = draftModelSourceExplicit
+		return target, true
+	}
+	return manualCreationTarget{}, false
 }
 
 // reusableManualCreationTopic keeps the topic a reused conversation already

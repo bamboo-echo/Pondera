@@ -17,22 +17,22 @@ export function projectTreeHeaderAddItems({
 }: {
   blankLabel?: string;
   localLabel: string;
-  remoteLabel: string;
+  remoteLabel?: string;
   remoteWorkspaceLabel?: string;
   disabled: boolean;
   onBlank?: () => void;
   onLocal: () => void;
-  onRemote: () => void;
+  onRemote?: () => void;
   onRemoteWorkspace?: () => void;
 }): ContextMenuItem[] {
   const items: ContextMenuItem[] = [];
   if (onBlank && blankLabel) {
     items.push({ key: "blank-project", icon: <FolderPlus size={13} />, label: blankLabel, disabled, onSelect: onBlank });
   }
-  items.push(
-    { key: "open-local-folder", icon: <FolderPlus size={13} />, label: localLabel, disabled, onSelect: onLocal },
-    { key: "remote-connection", icon: <Server size={13} />, label: remoteLabel, onSelect: onRemote },
-  );
+  items.push({ key: "open-local-folder", icon: <FolderPlus size={13} />, label: localLabel, disabled, onSelect: onLocal });
+  if (onRemote && remoteLabel) {
+    items.push({ key: "remote-connection", icon: <Server size={13} />, label: remoteLabel, onSelect: onRemote });
+  }
   if (onRemoteWorkspace && remoteWorkspaceLabel) {
     items.push({ key: "remote-workspace", icon: <FolderInput size={13} />, label: remoteWorkspaceLabel, onSelect: onRemoteWorkspace });
   }
