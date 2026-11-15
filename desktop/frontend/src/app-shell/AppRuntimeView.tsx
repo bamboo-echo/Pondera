@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState, useLayoutEffect, type CSSProperties } from "react";
+import { lazy, Suspense, useMemo, useState, useLayoutEffect, useEffect, type CSSProperties } from "react";
 import { DockNavigation } from "./dockNavigation";
 import { useFileNavigationRuntime } from "../app-runtime/useFileNavigationRuntime";
 import { useActiveRemoteRef } from "../app-runtime/useActiveRemoteRef";
@@ -36,6 +36,7 @@ import { AppBottomRegions } from "./AppBottomRegions";
 import { AppOverlayHost } from "./AppOverlayHost";
 import { buildAppShellClassNames, buildSessionStatusBannerProps, buildSidebarRegionProps } from "./chromeRegionBuilders";
 import { buildBottomRegionsProps, buildWorkspaceDockProps } from "./dockRegionBuilders";
+import { useRemoteStore } from "../store/remote";
 import { buildOverlayHostProps } from "./overlayBuilders";
 import { buildComposerSurface, buildDecisionFooterSurface, buildFooterTodo, buildFooterUndo } from "./decisionFooterBuilders";
 import { submitBlockReason } from "../lib/sessionAvailability";
@@ -127,6 +128,18 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
   const workspaceContextProject = Boolean(
     activeTab?.remote || (activeTab?.scope === "project" && activeTab.workspaceRoot),
   );
+  // The remote file tree is rooted at the workspace the active remote tab is
+  // bound to, so the dock shows the directory the user picked on the server.
+  const remoteWorkspace = activeTab?.remote
+    ? { hostId: activeTab.remote.hostId, workspace: activeTab.remote.workspace }
+    : undefined;
+  useEffect(() => {
+    useRemoteStore.getState().setActiveWorkspace(remoteWorkspace ?? null);
+    // The workspace is compared field by field in the store: the tab meta
+    // object is recreated on every refresh, and re-publishing it on every
+    // meta tick would re-render the dock for nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteWorkspace?.hostId, remoteWorkspace?.workspace]);
   const workspaceContextRoot = workspaceContextProject
     ? (activeTab?.workspaceRoot ?? state.meta?.workspaceRoot ?? state.meta?.cwd ?? "")
     : "";
@@ -460,6 +473,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
           surface: { renderable: surfaceWorkspacePanelRenderable, overlay: surfaceWorkspacePanelOverlay, gridOpen: surfaceWorkspacePanelGridOpen },
           showContext: SHOW_CONTEXT_DOCK,
           remote: core.remoteSurfaceActive,
+          remoteWorkspace,
           t,
           context: conversationView.context,
           sessionTurns: session.sessionTurns,
