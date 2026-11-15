@@ -3,13 +3,15 @@ import { app } from "../lib/bridge";
 import { useCommittedCommand } from "../lib/useCommittedCommand";
 import { RemoteConnectionTimeoutError, useRemoteStore, waitForRemoteConnection } from "../store/remote";
 import { RemoteWorkspaceLaunchGate, resolveRemoteWorkspace } from "../lib/remoteWorkspace";
-import { publishNavigationIntent } from "../lib/useNavigationIntentFence";
+import type { RemoteNavigationCommand } from "../lib/remoteNavigationCommands";
 import type { RemoteHostView } from "../lib/types";
 import type { Translator } from "../lib/i18n";
 
 export type RemoteWorkspaceCommandsInput = {
   t: Translator;
   showToast(message: string, level: "error", options?: { durationMs?: number; actionLabel?: string; onAction?: () => void }): void;
+  /** Opens the remote workspace as a tab in this window. */
+  openRemoteProject: RemoteNavigationCommand;
 };
 
 /**
@@ -27,8 +29,12 @@ export function useRemoteWorkspaceCommands(input: RemoteWorkspaceCommandsInput) 
     const lastWorkspace = await app.RemoteLastWorkspace(host.id).catch(() => "");
     const workspace = resolveRemoteWorkspace(lastWorkspace, host.defaultWorkspace);
     if (!remoteWorkspaceLaunchGate.current.isCurrent(host.id, requestSeq)) return;
-    await publishNavigationIntent("remote-workspace");
-    await app.OpenRemoteWorkspace(host.id, workspace);
+    // The workspace opens as a tab in this window. It used to spawn a separate
+    // native window running the remote Serve web client, which left the user
+    // driving the remote host from a second surface instead of the workbench.
+    const outcome = await input.openRemoteProject({ hostId: host.id, workspace }, { newSession: true });
+    if (outcome.status === "cancelled") return;
+    if (outcome.status === "failed") throw outcome.error;
   });
 
   const openRemoteWorkspaceFromStatus = useCommittedCommand((host: RemoteHostView) => {

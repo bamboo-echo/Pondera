@@ -632,7 +632,7 @@ export function useAppSessionComposition(input: AppSessionCompositionInput) {
     tabId: activeTabId, enabled: conversationView.localToolsEnabled, shortcutsEnabled: !managementActive,
   });
 
-  const remoteWorkspaceCommands = useRemoteWorkspaceCommands({ t, showToast });
+  const remoteWorkspaceCommands = useRemoteWorkspaceCommands({ t, showToast, openRemoteProject: navigateRemote });
 
   const layoutStyle = useMemo(
     () =>

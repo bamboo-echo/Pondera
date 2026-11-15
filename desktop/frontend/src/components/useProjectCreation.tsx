@@ -3,6 +3,7 @@ import type { ToastContextValue } from "../lib/toast";
 
 const BlankProjectFlow = lazy(() => import("./BlankProjectFlow").then((module) => ({ default: module.BlankProjectFlow })));
 const RemoteConnectWizard = lazy(() => import("./RemoteConnectWizardEntry").then((module) => ({ default: module.RemoteConnectWizard })));
+const RemoteWorkspacePicker = lazy(() => import("./RemoteWorkspacePicker").then((module) => ({ default: module.RemoteWorkspacePicker })));
 
 export function useProjectCreation({
   onAddProject,
@@ -19,10 +20,13 @@ export function useProjectCreation({
   blankProjectFlow: ReactNode;
   openRemoteConnectFlow: () => void;
   remoteConnectFlow: ReactNode;
+  openRemoteWorkspaceFlow: () => void;
+  remoteWorkspaceFlow: ReactNode;
 } {
   const [addingProject, setAddingProject] = useState(false);
   const [blankProjectFlowOpen, setBlankProjectFlowOpen] = useState(false);
   const [remoteFlowOpen, setRemoteFlowOpen] = useState(false);
+  const [remoteWorkspaceOpen, setRemoteWorkspaceOpen] = useState(false);
   const handleAddProject = async () => {
     if (addingProject) return;
     setAddingProject(true);
@@ -54,6 +58,20 @@ export function useProjectCreation({
         <RemoteConnectWizard
           onRefresh={onRefresh}
           onClose={() => setRemoteFlowOpen(false)}
+          onMerged={(message) => showToast(message, "info")}
+        />
+      </Suspense>
+    ) : null,
+    openRemoteWorkspaceFlow: () => setRemoteWorkspaceOpen(true),
+    remoteWorkspaceFlow: remoteWorkspaceOpen ? (
+      <Suspense fallback={null}>
+        <RemoteWorkspacePicker
+          onRefresh={onRefresh}
+          onClose={() => setRemoteWorkspaceOpen(false)}
+          onConfigureHost={() => {
+            setRemoteWorkspaceOpen(false);
+            setRemoteFlowOpen(true);
+          }}
           onMerged={(message) => showToast(message, "info")}
         />
       </Suspense>
