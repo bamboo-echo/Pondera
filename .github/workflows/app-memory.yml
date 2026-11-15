@@ -77,7 +77,7 @@ jobs:
         run: go build ./...
 
       - name: Upload the prepared memory fixture
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-memory-build-${{ github.run_id }}
           path: .
@@ -101,7 +101,7 @@ jobs:
           node-version-file: .node-version
 
       - name: Download the prepared fixture
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: app-memory-build-${{ github.run_id }}
 
@@ -113,7 +113,7 @@ jobs:
           go test ./internal/... -count=1 -shuffle=on
 
       - name: Upload the shard report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-memory-report-${{ github.run_id }}-${{ matrix.shard }}
           path: memory-report-${{ matrix.shard }}.json
@@ -133,14 +133,14 @@ jobs:
           node-version-file: .node-version
 
       - name: Download every shard report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: app-memory-report-${{ github.run_id }}-*
           path: reports
           merge-multiple: true
 
       - name: Download the prepared fixture
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: app-memory-build-${{ github.run_id }}
           path: build
