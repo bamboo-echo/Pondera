@@ -91,7 +91,7 @@ ok(
 );
 ok(
   stylesSource.includes(".settings-page--general .settings-section") &&
-    stylesSource.includes("grid-template-columns: minmax(180px, 300px) minmax(0, 1fr)") &&
+    stylesSource.includes("grid-template-columns: minmax(0, 1fr) minmax(200px, 300px)") &&
     stylesSource.includes(".settings-field__copy--icon") &&
     stylesSource.includes("container: settings-general / inline-size") &&
     stylesSource.includes("@container settings-general (max-width: 620px)") &&
@@ -100,10 +100,23 @@ ok(
 );
 ok(
   panelStyles.includes('.settings-page[data-layout="form"] .settings-field') &&
-    panelStyles.includes("grid-template-columns: minmax(180px, 300px) minmax(0, 1fr)") &&
+    panelStyles.includes("grid-template-columns: minmax(0, 1fr) minmax(200px, 300px)") &&
     panelStyles.includes(".settings-field__control") &&
-    panelStyles.includes("justify-content: flex-start"),
-  "Form pages keep a label column and place the control beside it",
+    panelStyles.includes("justify-content: flex-end"),
+  "Form pages keep the label on the left and align every value on one edge",
+);
+ok(
+  settingsSource.includes("settings-hero__title") &&
+    settingsSource.includes("settings-hero__subtitle") &&
+    settingsSource.includes("logo-symbol.svg") &&
+    stylesSource.includes(".settings-hero__title") &&
+    stylesSource.includes(".settings-hero__icon"),
+  "settings opens with the product mark, its title and the current page",
+);
+ok(
+  panelStyles.includes("border-radius: 12px") &&
+    panelStyles.includes("color-mix(in srgb, var(--fg) 8%, transparent)"),
+  "settings groups read as bordered cards instead of loose text",
 );
 ok(
   panelStyles.includes('input[type="checkbox"]') &&

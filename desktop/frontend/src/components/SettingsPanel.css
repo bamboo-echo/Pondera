@@ -257,10 +257,10 @@
 }
 
 .settings-page--general .settings-field {
-  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 300px);
   gap: 28px;
   min-height: 0;
-  padding: 12px 0;
+  padding: 13px 0;
 }
 
 .settings-page--general .settings-field:first-child {
@@ -703,6 +703,10 @@
 :root .settings-center .settings-page--form {
   max-width: 880px;
 }
+:root .settings-center .settings-page-content {
+  max-width: 920px;
+  margin: 0 auto;
+}
 :root .settings-center .settings-page--manager {
   max-width: none;
 }
@@ -737,8 +741,16 @@
 }
 :root .settings-center .settings-page[data-layout="form"] { max-width: 960px; }
 :root .settings-center .settings-page[data-layout="tool"] { max-width: 1200px; }
-:root .settings-center .settings-page[data-layout] > :is(.settings-section, .mem-section, .cap-mcp-settings, .appearance-overview, .remote-hosts, .diag-page) {
-  margin: 0 0 var(--settings-space);
+:root .settings-center .settings-page[data-layout] > .settings-section {
+  margin: 0 0 20px;
+  padding: 2px 18px 6px;
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+  border-radius: 12px;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--fg) 2%, var(--bg));
+}
+:root .settings-center .settings-page[data-layout] > :is(.mem-section, .cap-mcp-settings, .appearance-overview, .remote-hosts, .diag-page) {
+  margin: 0 0 20px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -753,22 +765,22 @@
 }
 :root .settings-center .settings-page[data-layout] :is(.settings-section__title, .settings-toolbar > h2, .settings-toolbar > strong, .cap-skills-head__title, .cap-server-section__title, .appearance-overview__section-label) {
   margin: 0;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 650;
   line-height: 1.5;
-  letter-spacing: -0.004em;
+  letter-spacing: 0.01em;
 }
 :where(.settings-center .settings-page[data-layout]) .settings-field {
   grid-template-columns: minmax(160px, .8fr) minmax(0, 1.2fr);
   gap: 24px;
   padding: 16px 0;
 }
-/* A form page pairs a fixed label column with the control column beside it, so a
-   wide pane never strands the control at the far edge. */
+/* A form page keeps the label on the left and the value in a fixed column on
+   the right, so every control lines up on one edge. */
 :where(.settings-center .settings-page[data-layout="form"]) .settings-field {
-  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 300px);
   gap: 28px;
-  padding: 12px 0;
+  padding: 13px 0;
 }
 :where(.settings-center .settings-page[data-layout]) .settings-field--wide-copy { grid-template-columns: minmax(0, 1fr) auto; }
 :root .settings-center .settings-page[data-layout] :is(.settings-field__copy, .settings-field__control) { min-width: 0; }
@@ -856,6 +868,33 @@
 :root .settings-center .settings-page[data-layout] .settings-path-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
 :root .settings-center .settings-page[data-layout] .settings-path-value input { flex: 1; min-width: 0; }
 
+/* MiniMax Code opens its settings with the product mark and the current page. */
+.settings-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0 24px;
+}
+.settings-hero__icon {
+  width: 44px;
+  height: 44px;
+}
+.settings-hero__title {
+  margin: 4px 0 0;
+  color: var(--fg);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.settings-hero__subtitle {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* The first section starts at the top of the pane; later ones get breathing room. */
 :root .settings-center .settings-page[data-layout] > .settings-section:first-child > .settings-section__head {
   padding-top: 0;
@@ -892,12 +931,12 @@
   outline-offset: 2px;
 }
 
-/* Form controls sit beside their label instead of drifting to the pane edge. */
+/* The value sits in a fixed column, so every control lines up on one edge. */
 :root .settings-center .settings-page[data-layout="form"] .settings-field__control {
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 :root .settings-center .settings-page[data-layout="form"] .settings-field__control > :is(input.mem-input, select.mem-select) {
-  max-width: 360px;
+  max-width: 300px;
 }
 :root .settings-center .settings-page[data-layout="form"] .settings-field {
   border-top-color: color-mix(in srgb, var(--fg) 8%, transparent);

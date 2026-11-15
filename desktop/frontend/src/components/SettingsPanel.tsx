@@ -8,6 +8,7 @@ import { providerProtocolLabel, providerProtocolChoices } from "../lib/providerP
 import { providerSupportsServerWebSearch } from "../lib/providerSearch";
 export { providerSupportsServerWebSearch } from "../lib/providerSearch";
 import { ManagementPageShell } from "./ManagementPageShell";
+import logoSymbol from "../assets/logo-symbol.svg";
 import { useProviderT as useT } from "../lib/providerSettingsLocale";
 import type { ModelDetailsDraft } from "./ProviderModelDialog";
 import { ConnectionTitle } from "./ConnectionTitle";
@@ -435,6 +436,11 @@ export function SettingsPanel({
   return (
     <ManagementPageShell title={t("settings.title")} className="settings-screen" onBack={requestClose} contentRef={settingsContentRef}
       navigation={<SettingsNavigation items={settingsNavigationItems} activeTab={tab} onSelect={selectTab} />}>
+      <div className="settings-hero">
+        <img className="settings-hero__icon" src={logoSymbol} alt="" />
+        <h1 className="settings-hero__title">{t("settings.title")}</h1>
+        <p className="settings-hero__subtitle">{settingsTabPageTitle(tab, t)}</p>
+      </div>
       <div className="settings-page-content">
             {needsSettings && settingsLoadFailed && (
               <div className="banner banner--error settings-load-error" role="alert">
