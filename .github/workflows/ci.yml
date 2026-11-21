@@ -330,7 +330,7 @@ jobs:
       - name: Collect coverage
         run: go test ./... -coverprofile=coverage.out -covermode=atomic -count=1
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
@@ -451,7 +451,7 @@ jobs:
         run: echo "attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
 
       - name: Upload the prepared frontend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-frontend-stable-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
           path: |
@@ -468,7 +468,7 @@ jobs:
           node desktop/frontend/scripts/artifact-identity.mjs create --root . --shell electron --channel canary --source-sha "${{ github.sha }}" --run-id "${{ github.run_id }}" --attempt "${{ steps.artifact-identity.outputs.attempt }}" --pnpm_version "$(pnpm --version)"
 
       - name: Upload the canary frontend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-frontend-canary-${{ github.run_id }}-${{ steps.artifact-identity.outputs.attempt }}
           path: |
@@ -508,7 +508,7 @@ jobs:
         run: node frontend/scripts/run-ci-tests.mjs
 
       - name: Download the prepared frontend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
           path: desktop/frontend
@@ -541,7 +541,7 @@ jobs:
           version: 11.8.0
 
       - name: Download the prepared frontend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
           path: desktop/frontend
@@ -576,7 +576,7 @@ jobs:
 
       - name: Restore the shared race cache
         id: gocache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/go-build
           key: desktop-race-${{ matrix.group == 'A-B' && steps.gocache.outputs.key || github.sha }}
@@ -609,7 +609,7 @@ jobs:
         run: PLAYWRIGHT_BROWSERS_PATH=.pw-browsers pnpm --dir frontend exec playwright install chromium
 
       - name: Download the prepared frontend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
           path: desktop/frontend
@@ -691,7 +691,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download the prepared frontend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
           path: desktop/frontend
@@ -753,7 +753,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download the prepared frontend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.desktop-prepare.outputs.canary_artifact_name }}
           path: desktop/frontend
@@ -825,7 +825,7 @@ jobs:
           version: 11.8.0
 
       - name: Download the prepared frontend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.desktop-prepare.outputs.stable_artifact_name }}
           path: desktop/frontend
@@ -910,7 +910,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download the prepared frontend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.desktop-prepare.outputs.canary_artifact_name }}
           path: desktop/frontend
@@ -954,7 +954,7 @@ jobs:
 
       - name: Upload Windows installer acceptance evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-installer-acceptance
           path: |
