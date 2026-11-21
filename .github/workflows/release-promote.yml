@@ -148,7 +148,7 @@ jobs:
         run: bash scripts/reconcile-release-publication.sh
 
       - name: Upload the publication ledger
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-publication-ledger-${{ inputs.candidate_id }}
           path: release-notes/publication-ledger.json
@@ -156,7 +156,7 @@ jobs:
           retention-days: 90
 
       - name: Upload the publication timing
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-publication-timing-${{ inputs.candidate_id }}
           path: release-notes/publication-timing.json

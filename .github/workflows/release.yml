@@ -188,14 +188,14 @@ jobs:
 
       - name: Download the CLI candidate
         if: ${{ steps.publication.outputs.decision == 'publish' && inputs.candidate_artifact_name != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.candidate_artifact_name }}
           path: dist
 
       - name: Build and publish the CLI
         if: ${{ steps.publication.outputs.decision == 'publish' && inputs.candidate_artifact_name == '' }}
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           args: release --clean${{ vars.CLI_PUBLISH_FROZEN == 'true' && ' --skip=homebrew' || '' }}
         env:
@@ -258,7 +258,7 @@ jobs:
 
       - name: Download orchestrator-reviewed release notes
         if: ${{ !inputs.orchestrated }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: orchestrator-reviewed-release-notes
           path: release-notes
@@ -277,7 +277,7 @@ jobs:
           done
 
       - name: Upload the CLI release manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cli-release-manifest
           path: dist/latest.json
